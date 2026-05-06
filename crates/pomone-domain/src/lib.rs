@@ -1,6 +1,46 @@
 //! Pomone domain crate: pure types and business rules.
 //!
 //! This crate must remain free of I/O (no DB, no filesystem, no network).
-//! All types should be deterministic and easily testable in isolation.
+//! All types are deterministic and easily testable in isolation.
+//!
+//! # Layout
+//!
+//! - [`ids`]: strongly-typed UUID newtypes for each entity.
+//! - [`error`]: validation errors returned by constructors.
+//! - [`validation`] (private): shared validation helpers.
+//! - [`family`], [`strata`], [`location_kind`]: small user-managed lookup
+//!   tables (with seed data living elsewhere, e.g. `pomone-db`).
+//! - [`location`]: physical hierarchical locations (parcels, beds, orchards…).
+//! - [`crop`]: crops with their `Lifespan` (annual vs pluriannual).
+//! - [`variety`]: varieties of a crop with their cultivation profile.
+//! - [`planting`]: concrete plantings with their `PlantingSchedule`.
+//! - [`harvest`]: yearly harvest records for perennial plantings.
+//! - [`date_calc`]: pure date arithmetic (replaces Qrop's SQL triggers).
 
 #![cfg_attr(not(test), warn(clippy::print_stdout, clippy::print_stderr))]
+
+pub mod crop;
+pub mod date_calc;
+pub mod error;
+pub mod family;
+pub mod harvest;
+pub mod ids;
+pub mod location;
+pub mod location_kind;
+pub mod planting;
+pub mod strata;
+pub mod variety;
+
+mod validation;
+
+// Re-export the most commonly used types at the crate root for ergonomics.
+pub use crop::{Crop, Lifespan, ProductivePattern, PruningSeason};
+pub use error::{DomainError, DomainResult};
+pub use family::Family;
+pub use harvest::YearlyHarvest;
+pub use ids::{CropId, FamilyId, LocationId, LocationKindId, PlantingId, StrataId, VarietyId};
+pub use location::Location;
+pub use location_kind::LocationKind;
+pub use planting::{Planting, PlantingSchedule};
+pub use strata::Strata;
+pub use variety::{AnnualProfile, PluriannualProfile, Variety, VarietyProfile};
