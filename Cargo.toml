@@ -1,0 +1,83 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/pomone-domain",
+    "crates/pomone-db",
+    "crates/pomone-app",
+    "crates/pomone-ui",
+    "crates/pomone-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+authors = ["Pomone contributors"]
+repository = "https://example.invalid/pomone"
+rust-version = "1.80"
+
+[workspace.dependencies]
+# Domain types
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+rust_decimal = { version = "1.36", default-features = false, features = ["serde", "std"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Errors
+thiserror = "2"
+anyhow = "1"
+
+# Async runtime + DB
+tokio = { version = "1.42", features = ["macros", "rt-multi-thread", "fs", "sync", "time"] }
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "sqlite", "mysql", "chrono", "uuid", "rust_decimal", "migrate", "macros"] }
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# i18n
+fluent = "0.16"
+fluent-bundle = "0.15"
+unic-langid = "0.9"
+
+# UI
+slint = "1.8"
+slint-build = "1.8"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+
+# Tests
+proptest = "1"
+rstest = "0.23"
+insta = "1"
+pretty_assertions = "1"
+testcontainers = "0.23"
+testcontainers-modules = { version = "0.11", features = ["mariadb"] }
+tokio-test = "0.4"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+# Pragmatic exceptions to pedantic
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+# Common in domain code with many small types
+multiple_crate_versions = "allow"

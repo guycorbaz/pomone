@@ -1,0 +1,8 @@
+//! Pomone desktop UI binary entry point (Slint).
+
+fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+    tracing::info!("pomone starting");
+}

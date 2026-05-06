@@ -1,0 +1,29 @@
+[package]
+name = "pomone-app"
+description = "Application services, use cases, state and i18n for Pomone"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+pomone-domain = { path = "../pomone-domain" }
+pomone-db = { path = "../pomone-db" }
+tokio.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true
+uuid.workspace = true
+fluent.workspace = true
+fluent-bundle.workspace = true
+unic-langid.workspace = true
+
+[dev-dependencies]
+rstest.workspace = true
+pretty_assertions.workspace = true

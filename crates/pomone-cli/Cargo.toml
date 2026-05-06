@@ -1,0 +1,25 @@
+[package]
+name = "pomone-cli"
+description = "Pomone admin/debug CLI (migrations, seed, dump)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "pomone-cli"
+path = "src/main.rs"
+
+[dependencies]
+pomone-domain = { path = "../pomone-domain" }
+pomone-db = { path = "../pomone-db" }
+pomone-app = { path = "../pomone-app" }
+clap.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

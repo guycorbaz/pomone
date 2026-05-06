@@ -1,0 +1,31 @@
+[package]
+name = "pomone-db"
+description = "Repository abstraction and SQLite/MariaDB backends for Pomone"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+pomone-domain = { path = "../pomone-domain" }
+sqlx.workspace = true
+tokio.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+rust_decimal.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+async-trait = "0.1"
+
+[dev-dependencies]
+rstest.workspace = true
+pretty_assertions.workspace = true
+testcontainers.workspace = true
+testcontainers-modules.workspace = true
+tokio-test.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

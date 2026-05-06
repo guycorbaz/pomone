@@ -1,0 +1,23 @@
+[package]
+name = "pomone-domain"
+description = "Pure domain types and business rules for Pomone (zero I/O)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono.workspace = true
+rust_decimal.workspace = true
+uuid.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+rstest.workspace = true
+pretty_assertions.workspace = true
