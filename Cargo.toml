@@ -51,6 +51,10 @@ slint-build = "1.8"
 # CLI
 clap = { version = "4", features = ["derive"] }
 
+# Config
+toml = "0.8"
+directories = "5"
+
 # Tests
 proptest = "1"
 rstest = "0.23"

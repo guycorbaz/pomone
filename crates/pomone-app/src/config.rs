@@ -1,0 +1,163 @@
+//! Application configuration.
+//!
+//! Configuration is stored as TOML in the OS-specific user config directory:
+//! - Linux:   `$XDG_CONFIG_HOME/pomone/config.toml` (defaults to `~/.config/pomone/`)
+//! - macOS:   `~/Library/Application Support/pomone/config.toml`
+//! - Windows: `%APPDATA%\pomone\config.toml`
+
+use crate::error::{AppError, AppResult};
+use directories::ProjectDirs;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+
+/// Top-level application configuration.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AppConfig {
+    pub backend: BackendConfig,
+    /// IETF BCP 47 language tag, e.g. "fr" or "en". Phase 5 will validate.
+    pub language: String,
+}
+
+/// Database backend selection.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum BackendConfig {
+    /// File-backed SQLite database. Path is OS-specific by default.
+    Sqlite { path: PathBuf },
+    /// Connection URL: `mysql://user:pass@host:port/database`.
+    Mariadb { url: String },
+}
+
+impl AppConfig {
+    /// A reasonable default: SQLite in the OS-specific user data directory,
+    /// language `fr`.
+    #[must_use]
+    pub fn default_for_user() -> Self {
+        Self {
+            backend: BackendConfig::Sqlite {
+                path: default_sqlite_path(),
+            },
+            language: "fr".to_owned(),
+        }
+    }
+
+    /// Load from a specific TOML file.
+    pub fn load_from(path: &Path) -> AppResult<Self> {
+        let text = std::fs::read_to_string(path)?;
+        let config: Self = toml::from_str(&text)?;
+        Ok(config)
+    }
+
+    /// Save to a specific TOML file (creates parent directories if needed).
+    pub fn save_to(&self, path: &Path) -> AppResult<()> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let text = toml::to_string_pretty(self)?;
+        std::fs::write(path, text)?;
+        Ok(())
+    }
+
+    /// Load from the OS-specific default location, falling back to default
+    /// values if the file does not exist.
+    pub fn load_or_default() -> AppResult<Self> {
+        let path = default_config_path()?;
+        if path.exists() {
+            Self::load_from(&path)
+        } else {
+            Ok(Self::default_for_user())
+        }
+    }
+
+    /// Save to the OS-specific default location.
+    pub fn save_default(&self) -> AppResult<()> {
+        let path = default_config_path()?;
+        self.save_to(&path)
+    }
+}
+
+fn project_dirs() -> AppResult<ProjectDirs> {
+    ProjectDirs::from("", "", "pomone")
+        .ok_or_else(|| AppError::Config("cannot determine OS user directories".into()))
+}
+
+/// OS-specific path of the TOML config file.
+pub fn default_config_path() -> AppResult<PathBuf> {
+    Ok(project_dirs()?.config_dir().join("config.toml"))
+}
+
+/// OS-specific default path of the SQLite database (used by
+/// `AppConfig::default_for_user`).
+fn default_sqlite_path() -> PathBuf {
+    project_dirs().map_or_else(
+        |_| PathBuf::from("pomone.sqlite"),
+        |d| d.data_dir().join("pomone.sqlite"),
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    #[test]
+    fn default_uses_sqlite() {
+        let cfg = AppConfig::default_for_user();
+        assert_eq!(cfg.language, "fr");
+        assert!(matches!(cfg.backend, BackendConfig::Sqlite { .. }));
+    }
+
+    #[test]
+    fn save_load_roundtrip() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("config.toml");
+        let original = AppConfig {
+            backend: BackendConfig::Sqlite {
+                path: PathBuf::from("/tmp/pomone.sqlite"),
+            },
+            language: "en".to_owned(),
+        };
+        original.save_to(&path).unwrap();
+        let loaded = AppConfig::load_from(&path).unwrap();
+        assert_eq!(loaded, original);
+    }
+
+    #[test]
+    fn save_creates_parent_directories() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("nested").join("deeper").join("config.toml");
+        let cfg = AppConfig::default_for_user();
+        cfg.save_to(&path).unwrap();
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn mariadb_backend_serializes_with_kind_tag() {
+        let cfg = AppConfig {
+            backend: BackendConfig::Mariadb {
+                url: "mysql://user@host/db".to_owned(),
+            },
+            language: "fr".to_owned(),
+        };
+        let text = toml::to_string(&cfg).unwrap();
+        assert!(text.contains("kind = \"mariadb\""));
+        assert!(text.contains("url = \"mysql://user@host/db\""));
+    }
+
+    #[test]
+    fn malformed_toml_yields_app_error() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("bad.toml");
+        std::fs::write(&path, "not = [valid").unwrap();
+        let err = AppConfig::load_from(&path).unwrap_err();
+        assert!(matches!(err, AppError::TomlDeserialize(_)));
+    }
+
+    #[test]
+    fn missing_file_yields_io_error() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("missing.toml");
+        let err = AppConfig::load_from(&path).unwrap_err();
+        assert!(matches!(err, AppError::Io(_)));
+    }
+}

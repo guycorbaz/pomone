@@ -1,0 +1,34 @@
+//! Application-level errors.
+
+use pomone_db::DbError;
+use pomone_domain::DomainError;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum AppError {
+    #[error("domain validation error: {0}")]
+    Domain(#[from] DomainError),
+
+    #[error("database error: {0}")]
+    Db(#[from] DbError),
+
+    #[error("configuration error: {0}")]
+    Config(String),
+
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+
+    #[error("TOML serialization error: {0}")]
+    TomlSerialize(#[from] toml::ser::Error),
+
+    #[error("TOML parsing error: {0}")]
+    TomlDeserialize(#[from] toml::de::Error),
+
+    #[error("entity not found: {kind} {id}")]
+    NotFound { kind: &'static str, id: String },
+
+    #[error("inconsistent state: {0}")]
+    Inconsistent(String),
+}
+
+pub type AppResult<T> = Result<T, AppError>;
