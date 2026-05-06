@@ -5,7 +5,15 @@ all-features = false
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "warn"
-ignore = []
+ignore = [
+    # tokio-tar 0.3.1 is unmaintained and has a PAX header parsing flaw
+    # (CVE-2025-62518). It only enters our build through testcontainers
+    # 0.23.3 → testcontainers-modules, both dev-dependencies used to
+    # spin up the MariaDB integration container. We don't read untrusted
+    # tar archives at runtime. To be revisited if testcontainers ships a
+    # release that switches to astral-tokio-tar.
+    "RUSTSEC-2025-0111",
+]
 
 [licenses]
 confidence-threshold = 0.8
@@ -14,8 +22,10 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "BSL-1.0",
     "CC0-1.0",
     "GPL-3.0",
+    "GPL-3.0-only",
     "GPL-3.0-or-later",
     "ISC",
     "MIT",
@@ -32,6 +42,9 @@ exceptions = []
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Path-only deps inside the workspace appear as wildcards; that's normal
+# and not what `wildcards = "deny"` is meant to catch.
+allow-wildcard-paths = true
 deny = []
 skip = []
 skip-tree = []
