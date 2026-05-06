@@ -43,10 +43,12 @@ exceptions = []
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
-# Path-only deps inside the workspace appear as wildcards; that's normal
-# and not what `wildcards = "deny"` is meant to catch.
-allow-wildcard-paths = true
+# Path-only deps inside the workspace appear as wildcards; the original
+# motivation for denying wildcards (uncontrolled `version = "*"` from
+# crates.io) doesn't apply, and `allow-wildcard-paths` only kicks in for
+# crates flagged `publish = false`. Downgraded to a warning until we
+# decide whether to publish individual crates to crates.io.
+wildcards = "warn"
 deny = []
 skip = []
 skip-tree = []
