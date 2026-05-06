@@ -13,6 +13,18 @@ ignore = [
     # tar archives at runtime. To be revisited if testcontainers ships a
     # release that switches to astral-tokio-tar.
     "RUSTSEC-2025-0111",
+    # `paste` proc-macro is no longer maintained (informational, no CVE).
+    # Transitively pulled by several Slint/sqlx-adjacent crates we don't
+    # control. Drops once those bump to alternatives.
+    "RUSTSEC-2024-0436",
+    # `rsa` crate has a timing sidechannel (Marvin Attack). It enters via
+    # sqlx-mysql for RSA-based MySQL/MariaDB auth. We use only TCP+plain
+    # auth in tests (no RSA challenge); production users wouldn't be
+    # exposed unless they explicitly pick a server forcing RSA auth.
+    "RUSTSEC-2023-0071",
+    # `rustls-pemfile` is unmaintained (no CVE). Pulled transitively by
+    # sqlx-tls / testcontainers-bollard. Watching for a maintained fork.
+    "RUSTSEC-2025-0134",
 ]
 
 [licenses]
