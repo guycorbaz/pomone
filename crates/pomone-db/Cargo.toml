@@ -29,3 +29,4 @@ testcontainers.workspace = true
 testcontainers-modules.workspace = true
 tokio-test.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+rust_decimal_macros.workspace = true

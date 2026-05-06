@@ -84,3 +84,9 @@ multiple_crate_versions = "allow"
 too_many_arguments = "allow"
 # Date-typed fields share an `_on` suffix on purpose
 struct_field_names = "allow"
+# Snake_case field names appear regularly in doc comments — too noisy
+doc_markdown = "allow"
+# Internal converters routinely take `Row` by value; perf is negligible
+needless_pass_by_value = "allow"
+# Short variable names (m, d, s) are fine in tightly-scoped helpers
+many_single_char_names = "allow"
