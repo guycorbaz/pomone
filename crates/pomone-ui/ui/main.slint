@@ -1,0 +1,117 @@
+// Pomone — root Slint window.
+//
+// All user-visible text comes in via in-properties so the Rust side can fill
+// it from Fluent (single source of truth for translations).
+
+import { Button, GroupBox, HorizontalBox, VerticalBox } from "std-widgets.slint";
+
+export component MainWindow inherits Window {
+    title: "Pomone";
+    preferred-width: 720px;
+    preferred-height: 480px;
+
+    // Header / welcome
+    in property <string> title-text;
+    in property <string> welcome-text;
+    in property <string> version-text;
+
+    // Stats labels (left column) and values (right column)
+    in property <string> label-strata;
+    in property <string> label-families;
+    in property <string> label-location-kinds;
+    in property <int> count-strata;
+    in property <int> count-families;
+    in property <int> count-location-kinds;
+
+    // Language switcher
+    in property <string> language-button-text;
+    in property <string> current-language-tag;
+    callback toggle-language();
+    callback refresh-counts();
+    in property <string> refresh-button-text;
+
+    VerticalBox {
+        padding: 24px;
+        spacing: 16px;
+
+        // Title row
+        HorizontalBox {
+            Text {
+                text: title-text;
+                font-size: 24px;
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+            Rectangle { } // spacer
+            Text {
+                text: version-text;
+                color: #888888;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: welcome-text;
+            wrap: word-wrap;
+        }
+
+        GroupBox {
+            title: "Pomone";
+            VerticalBox {
+                padding: 8px;
+                spacing: 6px;
+                HorizontalBox {
+                    Text {
+                        text: label-strata;
+                        horizontal-stretch: 1;
+                    }
+                    Text {
+                        text: count-strata;
+                        horizontal-alignment: right;
+                    }
+                }
+                HorizontalBox {
+                    Text {
+                        text: label-families;
+                        horizontal-stretch: 1;
+                    }
+                    Text {
+                        text: count-families;
+                        horizontal-alignment: right;
+                    }
+                }
+                HorizontalBox {
+                    Text {
+                        text: label-location-kinds;
+                        horizontal-stretch: 1;
+                    }
+                    Text {
+                        text: count-location-kinds;
+                        horizontal-alignment: right;
+                    }
+                }
+            }
+        }
+
+        HorizontalBox {
+            Button {
+                text: refresh-button-text;
+                clicked => {
+                    refresh-counts();
+                }
+            }
+            Rectangle { } // spacer
+            Text {
+                text: current-language-tag;
+                vertical-alignment: center;
+                color: #555555;
+            }
+            Button {
+                text: language-button-text;
+                clicked => {
+                    toggle-language();
+                }
+            }
+        }
+    }
+}

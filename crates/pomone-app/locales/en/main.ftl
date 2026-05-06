@@ -5,6 +5,12 @@
 ## Application
 welcome = Welcome to Pomone
 welcome-user = Welcome, { $name }!
+welcome-summary = Pomone manages your annual and pluriannual crops, from market gardening to agroforestry.
+button-refresh = Refresh
+button-switch-language = Français
+label-strata-count = Strata
+label-families-count = Families
+label-location-kinds-count = Location kinds
 
 ## Common nouns
 crop = Crop

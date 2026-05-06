@@ -18,7 +18,11 @@ path = "src/main.rs"
 pomone-domain = { path = "../pomone-domain" }
 pomone-db = { path = "../pomone-db" }
 pomone-app = { path = "../pomone-app" }
-tokio.workspace = true
+slint.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[build-dependencies]
+slint-build.workspace = true

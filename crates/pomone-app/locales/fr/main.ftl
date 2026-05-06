@@ -7,6 +7,12 @@
 ## Application
 welcome = Bienvenue dans Pomone
 welcome-user = Bienvenue, { $name } !
+welcome-summary = Pomone gère vos cultures annuelles et pluriannuelles, du maraîchage à l'agroforesterie.
+button-refresh = Actualiser
+button-switch-language = English
+label-strata-count = Strates
+label-families-count = Familles
+label-location-kinds-count = Types de lieux
 
 ## Common nouns
 crop = Culture

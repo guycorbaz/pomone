@@ -44,8 +44,10 @@ fluent = "0.16"
 fluent-bundle = "0.15"
 unic-langid = { version = "0.9", features = ["macros"] }
 
-# UI
-slint = "1.8"
+# UI — software renderer is pure-Rust (no fontconfig/skia system deps).
+# Switch features to renderer-femtovg or renderer-skia for higher fidelity
+# once the platform's dev libraries are available.
+slint = { version = "1.8", default-features = false, features = ["std", "compat-1-2", "backend-winit", "renderer-software"] }
 slint-build = "1.8"
 
 # CLI
@@ -70,7 +72,9 @@ codegen-units = 1
 strip = "symbols"
 
 [workspace.lints.rust]
-unsafe_code = "forbid"
+# `deny` rather than `forbid` so generated code (Slint, sqlx) can opt out
+# locally with `#[allow(unsafe_code)]`. We don't write unsafe directly.
+unsafe_code = "deny"
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"
 unused_must_use = "deny"
