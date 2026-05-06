@@ -13,7 +13,7 @@ version = "0.1.0"
 edition = "2021"
 license = "GPL-3.0-or-later"
 authors = ["Pomone contributors"]
-repository = "https://example.invalid/pomone"
+repository = "https://github.com/guycorbaz/pomone"
 rust-version = "1.80"
 
 [workspace.dependencies]
