@@ -1,10 +1,10 @@
 //! `VarietyRepo` implementation for SQLite.
 
-use crate::error::{DbError, DbResult};
-use crate::repository::VarietyRepo;
-use crate::sqlite::codec::{
+use crate::codec::{
     decode_variety_profile, encode_variety_profile, opt_decimal_from_text, opt_decimal_to_text,
 };
+use crate::error::{DbError, DbResult};
+use crate::repository::VarietyRepo;
 use crate::sqlite::SqliteRepository;
 use async_trait::async_trait;
 use pomone_domain::{CropId, Variety, VarietyId};

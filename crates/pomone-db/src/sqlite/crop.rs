@@ -1,8 +1,8 @@
 //! `CropRepo` implementation for SQLite.
 
+use crate::codec::{decode_lifespan, decode_pruning, encode_lifespan, encode_pruning};
 use crate::error::{DbError, DbResult};
 use crate::repository::CropRepo;
-use crate::sqlite::codec::{decode_lifespan, decode_pruning, encode_lifespan, encode_pruning};
 use crate::sqlite::SqliteRepository;
 use async_trait::async_trait;
 use pomone_domain::{Crop, CropId, FamilyId, StrataId};

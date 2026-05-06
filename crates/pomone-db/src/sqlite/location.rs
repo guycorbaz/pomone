@@ -3,9 +3,9 @@
 //! Updates that would form a hierarchy cycle are detected by walking up from
 //! the proposed parent and rejecting if we hit the location being updated.
 
+use crate::codec::{decimal_from_text, decimal_to_text};
 use crate::error::{DbError, DbResult};
 use crate::repository::LocationRepo;
-use crate::sqlite::codec::{decimal_from_text, decimal_to_text};
 use crate::sqlite::SqliteRepository;
 use async_trait::async_trait;
 use pomone_domain::{Location, LocationId, LocationKindId};

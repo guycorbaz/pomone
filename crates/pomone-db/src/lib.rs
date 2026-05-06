@@ -4,12 +4,18 @@
 //! Application code depends on `dyn Repository` so the backend can be swapped
 //! based on user configuration without recompiling.
 
+pub(crate) mod codec;
 pub mod error;
+pub mod mariadb;
 pub mod repository;
 pub mod seed;
 pub mod sqlite;
 
+#[cfg(test)]
+mod cross_backend_tests;
+
 pub use error::{DbError, DbResult};
+pub use mariadb::MariaDbRepository;
 pub use repository::{
     CropRepo, FamilyRepo, LocationKindRepo, LocationRepo, PlantingRepo, Repository, StrataRepo,
     VarietyRepo, YearlyHarvestRepo,

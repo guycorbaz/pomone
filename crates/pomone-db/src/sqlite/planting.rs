@@ -1,10 +1,10 @@
 //! `PlantingRepo` implementation for SQLite.
 
-use crate::error::{DbError, DbResult};
-use crate::repository::PlantingRepo;
-use crate::sqlite::codec::{
+use crate::codec::{
     decimal_from_text, decimal_to_text, decode_planting_schedule, encode_planting_schedule,
 };
+use crate::error::{DbError, DbResult};
+use crate::repository::PlantingRepo;
 use crate::sqlite::SqliteRepository;
 use async_trait::async_trait;
 use pomone_domain::{LocationId, Planting, PlantingId, VarietyId};

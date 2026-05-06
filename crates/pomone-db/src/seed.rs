@@ -149,8 +149,8 @@ pub async fn seed_defaults(repo: &dyn Repository) -> DbResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::SqliteRepository;
     use crate::repository::{FamilyRepo, LocationKindRepo, StrataRepo};
+    use crate::SqliteRepository;
 
     #[tokio::test]
     async fn seed_populates_three_lookup_tables() {

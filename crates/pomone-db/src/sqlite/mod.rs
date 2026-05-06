@@ -1,7 +1,6 @@
 //! SQLite implementation of the [`Repository`](crate::repository::Repository)
 //! trait.
 
-mod codec;
 mod crop;
 mod family;
 mod location;

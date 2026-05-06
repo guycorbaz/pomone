@@ -1,8 +1,8 @@
 //! `YearlyHarvestRepo` implementation for SQLite.
 
+use crate::codec::{opt_decimal_from_text, opt_decimal_to_text};
 use crate::error::{DbError, DbResult};
 use crate::repository::YearlyHarvestRepo;
-use crate::sqlite::codec::{opt_decimal_from_text, opt_decimal_to_text};
 use crate::sqlite::SqliteRepository;
 use async_trait::async_trait;
 use pomone_domain::{PlantingId, YearlyHarvest};
