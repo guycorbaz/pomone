@@ -73,8 +73,14 @@ impl App {
 async fn build_repo(backend: &BackendConfig) -> AppResult<Box<dyn Repository>> {
     match backend {
         BackendConfig::Sqlite { path } => {
-            // sqlx URL form: `sqlite:<path>?mode=rwc` (create if missing handled
-            // by SqliteRepository::connect via SqliteConnectOptions).
+            // SQLite's `create_if_missing` only creates the FILE — its parent
+            // directories must already exist. Make sure they do, since the
+            // OS-specific data dir is unlikely to be present on first launch.
+            if let Some(parent) = path.parent() {
+                if !parent.as_os_str().is_empty() {
+                    std::fs::create_dir_all(parent)?;
+                }
+            }
             let url = format!("sqlite:{}?mode=rwc", path.display());
             let repo = SqliteRepository::connect(&url).await?;
             Ok(Box::new(repo))
