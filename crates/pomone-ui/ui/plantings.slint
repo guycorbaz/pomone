@@ -1,0 +1,264 @@
+// Pomone — Plantings screen.
+//
+// All user-visible text is fed in from Rust via in-properties (single source
+// of truth for translations). The Rust side also owns the list models and
+// callbacks (parse the date, build the typed IDs, run the service).
+
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
+import { ComboBox, LineEdit, ListView, ScrollView } from "std-widgets.slint";
+
+// Row of the plantings list. Mirrors `pomone_app::PlantingRow` field-for-field;
+// the Rust binding converts at the boundary.
+export struct PlantingRow {
+    id: string,
+    variety-label: string,
+    location-label: string,
+    schedule-summary: string,
+    area-label: string,
+    plants-count: int,
+}
+
+// One row in the list. Plain Card with structured content.
+component PlantingRowView inherits Card {
+    in property <PlantingRow> entry;
+    height: 96px;
+
+    VerticalLayout {
+        padding: Theme.space-lg;
+        spacing: Theme.space-xs;
+
+        HorizontalLayout {
+            spacing: Theme.space-md;
+            Text {
+                text: entry.variety-label;
+                color: Palette.text-primary;
+                font-size: Theme.font-size-h3;
+                font-weight: Theme.font-weight-semibold;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: entry.location-label;
+                color: Palette.text-secondary;
+                font-size: Theme.font-size-body;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: entry.schedule-summary;
+            color: Palette.text-secondary;
+            font-size: Theme.font-size-body;
+        }
+
+        HorizontalLayout {
+            spacing: Theme.space-md;
+            Text {
+                text: entry.area-label;
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: entry.plants-count + " " + "plants";
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+                horizontal-alignment: right;
+            }
+        }
+    }
+}
+
+export component PlantingsPage inherits Rectangle {
+    background: Palette.background;
+
+    // Header
+    in property <string> title-text;
+    in property <string> back-button-text;
+    in property <string> empty-state-text;
+
+    // List
+    in property <[PlantingRow]> plantings;
+
+    // Form section
+    in property <string> section-new-text;
+    in property <string> label-variety;
+    in property <string> label-location;
+    in property <string> label-sown-on;
+    in property <string> label-area;
+    in property <string> label-count;
+    in property <string> placeholder-date;
+    in property <string> placeholder-area;
+    in property <string> placeholder-count;
+    in property <string> create-button-text;
+    in property <[string]> variety-labels;
+    in property <[string]> location-labels;
+
+    // Form state (read back by Rust on "create" callback)
+    in-out property <int> variety-index: 0;
+    in-out property <int> location-index: 0;
+    in-out property <string> sown-on-text;
+    in-out property <string> area-text: "20";
+    in-out property <string> count-text: "20";
+
+    // Status line below the form (Rust fills with success or error message)
+    in property <string> status-text;
+    in property <bool> status-is-error: false;
+
+    callback back();
+    callback create-planting();
+
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-xl;
+
+        // Header row with back button and screen title.
+        HorizontalLayout {
+            spacing: Theme.space-md;
+            SecondaryButton {
+                text: back-button-text;
+                clicked => { back(); }
+            }
+            Text {
+                text: title-text;
+                color: Palette.primary;
+                font-size: Theme.font-size-h1;
+                font-weight: Theme.font-weight-bold;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+        }
+
+        // List section
+        if plantings.length == 0: Card {
+            VerticalLayout {
+                padding: Theme.space-2xl;
+                Text {
+                    text: empty-state-text;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-body;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+        if plantings.length > 0: list-area := Rectangle {
+            min-height: 120px;
+            preferred-height: 240px;
+            vertical-stretch: 1;
+            ListView {
+                for item in plantings: PlantingRowView {
+                    entry: item;
+                    width: list-area.width;
+                }
+            }
+        }
+
+        // New-planting form
+        Card {
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-md;
+
+                SectionHeader { text: section-new-text; }
+
+                // Row 1 — variety + location
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-variety;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ComboBox {
+                            model: variety-labels;
+                            current-index <=> variety-index;
+                            enabled: variety-labels.length > 0;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-location;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ComboBox {
+                            model: location-labels;
+                            current-index <=> location-index;
+                            enabled: location-labels.length > 0;
+                        }
+                    }
+                }
+
+                // Row 2 — date + area + count
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 2;
+                        Text {
+                            text: label-sown-on;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        LineEdit {
+                            text <=> sown-on-text;
+                            placeholder-text: placeholder-date;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-area;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        LineEdit {
+                            text <=> area-text;
+                            placeholder-text: placeholder-area;
+                            input-type: decimal;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-count;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        LineEdit {
+                            text <=> count-text;
+                            placeholder-text: placeholder-count;
+                            input-type: number;
+                        }
+                    }
+                }
+
+                // Row 3 — submit + status
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    alignment: stretch;
+                    PrimaryButton {
+                        text: create-button-text;
+                        enabled: variety-labels.length > 0 && location-labels.length > 0;
+                        clicked => { create-planting(); }
+                    }
+                    Text {
+                        text: status-text;
+                        color: status-is-error ? Palette.danger : Palette.success;
+                        font-size: Theme.font-size-label;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+    }
+}

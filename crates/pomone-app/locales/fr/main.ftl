@@ -10,10 +10,27 @@ welcome-user = Bienvenue, { $name } !
 welcome-summary = Pomone gère vos cultures annuelles et pluriannuelles, du maraîchage à l'agroforesterie.
 button-refresh = Actualiser
 button-switch-language = English
+button-plantings = Plantations →
+button-back = ← Retour
+button-create-planting = Créer la plantation
 label-strata-count = Strates
 label-families-count = Familles
 label-location-kinds-count = Types de lieux
+label-variety = Variété
+label-location = Lieu
+label-sown-on = Date de semis
+label-area = Surface (m²)
+label-plants-count = Nombre de plants
+placeholder-date = AAAA-MM-JJ
+placeholder-area = 20
+placeholder-count = 100
 section-overview = Aperçu
+section-new-planting = Nouvelle plantation annuelle
+title-plantings = Plantations
+empty-plantings = Aucune plantation pour l'instant. Renseignez le formulaire ci-dessous pour en créer une.
+status-planting-created = Plantation créée
+status-planting-failed = Échec de la création : { $message }
+status-pick-variety = Sélectionnez une variété et un lieu avant de créer.
 
 ## Common nouns
 crop = Culture
