@@ -101,139 +101,85 @@ export component Card inherits Rectangle {
     border-radius: Theme.radius-md;
 }
 
-// Primary action button.
+// Primary action button. The TouchArea wraps the visual content so its hit-
+// box always matches the painted button — that's the idiomatic Slint pattern.
 export component PrimaryButton inherits Rectangle {
     in property <string> text;
     in property <bool> enabled: true;
     callback clicked();
 
-    private property <bool> pressed: touch.pressed;
-    private property <bool> hovered: touch.has-hover;
-
     height: 36px;
     min-width: 96px;
+    horizontal-stretch: 0;
     border-radius: Theme.radius-md;
     background: !enabled ? Palette.border
-                : pressed ? Palette.primary-pressed
-                : hovered ? Palette.primary-hover
+                : touch.pressed ? Palette.primary-pressed
+                : touch.has-hover ? Palette.primary-hover
                 : Palette.primary;
 
     animate background { duration: Theme.transition-fast; }
-
-    label := Text {
-        text: root.text;
-        color: Palette.text-on-primary;
-        font-size: Theme.font-size-body;
-        font-weight: Theme.font-weight-semibold;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        x: Theme.space-lg;
-        y: 0;
-        width: parent.width - 2 * Theme.space-lg;
-        height: parent.height;
-    }
-
-    // Focus ring drawn on top via a sibling rectangle so it stays crisp.
-    focus-ring := Rectangle {
-        visible: focus-scope.has-focus;
-        border-color: Palette.focus-ring;
-        border-width: Theme.focus-ring-width;
-        border-radius: Theme.radius-md + 2px;
-        x: -2px;
-        y: -2px;
-        width: parent.width + 4px;
-        height: parent.height + 4px;
-        background: transparent;
-    }
-
-    focus-scope := FocusScope {
-        key-pressed(event) => {
-            if (event.text == " " || event.text == "\n") {
-                if (root.enabled) {
-                    root.clicked();
-                }
-                return accept;
-            }
-            return reject;
-        }
-    }
 
     touch := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
         clicked => {
             if (root.enabled) {
-                focus-scope.focus();
                 root.clicked();
             }
+        }
+
+        Text {
+            text: root.text;
+            color: Palette.text-on-primary;
+            font-size: Theme.font-size-body;
+            font-weight: Theme.font-weight-semibold;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            x: Theme.space-lg;
+            y: 0;
+            width: parent.width - 2 * Theme.space-lg;
+            height: parent.height;
         }
     }
 }
 
-// Secondary / ghost button — text-coloured, transparent background.
+// Secondary / ghost button — outlined, transparent background, primary text.
 export component SecondaryButton inherits Rectangle {
     in property <string> text;
     in property <bool> enabled: true;
     callback clicked();
 
-    private property <bool> pressed: touch.pressed;
-    private property <bool> hovered: touch.has-hover;
-
     height: 36px;
     min-width: 96px;
+    horizontal-stretch: 0;
     border-radius: Theme.radius-md;
     border-width: Theme.border-width;
     border-color: enabled ? Palette.border-strong : Palette.border;
     background: !enabled ? transparent
-                : pressed ? Palette.surface-alt
-                : hovered ? Palette.surface-alt
+                : touch.pressed ? Palette.surface-alt
+                : touch.has-hover ? Palette.surface-alt
                 : transparent;
 
     animate background { duration: Theme.transition-fast; }
-
-    Text {
-        text: root.text;
-        color: root.enabled ? Palette.text-primary : Palette.text-muted;
-        font-size: Theme.font-size-body;
-        font-weight: Theme.font-weight-medium;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        x: Theme.space-lg;
-        y: 0;
-        width: parent.width - 2 * Theme.space-lg;
-        height: parent.height;
-    }
-
-    focus-ring := Rectangle {
-        visible: focus-scope.has-focus;
-        border-color: Palette.focus-ring;
-        border-width: Theme.focus-ring-width;
-        border-radius: Theme.radius-md + 2px;
-        x: -2px;
-        y: -2px;
-        width: parent.width + 4px;
-        height: parent.height + 4px;
-        background: transparent;
-    }
-
-    focus-scope := FocusScope {
-        key-pressed(event) => {
-            if (event.text == " " || event.text == "\n") {
-                if (root.enabled) {
-                    root.clicked();
-                }
-                return accept;
-            }
-            return reject;
-        }
-    }
 
     touch := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
         clicked => {
             if (root.enabled) {
-                focus-scope.focus();
                 root.clicked();
             }
+        }
+
+        Text {
+            text: root.text;
+            color: root.enabled ? Palette.text-primary : Palette.text-muted;
+            font-size: Theme.font-size-body;
+            font-weight: Theme.font-weight-medium;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            x: Theme.space-lg;
+            y: 0;
+            width: parent.width - 2 * Theme.space-lg;
+            height: parent.height;
         }
     }
 }
