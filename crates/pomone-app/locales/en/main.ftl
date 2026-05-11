@@ -8,10 +8,27 @@ welcome-user = Welcome, { $name }!
 welcome-summary = Pomone manages your annual and pluriannual crops, from market gardening to agroforestry.
 button-refresh = Refresh
 button-switch-language = Français
+button-plantings = Plantings →
+button-back = ← Back
+button-create-planting = Create planting
 label-strata-count = Strata
 label-families-count = Families
 label-location-kinds-count = Location kinds
+label-variety = Variety
+label-location = Location
+label-sown-on = Sowing date
+label-area = Area (m²)
+label-plants-count = Plant count
+placeholder-date = YYYY-MM-DD
+placeholder-area = 20
+placeholder-count = 100
 section-overview = Overview
+section-new-planting = New annual planting
+title-plantings = Plantings
+empty-plantings = No plantings yet. Fill in the form below to create one.
+status-planting-created = Planting created
+status-planting-failed = Creation failed: { $message }
+status-pick-variety = Pick a variety and a location before creating.
 
 ## Common nouns
 crop = Crop

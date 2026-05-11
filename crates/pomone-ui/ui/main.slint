@@ -1,23 +1,24 @@
 // Pomone — root Slint window.
 //
-// All user-visible text comes in via in-properties so the Rust side can fill
-// it from Fluent (single source of truth for translations).
-//
-// All colours/spacing/typography come from `theme.slint` so screens stay
-// visually coherent and a single switch flips light → dark.
+// MainWindow is just a router: it owns `current-page` and switches between
+// the Home and Plantings panes. Every visible string and every list model is
+// supplied by Rust through in-properties, keeping translations and data in a
+// single Rust-side source of truth.
 
 import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
+import { PlantingsPage, PlantingRow } from "plantings.slint";
 
-// One row of the "overview" card: a label on the left, a numeric value on the right.
+// Re-export so the generated Rust types are visible to `main.rs`.
+export { PlantingRow }
+
+// One row of the "overview" card on the home page: label on the left, numeric
+// value on the right.
 component StatRow inherits Rectangle {
     in property <string> label;
     in property <int> value;
     height: 36px;
     HorizontalLayout {
-        padding-left: 0px;
-        padding-right: 0px;
         spacing: Theme.space-md;
-        alignment: stretch;
         Text {
             text: root.label;
             color: Palette.text-primary;
@@ -36,7 +37,6 @@ component StatRow inherits Rectangle {
     }
 }
 
-// Thin divider between rows inside a card.
 component Divider inherits Rectangle {
     height: 1px;
     background: Palette.border;
@@ -44,42 +44,67 @@ component Divider inherits Rectangle {
 
 export component MainWindow inherits Window {
     title: "Pomone";
-    preferred-width: 720px;
-    preferred-height: 520px;
-    min-width: 480px;
-    min-height: 360px;
+    preferred-width: 880px;
+    preferred-height: 640px;
+    min-width: 520px;
+    min-height: 420px;
     background: Palette.background;
 
-    // Header / welcome
+    // ------- Navigation -------
+    in-out property <string> current-page: "home";
+
+    // ------- Home page strings -------
     in property <string> title-text;
     in property <string> welcome-text;
     in property <string> version-text;
     in property <string> section-overview-text;
-
-    // Stats labels (left column) and values (right column)
     in property <string> label-strata;
     in property <string> label-families;
     in property <string> label-location-kinds;
     in property <int> count-strata;
     in property <int> count-families;
     in property <int> count-location-kinds;
-
-    // Language switcher
     in property <string> language-button-text;
     in property <string> current-language-tag;
+    in property <string> refresh-button-text;
+    in property <string> plantings-button-text;
     callback toggle-language();
     callback refresh-counts();
-    in property <string> refresh-button-text;
+    callback navigate-plantings();
 
-    VerticalLayout {
+    // ------- Plantings page state forwarded to PlantingsPage -------
+    in property <string> plantings-title-text;
+    in property <string> back-button-text;
+    in property <string> empty-state-text;
+    in property <[PlantingRow]> plantings;
+    in property <string> section-new-text;
+    in property <string> label-variety;
+    in property <string> label-location;
+    in property <string> label-sown-on;
+    in property <string> label-area;
+    in property <string> label-count;
+    in property <string> placeholder-date;
+    in property <string> placeholder-area;
+    in property <string> placeholder-count;
+    in property <string> create-button-text;
+    in property <[string]> variety-labels;
+    in property <[string]> location-labels;
+    in-out property <int> variety-index: 0;
+    in-out property <int> location-index: 0;
+    in-out property <string> sown-on-text;
+    in-out property <string> area-text: "20";
+    in-out property <string> count-text: "20";
+    in property <string> status-text;
+    in property <bool> status-is-error: false;
+    callback create-planting();
+
+    // ------- Home page -------
+    if current-page == "home": home-pane := VerticalLayout {
         padding: Theme.space-2xl;
         spacing: Theme.space-xl;
 
-        // Header — app name + version
         HorizontalLayout {
-            alignment: stretch;
             spacing: Theme.space-md;
-
             VerticalLayout {
                 spacing: 2px;
                 horizontal-stretch: 1;
@@ -97,7 +122,6 @@ export component MainWindow inherits Window {
             }
         }
 
-        // Welcome line — secondary text, wraps on narrow widths.
         Text {
             text: welcome-text;
             color: Palette.text-secondary;
@@ -105,48 +129,35 @@ export component MainWindow inherits Window {
             wrap: word-wrap;
         }
 
-        // Overview card — three labelled counts.
         Card {
             VerticalLayout {
                 padding: Theme.space-xl;
                 spacing: Theme.space-sm;
 
-                SectionHeader {
-                    text: section-overview-text;
-                }
-
+                SectionHeader { text: section-overview-text; }
                 Rectangle { height: Theme.space-xs; }
 
-                StatRow {
-                    label: label-strata;
-                    value: count-strata;
-                }
+                StatRow { label: label-strata; value: count-strata; }
                 Divider { }
-                StatRow {
-                    label: label-families;
-                    value: count-families;
-                }
+                StatRow { label: label-families; value: count-families; }
                 Divider { }
-                StatRow {
-                    label: label-location-kinds;
-                    value: count-location-kinds;
-                }
+                StatRow { label: label-location-kinds; value: count-location-kinds; }
             }
         }
 
-        // Pushes the action row to the bottom.
         Rectangle { vertical-stretch: 1; }
 
-        // Footer — primary action (refresh) on the left, language switch on the right.
         HorizontalLayout {
             spacing: Theme.space-md;
             alignment: stretch;
 
             PrimaryButton {
+                text: plantings-button-text;
+                clicked => { navigate-plantings(); }
+            }
+            SecondaryButton {
                 text: refresh-button-text;
-                clicked => {
-                    refresh-counts();
-                }
+                clicked => { refresh-counts(); }
             }
 
             Rectangle { horizontal-stretch: 1; }
@@ -159,10 +170,37 @@ export component MainWindow inherits Window {
             }
             SecondaryButton {
                 text: language-button-text;
-                clicked => {
-                    toggle-language();
-                }
+                clicked => { toggle-language(); }
             }
         }
+    }
+
+    // ------- Plantings page -------
+    if current-page == "plantings": plantings-pane := PlantingsPage {
+        title-text: plantings-title-text;
+        back-button-text: back-button-text;
+        empty-state-text: empty-state-text;
+        plantings: plantings;
+        section-new-text: section-new-text;
+        label-variety: label-variety;
+        label-location: label-location;
+        label-sown-on: label-sown-on;
+        label-area: label-area;
+        label-count: label-count;
+        placeholder-date: placeholder-date;
+        placeholder-area: placeholder-area;
+        placeholder-count: placeholder-count;
+        create-button-text: create-button-text;
+        variety-labels: variety-labels;
+        location-labels: location-labels;
+        variety-index <=> variety-index;
+        location-index <=> location-index;
+        sown-on-text <=> sown-on-text;
+        area-text <=> area-text;
+        count-text <=> count-text;
+        status-text: status-text;
+        status-is-error: status-is-error;
+        back => { current-page = "home"; }
+        create-planting => { create-planting(); }
     }
 }

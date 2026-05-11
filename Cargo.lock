@@ -4286,9 +4286,12 @@ name = "pomone-ui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
+ "fluent",
  "pomone-app",
  "pomone-db",
  "pomone-domain",
+ "rust_decimal",
  "slint",
  "slint-build",
  "tokio",
