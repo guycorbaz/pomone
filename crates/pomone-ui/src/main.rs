@@ -107,6 +107,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_label_strata(SharedString::from(i18n.t("label-strata-count")));
     window.set_label_families(SharedString::from(i18n.t("label-families-count")));
     window.set_label_location_kinds(SharedString::from(i18n.t("label-location-kinds-count")));
+    window.set_section_overview_text(SharedString::from(i18n.t("section-overview")));
     window.set_refresh_button_text(SharedString::from(i18n.t("button-refresh")));
     window.set_language_button_text(SharedString::from(i18n.t("button-switch-language")));
     window.set_current_language_tag(SharedString::from(i18n.lang().tag()));

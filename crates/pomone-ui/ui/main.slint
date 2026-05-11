@@ -2,18 +2,59 @@
 //
 // All user-visible text comes in via in-properties so the Rust side can fill
 // it from Fluent (single source of truth for translations).
+//
+// All colours/spacing/typography come from `theme.slint` so screens stay
+// visually coherent and a single switch flips light → dark.
 
-import { Button, GroupBox, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
+
+// One row of the "overview" card: a label on the left, a numeric value on the right.
+component StatRow inherits Rectangle {
+    in property <string> label;
+    in property <int> value;
+    height: 36px;
+    HorizontalLayout {
+        padding-left: 0px;
+        padding-right: 0px;
+        spacing: Theme.space-md;
+        alignment: stretch;
+        Text {
+            text: root.label;
+            color: Palette.text-primary;
+            font-size: Theme.font-size-body;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        Text {
+            text: root.value;
+            color: Palette.primary;
+            font-size: Theme.font-size-numeric;
+            font-weight: Theme.font-weight-semibold;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+        }
+    }
+}
+
+// Thin divider between rows inside a card.
+component Divider inherits Rectangle {
+    height: 1px;
+    background: Palette.border;
+}
 
 export component MainWindow inherits Window {
     title: "Pomone";
     preferred-width: 720px;
-    preferred-height: 480px;
+    preferred-height: 520px;
+    min-width: 480px;
+    min-height: 360px;
+    background: Palette.background;
 
     // Header / welcome
     in property <string> title-text;
     in property <string> welcome-text;
     in property <string> version-text;
+    in property <string> section-overview-text;
 
     // Stats labels (left column) and values (right column)
     in property <string> label-strata;
@@ -30,83 +71,93 @@ export component MainWindow inherits Window {
     callback refresh-counts();
     in property <string> refresh-button-text;
 
-    VerticalBox {
-        padding: 24px;
-        spacing: 16px;
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-xl;
 
-        // Title row
-        HorizontalBox {
-            Text {
-                text: title-text;
-                font-size: 24px;
-                font-weight: 700;
-                vertical-alignment: center;
-            }
-            Rectangle { } // spacer
-            Text {
-                text: version-text;
-                color: #888888;
-                vertical-alignment: center;
+        // Header — app name + version
+        HorizontalLayout {
+            alignment: stretch;
+            spacing: Theme.space-md;
+
+            VerticalLayout {
+                spacing: 2px;
+                horizontal-stretch: 1;
+                Text {
+                    text: title-text;
+                    color: Palette.primary;
+                    font-size: Theme.font-size-h1;
+                    font-weight: Theme.font-weight-bold;
+                }
+                Text {
+                    text: version-text;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-label;
+                }
             }
         }
 
+        // Welcome line — secondary text, wraps on narrow widths.
         Text {
             text: welcome-text;
+            color: Palette.text-secondary;
+            font-size: Theme.font-size-body;
             wrap: word-wrap;
         }
 
-        GroupBox {
-            title: "Pomone";
-            VerticalBox {
-                padding: 8px;
-                spacing: 6px;
-                HorizontalBox {
-                    Text {
-                        text: label-strata;
-                        horizontal-stretch: 1;
-                    }
-                    Text {
-                        text: count-strata;
-                        horizontal-alignment: right;
-                    }
+        // Overview card — three labelled counts.
+        Card {
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-sm;
+
+                SectionHeader {
+                    text: section-overview-text;
                 }
-                HorizontalBox {
-                    Text {
-                        text: label-families;
-                        horizontal-stretch: 1;
-                    }
-                    Text {
-                        text: count-families;
-                        horizontal-alignment: right;
-                    }
+
+                Rectangle { height: Theme.space-xs; }
+
+                StatRow {
+                    label: label-strata;
+                    value: count-strata;
                 }
-                HorizontalBox {
-                    Text {
-                        text: label-location-kinds;
-                        horizontal-stretch: 1;
-                    }
-                    Text {
-                        text: count-location-kinds;
-                        horizontal-alignment: right;
-                    }
+                Divider { }
+                StatRow {
+                    label: label-families;
+                    value: count-families;
+                }
+                Divider { }
+                StatRow {
+                    label: label-location-kinds;
+                    value: count-location-kinds;
                 }
             }
         }
 
-        HorizontalBox {
-            Button {
+        // Pushes the action row to the bottom.
+        Rectangle { vertical-stretch: 1; }
+
+        // Footer — primary action (refresh) on the left, language switch on the right.
+        HorizontalLayout {
+            spacing: Theme.space-md;
+            alignment: stretch;
+
+            PrimaryButton {
                 text: refresh-button-text;
                 clicked => {
                     refresh-counts();
                 }
             }
-            Rectangle { } // spacer
+
+            Rectangle { horizontal-stretch: 1; }
+
             Text {
                 text: current-language-tag;
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
                 vertical-alignment: center;
-                color: #555555;
             }
-            Button {
+            SecondaryButton {
                 text: language-button-text;
                 clicked => {
                     toggle-language();

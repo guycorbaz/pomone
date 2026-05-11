@@ -13,6 +13,7 @@ button-switch-language = English
 label-strata-count = Strates
 label-families-count = Familles
 label-location-kinds-count = Types de lieux
+section-overview = Aperçu
 
 ## Common nouns
 crop = Culture

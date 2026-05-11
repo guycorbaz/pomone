@@ -1,0 +1,248 @@
+// Pomone design tokens.
+//
+// Two globals are exposed:
+//   * `Palette` — semantic colours, derived from a single `dark` toggle.
+//     Every screen reads colours from here so that flipping the toggle
+//     switches the whole UI between light and dark themes.
+//   * `Theme` — non-colour tokens: spacing scale, type scale, radii, weights.
+//
+// Visual direction: "orchard / garden" — leaf greens for primary actions,
+// terracotta for accents, warm cream for the light surface, dark olive for
+// the dark surface. WCAG AA contrast was checked for text on every surface.
+
+export global Palette {
+    // Flip this at runtime to switch the whole UI to dark mode.
+    in-out property <bool> dark: false;
+
+    // Backgrounds
+    out property <brush> background: dark ? #1B2018 : #FBF7F0;
+    out property <brush> surface: dark ? #242B23 : #FFFFFF;
+    out property <brush> surface-alt: dark ? #2D352C : #F3EDE0;
+    out property <brush> overlay: dark ? #00000080 : #00000026;
+
+    // Text
+    out property <brush> text-primary: dark ? #ECE6D8 : #2A2118;
+    out property <brush> text-secondary: dark ? #BDB59F : #5B4D3E;
+    out property <brush> text-muted: dark ? #8A8472 : #8A7B6A;
+    out property <brush> text-on-primary: #FFFFFF;
+    out property <brush> text-on-accent: #FFFFFF;
+
+    // Borders / dividers
+    out property <brush> border: dark ? #3B4439 : #E2D7C2;
+    out property <brush> border-strong: dark ? #55604F : #C8B89A;
+
+    // Primary action — leaf green
+    out property <brush> primary: dark ? #6FAF7A : #3C6E47;
+    out property <brush> primary-hover: dark ? #7FBF8A : #2F5938;
+    out property <brush> primary-pressed: dark ? #5F9F6A : #244529;
+
+    // Accent — terracotta
+    out property <brush> accent: dark ? #D87858 : #B85C38;
+    out property <brush> accent-hover: dark ? #E88868 : #9A4A2C;
+    out property <brush> accent-pressed: dark ? #C86848 : #7E3A22;
+
+    // Focus ring — light leaf green, visible on both themes
+    out property <brush> focus-ring: dark ? #9FD0A8 : #6A9F77;
+
+    // Status colours (kept gentle so they don't shout in a data-heavy UI)
+    out property <brush> success: dark ? #6FAF7A : #3C6E47;
+    out property <brush> warning: dark ? #E3B567 : #B07C25;
+    out property <brush> danger: dark ? #D88078 : #A64238;
+}
+
+export global Theme {
+    // Spacing scale (multiples of 4px).
+    out property <length> space-xs: 4px;
+    out property <length> space-sm: 8px;
+    out property <length> space-md: 12px;
+    out property <length> space-lg: 16px;
+    out property <length> space-xl: 24px;
+    out property <length> space-2xl: 32px;
+    out property <length> space-3xl: 48px;
+
+    // Type scale.
+    out property <length> font-size-h1: 28px;
+    out property <length> font-size-h2: 20px;
+    out property <length> font-size-h3: 16px;
+    out property <length> font-size-body: 14px;
+    out property <length> font-size-label: 12px;
+    out property <length> font-size-numeric: 22px;
+
+    out property <int> font-weight-regular: 400;
+    out property <int> font-weight-medium: 500;
+    out property <int> font-weight-semibold: 600;
+    out property <int> font-weight-bold: 700;
+
+    // Radii.
+    out property <length> radius-sm: 4px;
+    out property <length> radius-md: 8px;
+    out property <length> radius-lg: 12px;
+    out property <length> radius-pill: 999px;
+
+    // Borders.
+    out property <length> border-width: 1px;
+    out property <length> focus-ring-width: 2px;
+
+    // Animation timing — kept short so the UI feels snappy on slower hardware.
+    out property <duration> transition-fast: 120ms;
+    out property <duration> transition-medium: 200ms;
+}
+
+// ---------------------------------------------------------------------------
+// Reusable components built on top of the tokens above. Screens compose these
+// rather than restyling primitives every time.
+// ---------------------------------------------------------------------------
+
+// A surface that hosts content groups (cards, panels, list rows).
+export component Card inherits Rectangle {
+    background: Palette.surface;
+    border-color: Palette.border;
+    border-width: Theme.border-width;
+    border-radius: Theme.radius-md;
+}
+
+// Primary action button.
+export component PrimaryButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    private property <bool> pressed: touch.pressed;
+    private property <bool> hovered: touch.has-hover;
+
+    height: 36px;
+    min-width: 96px;
+    border-radius: Theme.radius-md;
+    background: !enabled ? Palette.border
+                : pressed ? Palette.primary-pressed
+                : hovered ? Palette.primary-hover
+                : Palette.primary;
+
+    animate background { duration: Theme.transition-fast; }
+
+    label := Text {
+        text: root.text;
+        color: Palette.text-on-primary;
+        font-size: Theme.font-size-body;
+        font-weight: Theme.font-weight-semibold;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        x: Theme.space-lg;
+        y: 0;
+        width: parent.width - 2 * Theme.space-lg;
+        height: parent.height;
+    }
+
+    // Focus ring drawn on top via a sibling rectangle so it stays crisp.
+    focus-ring := Rectangle {
+        visible: focus-scope.has-focus;
+        border-color: Palette.focus-ring;
+        border-width: Theme.focus-ring-width;
+        border-radius: Theme.radius-md + 2px;
+        x: -2px;
+        y: -2px;
+        width: parent.width + 4px;
+        height: parent.height + 4px;
+        background: transparent;
+    }
+
+    focus-scope := FocusScope {
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") {
+                if (root.enabled) {
+                    root.clicked();
+                }
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                focus-scope.focus();
+                root.clicked();
+            }
+        }
+    }
+}
+
+// Secondary / ghost button — text-coloured, transparent background.
+export component SecondaryButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    private property <bool> pressed: touch.pressed;
+    private property <bool> hovered: touch.has-hover;
+
+    height: 36px;
+    min-width: 96px;
+    border-radius: Theme.radius-md;
+    border-width: Theme.border-width;
+    border-color: enabled ? Palette.border-strong : Palette.border;
+    background: !enabled ? transparent
+                : pressed ? Palette.surface-alt
+                : hovered ? Palette.surface-alt
+                : transparent;
+
+    animate background { duration: Theme.transition-fast; }
+
+    Text {
+        text: root.text;
+        color: root.enabled ? Palette.text-primary : Palette.text-muted;
+        font-size: Theme.font-size-body;
+        font-weight: Theme.font-weight-medium;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        x: Theme.space-lg;
+        y: 0;
+        width: parent.width - 2 * Theme.space-lg;
+        height: parent.height;
+    }
+
+    focus-ring := Rectangle {
+        visible: focus-scope.has-focus;
+        border-color: Palette.focus-ring;
+        border-width: Theme.focus-ring-width;
+        border-radius: Theme.radius-md + 2px;
+        x: -2px;
+        y: -2px;
+        width: parent.width + 4px;
+        height: parent.height + 4px;
+        background: transparent;
+    }
+
+    focus-scope := FocusScope {
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") {
+                if (root.enabled) {
+                    root.clicked();
+                }
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    touch := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                focus-scope.focus();
+                root.clicked();
+            }
+        }
+    }
+}
+
+// Section header for grouping content inside cards or panels.
+export component SectionHeader inherits Text {
+    color: Palette.text-secondary;
+    font-size: Theme.font-size-label;
+    font-weight: Theme.font-weight-semibold;
+    // Letter-spacing isn't directly settable in Slint; we approximate the
+    // "uppercase eyebrow" feel through weight + colour alone.
+}

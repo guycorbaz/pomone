@@ -11,6 +11,7 @@ button-switch-language = Français
 label-strata-count = Strata
 label-families-count = Families
 label-location-kinds-count = Location kinds
+section-overview = Overview
 
 ## Common nouns
 crop = Crop
