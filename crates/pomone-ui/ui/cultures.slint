@@ -8,8 +8,8 @@
 // add a new annual variety. A separate form below the Crops list adds a new
 // annual crop.
 
-import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
-import { ComboBox, LineEdit, ListView } from "std-widgets.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
+import { ListView } from "std-widgets.slint";
 
 export struct CropRow {
     id: string,
@@ -17,7 +17,9 @@ export struct CropRow {
     family-label: string,
     strata-label: string,
     lifespan-label: string,
+    pruning-label: string,
     variety-count: int,
+    is-annual: bool,
 }
 
 export struct VarietyRow {
@@ -33,7 +35,7 @@ component CropRowView inherits Rectangle {
     in property <bool> selected;
     callback clicked();
 
-    height: 76px;
+    height: 84px;
     background: selected ? Palette.surface-alt
                 : touch.has-hover ? Palette.surface-alt
                 : Palette.surface;
@@ -68,9 +70,11 @@ component CropRowView inherits Rectangle {
                 }
             }
             Text {
-                text: entry.family-label + " · " + entry.strata-label + " · " + entry.lifespan-label;
+                text: entry.family-label + " · " + entry.strata-label
+                      + " · " + entry.lifespan-label + " · " + entry.pruning-label;
                 color: Palette.text-muted;
                 font-size: Theme.font-size-label;
+                wrap: word-wrap;
             }
         }
     }
@@ -78,7 +82,7 @@ component CropRowView inherits Rectangle {
 
 component VarietyRowView inherits Card {
     in property <VarietyRow> entry;
-    height: 88px;
+    height: 96px;
 
     VerticalLayout {
         padding: Theme.space-md;
@@ -129,6 +133,22 @@ export component CulturesPage inherits Rectangle {
     in-out property <int> strata-index: 0;
     in-out property <string> new-crop-name;
     in-out property <string> new-crop-latin;
+    // Lifespan kind: 0 = Annual, 1 = Pluriannual single cycle,
+    // 2 = Pluriannual recurring. Rust resolves the index back to the enum.
+    in property <string> label-lifespan;
+    in property <[string]> lifespan-labels;
+    in-out property <int> new-crop-lifespan-index: 0;
+    // Pluriannual extras (visible conditionally based on lifespan index).
+    in property <string> label-lifespan-years;
+    in property <string> placeholder-lifespan-years;
+    in-out property <string> new-crop-lifespan-years: "30";
+    in property <string> label-years-to-first-yield;
+    in property <string> placeholder-years-to-first-yield;
+    in-out property <string> new-crop-years-to-first-yield: "3";
+    // Pruning season: 0 = None, 1 = Winter, 2 = Summer, 3 = Both.
+    in property <string> label-pruning;
+    in property <[string]> pruning-labels;
+    in-out property <int> new-crop-pruning-index: 0;
     in property <string> create-crop-button-text;
     callback create-crop();
 
@@ -143,6 +163,9 @@ export component CulturesPage inherits Rectangle {
     in property <string> placeholder-variety-name;
     in property <string> label-variety-description;
     in property <string> placeholder-variety-description;
+    // True when the selected crop is annual; drives which form panel shows.
+    in property <bool> selected-crop-is-annual: true;
+    // Annual variety form fields.
     in property <string> label-dtt;
     in property <string> label-dtm;
     in property <string> label-window;
@@ -154,6 +177,22 @@ export component CulturesPage inherits Rectangle {
     in-out property <string> new-variety-dtt: "35";
     in-out property <string> new-variety-dtm: "70";
     in-out property <string> new-variety-window: "60";
+    // Pluriannual variety form fields.
+    in property <string> label-bud-break-doy;
+    in property <string> label-flowering-doy;
+    in property <string> label-harvest-start-doy;
+    in property <string> label-harvest-end-doy;
+    in property <string> label-yield-kg;
+    in property <string> placeholder-bud-break-doy;
+    in property <string> placeholder-flowering-doy;
+    in property <string> placeholder-harvest-start-doy;
+    in property <string> placeholder-harvest-end-doy;
+    in property <string> placeholder-yield-kg;
+    in-out property <string> new-variety-bud-break-doy;
+    in-out property <string> new-variety-flowering-doy;
+    in-out property <string> new-variety-harvest-start-doy: "220";
+    in-out property <string> new-variety-harvest-end-doy: "280";
+    in-out property <string> new-variety-yield-kg;
     in property <string> create-variety-button-text;
     callback create-variety();
 
@@ -223,7 +262,7 @@ export component CulturesPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        LineEdit {
+                        ThemedLineEdit {
                             text <=> new-crop-name;
                             placeholder-text: placeholder-crop-name;
                         }
@@ -235,7 +274,7 @@ export component CulturesPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        LineEdit {
+                        ThemedLineEdit {
                             text <=> new-crop-latin;
                             placeholder-text: placeholder-crop-latin;
                         }
@@ -250,7 +289,7 @@ export component CulturesPage inherits Rectangle {
                                 color: Palette.text-secondary;
                                 font-size: Theme.font-size-label;
                             }
-                            ComboBox {
+                            ThemedComboBox {
                                 model: family-labels;
                                 current-index <=> family-index;
                                 enabled: family-labels.length > 0;
@@ -264,10 +303,75 @@ export component CulturesPage inherits Rectangle {
                                 color: Palette.text-secondary;
                                 font-size: Theme.font-size-label;
                             }
-                            ComboBox {
+                            ThemedComboBox {
                                 model: strata-labels;
                                 current-index <=> strata-index;
                                 enabled: strata-labels.length > 0;
+                            }
+                        }
+                    }
+                    // Lifespan + pruning dropdowns.
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-lifespan;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedComboBox {
+                                model: lifespan-labels;
+                                current-index <=> new-crop-lifespan-index;
+                                enabled: lifespan-labels.length > 0;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-pruning;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedComboBox {
+                                model: pruning-labels;
+                                current-index <=> new-crop-pruning-index;
+                                enabled: pruning-labels.length > 0;
+                            }
+                        }
+                    }
+                    // Pluriannual extras — shown only when a pluri lifespan is picked.
+                    if new-crop-lifespan-index > 0: HorizontalLayout {
+                        spacing: Theme.space-md;
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-lifespan-years;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedLineEdit {
+                                text <=> new-crop-lifespan-years;
+                                placeholder-text: placeholder-lifespan-years;
+                                input-type: number;
+                            }
+                        }
+                        // Recurring only — show "years to first yield".
+                        if new-crop-lifespan-index == 2: VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-years-to-first-yield;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedLineEdit {
+                                text <=> new-crop-years-to-first-yield;
+                                placeholder-text: placeholder-years-to-first-yield;
+                                input-type: number;
                             }
                         }
                     }
@@ -331,7 +435,7 @@ export component CulturesPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        LineEdit {
+                        ThemedLineEdit {
                             text <=> new-variety-name;
                             placeholder-text: placeholder-variety-name;
                             enabled: selected-crop-index >= 0;
@@ -344,13 +448,14 @@ export component CulturesPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        LineEdit {
+                        ThemedLineEdit {
                             text <=> new-variety-description;
                             placeholder-text: placeholder-variety-description;
                             enabled: selected-crop-index >= 0;
                         }
                     }
-                    HorizontalLayout {
+                    // Annual variety form (DTT/DTM/window).
+                    if selected-crop-is-annual: HorizontalLayout {
                         spacing: Theme.space-md;
                         VerticalLayout {
                             spacing: Theme.space-xs;
@@ -360,7 +465,7 @@ export component CulturesPage inherits Rectangle {
                                 color: Palette.text-secondary;
                                 font-size: Theme.font-size-label;
                             }
-                            LineEdit {
+                            ThemedLineEdit {
                                 text <=> new-variety-dtt;
                                 placeholder-text: placeholder-dtt;
                                 input-type: number;
@@ -375,7 +480,7 @@ export component CulturesPage inherits Rectangle {
                                 color: Palette.text-secondary;
                                 font-size: Theme.font-size-label;
                             }
-                            LineEdit {
+                            ThemedLineEdit {
                                 text <=> new-variety-dtm;
                                 placeholder-text: placeholder-dtm;
                                 input-type: number;
@@ -390,10 +495,94 @@ export component CulturesPage inherits Rectangle {
                                 color: Palette.text-secondary;
                                 font-size: Theme.font-size-label;
                             }
-                            LineEdit {
+                            ThemedLineEdit {
                                 text <=> new-variety-window;
                                 placeholder-text: placeholder-window;
                                 input-type: number;
+                                enabled: selected-crop-index >= 0;
+                            }
+                        }
+                    }
+                    // Pluriannual variety form (DOY phenology + yield).
+                    if !selected-crop-is-annual: VerticalLayout {
+                        spacing: Theme.space-md;
+                        HorizontalLayout {
+                            spacing: Theme.space-md;
+                            VerticalLayout {
+                                spacing: Theme.space-xs;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: label-bud-break-doy;
+                                    color: Palette.text-secondary;
+                                    font-size: Theme.font-size-label;
+                                }
+                                ThemedLineEdit {
+                                    text <=> new-variety-bud-break-doy;
+                                    placeholder-text: placeholder-bud-break-doy;
+                                    input-type: number;
+                                    enabled: selected-crop-index >= 0;
+                                }
+                            }
+                            VerticalLayout {
+                                spacing: Theme.space-xs;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: label-flowering-doy;
+                                    color: Palette.text-secondary;
+                                    font-size: Theme.font-size-label;
+                                }
+                                ThemedLineEdit {
+                                    text <=> new-variety-flowering-doy;
+                                    placeholder-text: placeholder-flowering-doy;
+                                    input-type: number;
+                                    enabled: selected-crop-index >= 0;
+                                }
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: Theme.space-md;
+                            VerticalLayout {
+                                spacing: Theme.space-xs;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: label-harvest-start-doy;
+                                    color: Palette.text-secondary;
+                                    font-size: Theme.font-size-label;
+                                }
+                                ThemedLineEdit {
+                                    text <=> new-variety-harvest-start-doy;
+                                    placeholder-text: placeholder-harvest-start-doy;
+                                    input-type: number;
+                                    enabled: selected-crop-index >= 0;
+                                }
+                            }
+                            VerticalLayout {
+                                spacing: Theme.space-xs;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: label-harvest-end-doy;
+                                    color: Palette.text-secondary;
+                                    font-size: Theme.font-size-label;
+                                }
+                                ThemedLineEdit {
+                                    text <=> new-variety-harvest-end-doy;
+                                    placeholder-text: placeholder-harvest-end-doy;
+                                    input-type: number;
+                                    enabled: selected-crop-index >= 0;
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text {
+                                text: label-yield-kg;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedLineEdit {
+                                text <=> new-variety-yield-kg;
+                                placeholder-text: placeholder-yield-kg;
+                                input-type: decimal;
                                 enabled: selected-crop-index >= 0;
                             }
                         }

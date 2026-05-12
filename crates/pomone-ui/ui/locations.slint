@@ -6,8 +6,8 @@
 // The Rust side flattens the hierarchy into pre-order `LocationItem`s with
 // a `depth` field; the row indent is `depth × 24px`.
 
-import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
-import { ComboBox, LineEdit, ListView } from "std-widgets.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
+import { ListView } from "std-widgets.slint";
 
 export struct LocationItem {
     id: string,
@@ -23,7 +23,7 @@ export struct LocationItem {
 component LocationRowView inherits Card {
     in property <LocationItem> entry;
     in property <length> indent-step: 24px;
-    height: 72px;
+    height: 80px;
 
     HorizontalLayout {
         padding: Theme.space-md;
@@ -159,7 +159,7 @@ export component LocationsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        LineEdit {
+                        ThemedLineEdit {
                             text <=> new-loc-name;
                             placeholder-text: placeholder-loc-name;
                         }
@@ -172,7 +172,7 @@ export component LocationsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ComboBox {
+                        ThemedComboBox {
                             model: loc-kind-labels;
                             current-index <=> loc-kind-index;
                             enabled: loc-kind-labels.length > 0;
@@ -189,7 +189,7 @@ export component LocationsPage inherits Rectangle {
                                 color: Palette.text-secondary;
                                 font-size: Theme.font-size-label;
                             }
-                            LineEdit {
+                            ThemedLineEdit {
                                 text <=> new-loc-length;
                                 placeholder-text: placeholder-loc-length;
                                 input-type: decimal;
@@ -203,7 +203,7 @@ export component LocationsPage inherits Rectangle {
                                 color: Palette.text-secondary;
                                 font-size: Theme.font-size-label;
                             }
-                            LineEdit {
+                            ThemedLineEdit {
                                 text <=> new-loc-width;
                                 placeholder-text: placeholder-loc-width;
                                 input-type: decimal;
@@ -218,7 +218,7 @@ export component LocationsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ComboBox {
+                        ThemedComboBox {
                             model: loc-parent-labels;
                             current-index <=> loc-parent-index;
                         }
@@ -231,7 +231,7 @@ export component LocationsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        LineEdit {
+                        ThemedLineEdit {
                             text <=> new-loc-notes;
                             placeholder-text: placeholder-loc-notes;
                         }

@@ -7,13 +7,35 @@
 use crate::error::{AppError, AppResult};
 use pomone_db::Repository;
 use pomone_domain::{
-    AnnualProfile, Crop, FamilyId, Lifespan, PruningSeason, StrataId, Variety, VarietyProfile,
+    AnnualProfile, Crop, FamilyId, Lifespan, PluriannualProfile, PruningSeason, StrataId, Variety,
+    VarietyProfile,
 };
+use rust_decimal::Decimal;
 use std::collections::HashMap;
 
-/// One row of the Cultures list. Annual-vs-pluriannual is surfaced as a
-/// short human string; richer renderings (pruning, lifespan years) will come
-/// when we add the full Lifespan editor.
+/// What kind of lifespan the UI selected for a new crop. Maps directly to
+/// the three concrete `pomone_domain::Lifespan` constructors.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LifespanKind {
+    Annual,
+    PluriannualSingleCycle,
+    PluriannualRecurring,
+}
+
+/// What kind of profile the UI selected for a new variety. The UI is in
+/// charge of matching it to the parent crop's lifespan; the service
+/// double-checks before persisting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VarietyProfileKind {
+    Annual,
+    Pluriannual,
+}
+
+/// One row of the Cultures list.
+///
+/// `is_annual` is duplicated as a plain bool (alongside `lifespan_label`)
+/// so the UI can quickly decide which variety-form panel to show when this
+/// row is the selected crop, without parsing the localized label.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CropRow {
     pub id: String,
@@ -21,7 +43,9 @@ pub struct CropRow {
     pub family_label: String,
     pub strata_label: String,
     pub lifespan_label: String,
+    pub pruning_label: String,
     pub variety_count: u32,
+    pub is_annual: bool,
 }
 
 /// One row of the Varieties list (always shown filtered by a parent crop).
@@ -75,7 +99,9 @@ pub async fn list_crops(repo: &dyn Repository) -> AppResult<Vec<CropRow>> {
                 .get(&c.strata_id)
                 .map_or_else(|| "?".to_owned(), |s| s.name.clone()),
             lifespan_label: lifespan_label(c.lifespan),
+            pruning_label: pruning_label(c.pruning_season),
             variety_count: *variety_count.get(&c.id).unwrap_or(&0),
+            is_annual: c.lifespan.is_annual(),
             name: c.name,
         })
         .collect();
@@ -123,51 +149,79 @@ pub async fn list_strata_options(repo: &dyn Repository) -> AppResult<Vec<StrataO
         .collect())
 }
 
-/// Validation-aware payload for `create_annual_crop`.
+/// Payload for `create_crop`. Fields that only apply to certain lifespan
+/// kinds are still present in every input (the UI parses every textbox
+/// regardless); `create_crop` ignores irrelevant ones based on
+/// `lifespan_kind`.
 #[derive(Debug, Clone)]
-pub struct AnnualCropInput {
+pub struct CropInput {
     pub family_id_str: String,
     pub strata_id_str: String,
     pub name: String,
     pub latin_name: Option<String>,
+    pub lifespan_kind: LifespanKind,
+    /// Used only when `lifespan_kind` is one of the pluriannual variants
+    /// (must be ≥ 2 in that case; ignored for `Annual`).
+    pub lifespan_years: u8,
+    /// Used only when `lifespan_kind == PluriannualRecurring`
+    /// (must be `< lifespan_years`; ignored otherwise).
+    pub years_to_first_yield: u8,
+    pub pruning_season: PruningSeason,
 }
 
-/// Create an Annual crop with `PruningSeason::None` and persist it.
-///
-/// Pluriannual crops / non-None pruning seasons will require a richer form
-/// and live in a follow-up PR.
-pub async fn create_annual_crop(repo: &dyn Repository, input: AnnualCropInput) -> AppResult<Crop> {
+/// Create a crop with the lifespan + pruning season selected in the UI.
+/// The concrete `Lifespan` variant is built from the input, then `Crop::new`
+/// performs the field-level validation.
+pub async fn create_crop(repo: &dyn Repository, input: CropInput) -> AppResult<Crop> {
     let family_id: FamilyId = crate::plantings_view::parse_id(&input.family_id_str)?;
     let strata_id: StrataId = crate::plantings_view::parse_id(&input.strata_id_str)?;
+    let lifespan = match input.lifespan_kind {
+        LifespanKind::Annual => Lifespan::Annual,
+        LifespanKind::PluriannualSingleCycle => {
+            Lifespan::pluriannual_single_cycle(input.lifespan_years)?
+        }
+        LifespanKind::PluriannualRecurring => {
+            Lifespan::perennial(input.lifespan_years, input.years_to_first_yield)?
+        }
+    };
     let crop = Crop::new(
         family_id,
         strata_id,
         input.name,
         input.latin_name,
-        Lifespan::Annual,
-        PruningSeason::None,
+        lifespan,
+        input.pruning_season,
     )?;
     repo.crop_create(&crop).await?;
     Ok(crop)
 }
 
-/// Validation-aware payload for `create_annual_variety`.
+/// Payload for `create_variety`. Holds the union of fields for both profile
+/// kinds; `create_variety` dispatches on `profile_kind` and ignores the
+/// fields that don't apply.
 #[derive(Debug, Clone)]
-pub struct AnnualVarietyInput {
+pub struct VarietyInput {
     pub crop_id_str: String,
     pub name: String,
     pub description: Option<String>,
+    pub profile_kind: VarietyProfileKind,
+    // Annual fields
     pub days_to_transplant: Option<u16>,
     pub days_to_maturity: u16,
     pub harvest_window_days: u16,
+    // Pluriannual fields
+    pub bud_break_doy: Option<u16>,
+    pub flowering_doy: Option<u16>,
+    pub harvest_start_doy: u16,
+    pub harvest_end_doy: u16,
+    pub expected_yield_kg_per_plant: Option<Decimal>,
 }
 
-/// Create a Variety of an existing Annual crop. Rejects pluriannual crops
-/// (use a different code path with a `PluriannualProfile`).
-pub async fn create_annual_variety(
-    repo: &dyn Repository,
-    input: AnnualVarietyInput,
-) -> AppResult<Variety> {
+/// Create a variety of an existing crop. Surfaces a clear `Inconsistent`
+/// error when the UI sent a profile kind that doesn't match the parent crop's
+/// lifespan (the domain layer would catch it anyway, but we want a better
+/// message than the generic mismatch).
+pub async fn create_variety(repo: &dyn Repository, input: VarietyInput) -> AppResult<Variety> {
     let crop_id: pomone_domain::CropId = crate::plantings_view::parse_id(&input.crop_id_str)?;
     let crop = repo
         .crop_get(crop_id)
@@ -176,22 +230,39 @@ pub async fn create_annual_variety(
             kind: "crop",
             id: crop_id.to_string(),
         })?;
-    if !crop.lifespan.is_annual() {
-        return Err(AppError::Inconsistent(
-            "create_annual_variety called on a pluriannual crop".into(),
-        ));
+    match (input.profile_kind, crop.lifespan.is_annual()) {
+        (VarietyProfileKind::Annual, false) => {
+            return Err(AppError::Inconsistent(
+                "annual variety profile selected for a pluriannual crop".into(),
+            ));
+        }
+        (VarietyProfileKind::Pluriannual, true) => {
+            return Err(AppError::Inconsistent(
+                "pluriannual variety profile selected for an annual crop".into(),
+            ));
+        }
+        _ => {}
     }
-    let profile = AnnualProfile::new(
-        input.days_to_transplant,
-        input.days_to_maturity,
-        input.harvest_window_days,
-    )?;
+    let profile = match input.profile_kind {
+        VarietyProfileKind::Annual => VarietyProfile::Annual(AnnualProfile::new(
+            input.days_to_transplant,
+            input.days_to_maturity,
+            input.harvest_window_days,
+        )?),
+        VarietyProfileKind::Pluriannual => VarietyProfile::Pluriannual(PluriannualProfile::new(
+            input.bud_break_doy,
+            input.flowering_doy,
+            input.harvest_start_doy,
+            input.harvest_end_doy,
+            input.expected_yield_kg_per_plant,
+        )?),
+    };
     let variety = Variety::new(
         crop_id,
         crop.lifespan,
         input.name,
         input.description,
-        VarietyProfile::Annual(profile),
+        profile,
     )?;
     repo.variety_create(&variety).await?;
     Ok(variety)
@@ -206,9 +277,23 @@ fn lifespan_label(lifespan: Lifespan) -> String {
             lifespan_years,
         } => format!("Pluriannuelle cycle unique ({lifespan_years} ans)"),
         Lifespan::Pluriannual {
-            pattern: ProductivePattern::Recurring { .. },
+            pattern:
+                ProductivePattern::Recurring {
+                    years_to_first_yield,
+                },
             lifespan_years,
-        } => format!("Pluriannuelle récurrente ({lifespan_years} ans)"),
+        } => format!(
+            "Pluriannuelle récurrente ({lifespan_years} ans, 1ère récolte +{years_to_first_yield})"
+        ),
+    }
+}
+
+fn pruning_label(pruning: PruningSeason) -> String {
+    match pruning {
+        PruningSeason::None => "Sans taille".to_owned(),
+        PruningSeason::Winter => "Taille d'hiver".to_owned(),
+        PruningSeason::Summer => "Taille d'été".to_owned(),
+        PruningSeason::Both => "Taille hiver + été".to_owned(),
     }
 }
 
@@ -239,7 +324,7 @@ fn variety_to_row(v: Variety) -> VarietyRow {
 mod tests {
     use super::*;
     use crate::plantings_view::seed_demo;
-    use pomone_db::{seed_defaults, CropRepo, SqliteRepository};
+    use pomone_db::{seed_defaults, SqliteRepository};
 
     async fn fresh_repo() -> SqliteRepository {
         let repo = SqliteRepository::in_memory().await.unwrap();
@@ -300,41 +385,172 @@ mod tests {
         assert_eq!(rows[0].label, "Canopée");
     }
 
+    fn annual_crop_input(family_id: &str, strata_id: &str, name: &str) -> CropInput {
+        CropInput {
+            family_id_str: family_id.to_owned(),
+            strata_id_str: strata_id.to_owned(),
+            name: name.to_owned(),
+            latin_name: None,
+            lifespan_kind: LifespanKind::Annual,
+            lifespan_years: 0,
+            years_to_first_yield: 0,
+            pruning_season: PruningSeason::None,
+        }
+    }
+
+    fn annual_variety_input(crop_id: &str, name: &str) -> VarietyInput {
+        VarietyInput {
+            crop_id_str: crop_id.to_owned(),
+            name: name.to_owned(),
+            description: None,
+            profile_kind: VarietyProfileKind::Annual,
+            days_to_transplant: Some(35),
+            days_to_maturity: 75,
+            harvest_window_days: 55,
+            bud_break_doy: None,
+            flowering_doy: None,
+            harvest_start_doy: 0,
+            harvest_end_doy: 0,
+            expected_yield_kg_per_plant: None,
+        }
+    }
+
+    fn pluriannual_variety_input(crop_id: &str, name: &str) -> VarietyInput {
+        VarietyInput {
+            crop_id_str: crop_id.to_owned(),
+            name: name.to_owned(),
+            description: None,
+            profile_kind: VarietyProfileKind::Pluriannual,
+            days_to_transplant: None,
+            days_to_maturity: 0,
+            harvest_window_days: 0,
+            bud_break_doy: Some(80),
+            flowering_doy: Some(120),
+            harvest_start_doy: 220,
+            harvest_end_doy: 280,
+            expected_yield_kg_per_plant: None,
+        }
+    }
+
     #[tokio::test]
     async fn create_annual_crop_persists_and_lists() {
         let repo = fresh_repo().await;
         let families = list_family_options(&repo).await.unwrap();
         let strata = list_strata_options(&repo).await.unwrap();
-        let crop = create_annual_crop(
+        let crop = create_crop(
             &repo,
-            AnnualCropInput {
-                family_id_str: solanaceae_id_str(&families),
-                strata_id_str: herbacee_id_str(&strata),
-                name: "Aubergine".to_owned(),
+            CropInput {
                 latin_name: Some("Solanum melongena".to_owned()),
+                ..annual_crop_input(
+                    &solanaceae_id_str(&families),
+                    &herbacee_id_str(&strata),
+                    "Aubergine",
+                )
             },
         )
         .await
         .unwrap();
         assert_eq!(crop.name, "Aubergine");
+        assert!(crop.lifespan.is_annual());
+        // Tomate (seed_demo) + Aubergine
+        assert_eq!(list_crops(&repo).await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn create_pluriannual_single_cycle_crop_persists() {
+        let repo = fresh_repo().await;
+        let families = list_family_options(&repo).await.unwrap();
+        let strata = list_strata_options(&repo).await.unwrap();
+        let crop = create_crop(
+            &repo,
+            CropInput {
+                lifespan_kind: LifespanKind::PluriannualSingleCycle,
+                lifespan_years: 2,
+                ..annual_crop_input(
+                    &solanaceae_id_str(&families),
+                    &herbacee_id_str(&strata),
+                    "Carotte porte-graine",
+                )
+            },
+        )
+        .await
+        .unwrap();
+        assert!(crop.lifespan.is_pluriannual());
+        assert!(!crop.lifespan.is_recurring());
+        assert_eq!(crop.lifespan.lifespan_years(), 2);
+    }
+
+    #[tokio::test]
+    async fn create_pluriannual_recurring_crop_persists_with_pruning() {
+        let repo = fresh_repo().await;
+        let families = list_family_options(&repo).await.unwrap();
+        let strata = list_strata_options(&repo).await.unwrap();
+        let rosacees = families
+            .iter()
+            .find(|f| f.label.contains("Rosacées"))
+            .unwrap()
+            .id
+            .clone();
+        let sous_etage = strata
+            .iter()
+            .find(|s| s.label == "Sous-étage")
+            .unwrap()
+            .id
+            .clone();
+        let crop = create_crop(
+            &repo,
+            CropInput {
+                lifespan_kind: LifespanKind::PluriannualRecurring,
+                lifespan_years: 40,
+                years_to_first_yield: 3,
+                pruning_season: PruningSeason::Winter,
+                ..annual_crop_input(&rosacees, &sous_etage, "Pommier")
+            },
+        )
+        .await
+        .unwrap();
+        assert!(crop.lifespan.is_recurring());
+        assert_eq!(crop.lifespan.lifespan_years(), 40);
+        assert_eq!(crop.pruning_season, PruningSeason::Winter);
         let rows = list_crops(&repo).await.unwrap();
-        // Tomate + Aubergine
-        assert_eq!(rows.len(), 2);
+        let row = rows.iter().find(|r| r.name == "Pommier").unwrap();
+        assert!(!row.is_annual);
+        assert!(row.lifespan_label.contains("40"));
+        assert!(row.pruning_label.contains("hiver"));
+    }
+
+    #[tokio::test]
+    async fn create_pluriannual_recurring_rejects_first_yield_ge_lifespan() {
+        let repo = fresh_repo().await;
+        let families = list_family_options(&repo).await.unwrap();
+        let strata = list_strata_options(&repo).await.unwrap();
+        let err = create_crop(
+            &repo,
+            CropInput {
+                lifespan_kind: LifespanKind::PluriannualRecurring,
+                lifespan_years: 5,
+                years_to_first_yield: 5,
+                ..annual_crop_input(
+                    &solanaceae_id_str(&families),
+                    &herbacee_id_str(&strata),
+                    "Bad",
+                )
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, AppError::Domain(_)));
     }
 
     #[tokio::test]
     async fn create_annual_variety_persists_under_crop() {
         let repo = fresh_repo().await;
         let crops = list_crops(&repo).await.unwrap();
-        let _ = create_annual_variety(
+        let _ = create_variety(
             &repo,
-            AnnualVarietyInput {
-                crop_id_str: crops[0].id.clone(),
-                name: "Cœur de bœuf".to_owned(),
-                description: None,
-                days_to_transplant: Some(35),
-                days_to_maturity: 75,
-                harvest_window_days: 55,
+            VarietyInput {
+                description: Some("Cœur boursouflé".to_owned()),
+                ..annual_variety_input(&crops[0].id, "Cœur de bœuf")
             },
         )
         .await
@@ -346,47 +562,87 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_annual_variety_rejects_pluriannual_crop() {
-        let repo = SqliteRepository::in_memory().await.unwrap();
-        seed_defaults(&repo).await.unwrap();
-        // Seed a perennial crop directly (no seed_demo here).
+    async fn create_pluriannual_variety_persists_under_recurring_crop() {
+        let repo = fresh_repo().await;
         let families = list_family_options(&repo).await.unwrap();
         let strata = list_strata_options(&repo).await.unwrap();
-        let rosacees_id = families
+        let rosacees = families
             .iter()
             .find(|f| f.label.contains("Rosacées"))
-            .expect("seed includes Rosacées")
+            .unwrap()
             .id
             .clone();
-        let canopee_id = strata
+        let sous_etage = strata
             .iter()
-            .find(|s| s.label == "Canopée")
-            .expect("seed includes Canopée")
+            .find(|s| s.label == "Sous-étage")
+            .unwrap()
             .id
             .clone();
-        let family_id: FamilyId = crate::plantings_view::parse_id(&rosacees_id).unwrap();
-        let strata_id: StrataId = crate::plantings_view::parse_id(&canopee_id).unwrap();
-        let crop = Crop::new(
-            family_id,
-            strata_id,
-            "Pommier",
-            None,
-            Lifespan::perennial(40, 3).unwrap(),
-            PruningSeason::Winter,
-        )
-        .unwrap();
-        repo.crop_create(&crop).await.unwrap();
-
-        let err = create_annual_variety(
+        let crop = create_crop(
             &repo,
-            AnnualVarietyInput {
-                crop_id_str: crop.id.to_string(),
-                name: "Reine".to_owned(),
-                description: None,
-                days_to_transplant: None,
-                days_to_maturity: 60,
-                harvest_window_days: 30,
+            CropInput {
+                lifespan_kind: LifespanKind::PluriannualRecurring,
+                lifespan_years: 40,
+                years_to_first_yield: 3,
+                pruning_season: PruningSeason::Winter,
+                ..annual_crop_input(&rosacees, &sous_etage, "Pommier")
             },
+        )
+        .await
+        .unwrap();
+        let v = create_variety(
+            &repo,
+            VarietyInput {
+                expected_yield_kg_per_plant: Some(Decimal::new(155, 1)),
+                ..pluriannual_variety_input(&crop.id.to_string(), "Reine des Reinettes")
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(v.name, "Reine des Reinettes");
+        let rows = list_varieties_for_crop(&repo, &crop.id.to_string())
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].profile_label.contains("DOY 220"));
+    }
+
+    #[tokio::test]
+    async fn create_annual_variety_rejects_pluriannual_crop() {
+        let repo = fresh_repo().await;
+        let families = list_family_options(&repo).await.unwrap();
+        let strata = list_strata_options(&repo).await.unwrap();
+        // Make a perennial crop via the public service so this also covers
+        // create_crop's pluriannual path.
+        let crop = create_crop(
+            &repo,
+            CropInput {
+                lifespan_kind: LifespanKind::PluriannualRecurring,
+                lifespan_years: 40,
+                years_to_first_yield: 3,
+                pruning_season: PruningSeason::Winter,
+                ..annual_crop_input(
+                    &solanaceae_id_str(&families),
+                    &herbacee_id_str(&strata),
+                    "Pommier",
+                )
+            },
+        )
+        .await
+        .unwrap();
+        let err = create_variety(&repo, annual_variety_input(&crop.id.to_string(), "Reine"))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(_)));
+    }
+
+    #[tokio::test]
+    async fn create_pluriannual_variety_rejects_annual_crop() {
+        let repo = fresh_repo().await;
+        let crops = list_crops(&repo).await.unwrap();
+        let err = create_variety(
+            &repo,
+            pluriannual_variety_input(&crops[0].id, "Pommier annuel"),
         )
         .await
         .unwrap_err();
@@ -394,18 +650,11 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_annual_variety_unknown_crop() {
+    async fn create_variety_unknown_crop() {
         let repo = fresh_repo().await;
-        let err = create_annual_variety(
+        let err = create_variety(
             &repo,
-            AnnualVarietyInput {
-                crop_id_str: pomone_domain::CropId::new().to_string(),
-                name: "Test".to_owned(),
-                description: None,
-                days_to_transplant: None,
-                days_to_maturity: 60,
-                harvest_window_days: 30,
-            },
+            annual_variety_input(&pomone_domain::CropId::new().to_string(), "Test"),
         )
         .await
         .unwrap_err();
