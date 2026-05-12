@@ -65,7 +65,7 @@ async fn scenario_full_perennial_chain(repo: &dyn Repository) {
     .unwrap();
     repo.variety_create(&variety).await.unwrap();
 
-    let location = Location::new(kind.id, "Verger nord", dec!(2000), None, None).unwrap();
+    let location = Location::new(kind.id, "Verger nord", dec!(50), dec!(40), None, None).unwrap();
     repo.location_create(&location).await.unwrap();
 
     let planting = Planting::new(
@@ -135,7 +135,7 @@ async fn scenario_annual_cycle_with_full_dates(repo: &dyn Repository) {
     .unwrap();
     repo.variety_create(&variety).await.unwrap();
 
-    let location = Location::new(kind.id, "Planche A", dec!(20.5), None, None).unwrap();
+    let location = Location::new(kind.id, "Planche A", dec!(25), dec!(0.82), None, None).unwrap();
     repo.location_create(&location).await.unwrap();
 
     let planting = Planting::new(

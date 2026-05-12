@@ -175,7 +175,7 @@ mod tests {
         )
         .unwrap();
         repo.variety_create(&variety).await.unwrap();
-        let loc = Location::new(k.id, "Planche A", dec!(20), None, None).unwrap();
+        let loc = Location::new(k.id, "Planche A", dec!(25), dec!(0.8), None, None).unwrap();
         repo.location_create(&loc).await.unwrap();
         (repo, variety.id, loc.id)
     }
@@ -203,7 +203,7 @@ mod tests {
         )
         .unwrap();
         repo.variety_create(&variety).await.unwrap();
-        let loc = Location::new(k.id, "Verger nord", dec!(2000), None, None).unwrap();
+        let loc = Location::new(k.id, "Verger nord", dec!(50), dec!(40), None, None).unwrap();
         repo.location_create(&loc).await.unwrap();
         (repo, variety.id, loc.id)
     }
@@ -271,7 +271,7 @@ mod tests {
         let repo = SqliteRepository::in_memory().await.unwrap();
         let kind = LocationKind::new("Test", None).unwrap();
         repo.location_kind_create(&kind).await.unwrap();
-        let loc = Location::new(kind.id, "L", dec!(10), None, None).unwrap();
+        let loc = Location::new(kind.id, "L", dec!(5), dec!(2), None, None).unwrap();
         repo.location_create(&loc).await.unwrap();
 
         let err = create_annual_planting_from_sowing(

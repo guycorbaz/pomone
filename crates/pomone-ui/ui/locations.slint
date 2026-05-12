@@ -14,6 +14,7 @@ export struct LocationItem {
     name: string,
     kind-label: string,
     area-label: string,
+    dimensions-label: string,
     parent-label: string,
     full-path: string,
     depth: int,
@@ -45,7 +46,7 @@ component LocationRowView inherits Card {
                 font-weight: Theme.font-weight-semibold;
             }
             Text {
-                text: entry.kind-label + " · " + entry.area-label
+                text: entry.kind-label + " · " + entry.dimensions-label
                       + (entry.parent-label != "" ? "  ↳ " + entry.parent-label : "");
                 color: Palette.text-muted;
                 font-size: Theme.font-size-label;
@@ -71,8 +72,10 @@ export component LocationsPage inherits Rectangle {
     in property <string> label-loc-name;
     in property <string> placeholder-loc-name;
     in property <string> label-loc-kind;
-    in property <string> label-loc-area;
-    in property <string> placeholder-loc-area;
+    in property <string> label-loc-length;
+    in property <string> placeholder-loc-length;
+    in property <string> label-loc-width;
+    in property <string> placeholder-loc-width;
     in property <string> label-loc-parent;
     in property <string> label-loc-notes;
     in property <string> placeholder-loc-notes;
@@ -81,7 +84,8 @@ export component LocationsPage inherits Rectangle {
     in-out property <int> loc-kind-index: 0;
     in-out property <int> loc-parent-index: 0;
     in-out property <string> new-loc-name;
-    in-out property <string> new-loc-area: "20";
+    in-out property <string> new-loc-length: "5";
+    in-out property <string> new-loc-width: "2";
     in-out property <string> new-loc-notes;
     in property <string> create-loc-button-text;
     callback create-location();
@@ -187,17 +191,35 @@ export component LocationsPage inherits Rectangle {
                         }
                     }
 
-                    VerticalLayout {
-                        spacing: Theme.space-xs;
-                        Text {
-                            text: label-loc-area;
-                            color: Palette.text-secondary;
-                            font-size: Theme.font-size-label;
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-loc-length;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            LineEdit {
+                                text <=> new-loc-length;
+                                placeholder-text: placeholder-loc-length;
+                                input-type: decimal;
+                            }
                         }
-                        LineEdit {
-                            text <=> new-loc-area;
-                            placeholder-text: placeholder-loc-area;
-                            input-type: decimal;
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-loc-width;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            LineEdit {
+                                text <=> new-loc-width;
+                                placeholder-text: placeholder-loc-width;
+                                input-type: decimal;
+                            }
                         }
                     }
 

@@ -184,7 +184,7 @@ mod tests {
         };
         let variety = Variety::new(crop.id, lifespan, "V", None, profile).unwrap();
         repo.variety_create(&variety).await.unwrap();
-        let location = Location::new(k.id, "L", dec!(100), None, None).unwrap();
+        let location = Location::new(k.id, "L", dec!(10), dec!(10), None, None).unwrap();
         repo.location_create(&location).await.unwrap();
         (repo, variety.id, location.id)
     }
@@ -243,7 +243,7 @@ mod tests {
         let (repo, vid, lid) = setup(Lifespan::Annual).await;
         // Second location
         let kind_id = repo.location_kind_list().await.unwrap()[0].id;
-        let l2 = Location::new(kind_id, "L2", dec!(50), None, None).unwrap();
+        let l2 = Location::new(kind_id, "L2", dec!(10), dec!(5), None, None).unwrap();
         repo.location_create(&l2).await.unwrap();
 
         for (loc, label) in [(lid, "p1"), (lid, "p2"), (l2.id, "p3")] {

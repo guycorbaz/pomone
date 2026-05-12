@@ -125,7 +125,7 @@ mod tests {
         )
         .unwrap();
         repo.variety_create(&v).await.unwrap();
-        let loc = Location::new(k.id, "Verger nord", dec!(2000), None, None).unwrap();
+        let loc = Location::new(k.id, "Verger nord", dec!(50), dec!(40), None, None).unwrap();
         repo.location_create(&loc).await.unwrap();
         let p = Planting::new(
             v.id,
