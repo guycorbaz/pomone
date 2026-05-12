@@ -13,12 +13,13 @@ use anyhow::{Context, Result};
 use chrono::Local;
 use fluent::FluentArgs;
 use pomone_app::{
-    create_annual_crop, create_annual_variety, list_crops, list_family_options,
-    list_location_options, list_plantings, list_strata_options, list_varieties_for_crop,
-    list_variety_options, parse_id, parse_iso_date, seed_demo, services, AnnualCropInput,
-    AnnualVarietyInput, App, AppConfig, AppError, BackendConfig, CropRow as AppCropRow,
-    FamilyOption, Lang, LocationOption, PlantingRow as AppPlantingRow, StrataOption, VarietyOption,
-    VarietyRow as AppVarietyRow,
+    create_annual_crop, create_annual_variety, create_location, list_crops, list_family_options,
+    list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
+    list_plantings, list_strata_options, list_varieties_for_crop, list_variety_options, parse_id,
+    parse_iso_date, seed_demo, services, AnnualCropInput, AnnualVarietyInput, App, AppConfig,
+    AppError, BackendConfig, CropRow as AppCropRow, FamilyOption, Lang, LocationInput,
+    LocationKindOption, LocationListItem, LocationOption, ParentLocationOption,
+    PlantingRow as AppPlantingRow, StrataOption, VarietyOption, VarietyRow as AppVarietyRow,
 };
 use pomone_domain::{LocationId, VarietyId};
 use rust_decimal::Decimal;
@@ -36,8 +37,8 @@ mod generated {
     slint::include_modules!();
 }
 use generated::{
-    CropRow as SlintCropRow, MainWindow, PlantingRow as SlintPlantingRow,
-    VarietyRow as SlintVarietyRow,
+    CropRow as SlintCropRow, LocationItem as SlintLocationItem, MainWindow,
+    PlantingRow as SlintPlantingRow, VarietyRow as SlintVarietyRow,
 };
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -57,6 +58,13 @@ struct UiState {
     /// Stringified `CropId`s, parallel to the Cultures page `crops` model
     /// (so a row click index resolves to a typed `CropId`).
     crop_ids: Vec<String>,
+    /// Stringified `LocationKindId`s, parallel to the Locations page
+    /// `loc-kind-labels` model.
+    location_kind_ids: Vec<String>,
+    /// Stringified `LocationId`s, parallel to the Locations page
+    /// `loc-parent-labels` model. The first entry is an empty string for the
+    /// synthetic "(no parent)" option.
+    parent_location_ids: Vec<String>,
 }
 
 // Setting up four panes' worth of callbacks in one place keeps the flow easy
@@ -93,6 +101,8 @@ fn main() -> Result<()> {
         family_ids: Vec::new(),
         strata_ids: Vec::new(),
         crop_ids: Vec::new(),
+        location_kind_ids: Vec::new(),
+        parent_location_ids: Vec::new(),
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
@@ -102,6 +112,7 @@ fn main() -> Result<()> {
     refresh_counts(&window, &state.borrow().app, &state.borrow().runtime);
     refresh_plantings(&window, &mut state.borrow_mut())?;
     refresh_cultures(&window, &mut state.borrow_mut())?;
+    refresh_locations(&window, &mut state.borrow_mut())?;
 
     // --- Home page callbacks ---
     {
@@ -244,6 +255,56 @@ fn main() -> Result<()> {
         });
     }
 
+    // --- Locations navigation ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_navigate_locations(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            if let Err(e) = refresh_locations(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh locations");
+            }
+            window.set_current_page(SharedString::from("locations"));
+            window.set_status_text(SharedString::from(""));
+            window.set_status_is_error(false);
+        });
+    }
+
+    // --- Create location ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_create_location(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            match try_create_location(&window, &mut s) {
+                Ok(()) => {
+                    let i18n = s.app.i18n();
+                    window.set_status_text(SharedString::from(i18n.t("status-location-created")));
+                    window.set_status_is_error(false);
+                    window.set_new_loc_name(SharedString::from(""));
+                    window.set_new_loc_notes(SharedString::from(""));
+                    if let Err(e) = refresh_locations(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh locations after create");
+                    }
+                }
+                Err(e) => {
+                    let i18n = s.app.i18n();
+                    let mut args = FluentArgs::new();
+                    args.set("message", e.to_string());
+                    window.set_status_text(SharedString::from(
+                        i18n.t_args("status-planting-failed", &args),
+                    ));
+                    window.set_status_is_error(true);
+                }
+            }
+        });
+    }
+
     // --- Create variety ---
     {
         let state = Rc::clone(&state);
@@ -298,6 +359,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_language_button_text(SharedString::from(i18n.t("button-switch-language")));
     window.set_plantings_button_text(SharedString::from(i18n.t("button-plantings")));
     window.set_cultures_button_text(SharedString::from(i18n.t("button-cultures")));
+    window.set_locations_button_text(SharedString::from(i18n.t("button-locations")));
     window.set_current_language_tag(SharedString::from(i18n.lang().tag()));
 
     // Plantings page
@@ -344,6 +406,21 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_placeholder_window(SharedString::from(i18n.t("placeholder-window")));
     window.set_create_crop_button_text(SharedString::from(i18n.t("button-create-crop")));
     window.set_create_variety_button_text(SharedString::from(i18n.t("button-create-variety")));
+
+    // Locations page
+    window.set_locations_title_text(SharedString::from(i18n.t("title-locations")));
+    window.set_locations_list_title(SharedString::from(i18n.t("locations-list-title")));
+    window.set_empty_locations_text(SharedString::from(i18n.t("empty-locations")));
+    window.set_location_form_section(SharedString::from(i18n.t("new-location-section")));
+    window.set_label_loc_name(SharedString::from(i18n.t("label-loc-name")));
+    window.set_placeholder_loc_name(SharedString::from(i18n.t("placeholder-loc-name")));
+    window.set_label_loc_kind(SharedString::from(i18n.t("label-loc-kind")));
+    window.set_label_loc_area(SharedString::from(i18n.t("label-loc-area")));
+    window.set_placeholder_loc_area(SharedString::from(i18n.t("placeholder-loc-area")));
+    window.set_label_loc_parent(SharedString::from(i18n.t("label-loc-parent")));
+    window.set_label_loc_notes(SharedString::from(i18n.t("label-loc-notes")));
+    window.set_placeholder_loc_notes(SharedString::from(i18n.t("placeholder-loc-notes")));
+    window.set_create_loc_button_text(SharedString::from(i18n.t("button-create-location")));
 }
 
 fn refresh_counts(window: &MainWindow, app: &App, runtime: &tokio::runtime::Runtime) {
@@ -658,6 +735,104 @@ fn try_create_variety(window: &MainWindow, state: &mut UiState) -> Result<(), Ap
                 days_to_transplant,
                 days_to_maturity,
                 harvest_window_days,
+            },
+        )
+        .await
+        .map(|_| ())
+    })
+}
+
+/// Snapshot of everything the Locations screen needs on every refresh.
+struct LocationsSnapshot {
+    items: Vec<LocationListItem>,
+    kinds: Vec<LocationKindOption>,
+    parents: Vec<ParentLocationOption>,
+}
+
+/// Reload the location tree + dropdown options (kinds, parents). Indices are
+/// clamped to stay valid after a refresh.
+fn refresh_locations(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    // "(aucun) / (none)" label for the synthetic root-parent option.
+    let none_label = state.app.i18n().t("parent-none");
+    let snapshot: Result<LocationsSnapshot, AppError> = state.runtime.block_on(async {
+        let items = list_locations_tree(state.app.repo()).await?;
+        let kinds = list_location_kind_options(state.app.repo()).await?;
+        let parents = list_parent_options(state.app.repo(), &none_label).await?;
+        Ok(LocationsSnapshot {
+            items,
+            kinds,
+            parents,
+        })
+    });
+    let snapshot = snapshot.context("failed to load locations data")?;
+
+    state.location_kind_ids = snapshot.kinds.iter().map(|k| k.id.clone()).collect();
+    state.parent_location_ids = snapshot.parents.iter().map(|p| p.id.clone()).collect();
+
+    let items: Vec<SlintLocationItem> = snapshot.items.into_iter().map(location_to_slint).collect();
+    window.set_locations(ModelRc::new(VecModel::from(items)));
+
+    let kind_labels: Vec<SharedString> = snapshot
+        .kinds
+        .into_iter()
+        .map(|k| SharedString::from(k.label))
+        .collect();
+    window.set_loc_kind_labels(ModelRc::new(VecModel::from(kind_labels)));
+
+    let parent_labels: Vec<SharedString> = snapshot
+        .parents
+        .into_iter()
+        .map(|p| SharedString::from(p.label))
+        .collect();
+    window.set_loc_parent_labels(ModelRc::new(VecModel::from(parent_labels)));
+
+    if i32_to_usize(window.get_loc_kind_index()) >= state.location_kind_ids.len() {
+        window.set_loc_kind_index(0);
+    }
+    if i32_to_usize(window.get_loc_parent_index()) >= state.parent_location_ids.len() {
+        window.set_loc_parent_index(0);
+    }
+    Ok(())
+}
+
+fn location_to_slint(item: LocationListItem) -> SlintLocationItem {
+    SlintLocationItem {
+        id: SharedString::from(item.id),
+        name: SharedString::from(item.name),
+        kind_label: SharedString::from(item.kind_label),
+        area_label: SharedString::from(item.area_label),
+        parent_label: SharedString::from(item.parent_label),
+        full_path: SharedString::from(item.full_path),
+        depth: usize_to_i32(item.depth as usize),
+    }
+}
+
+fn try_create_location(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
+    let kind_idx = i32_to_usize(window.get_loc_kind_index());
+    let parent_idx = i32_to_usize(window.get_loc_parent_index());
+    let kind_id_str = state
+        .location_kind_ids
+        .get(kind_idx)
+        .ok_or_else(|| AppError::Inconsistent("no location kind selected".to_owned()))?
+        .clone();
+    let parent_id_str = state
+        .parent_location_ids
+        .get(parent_idx)
+        .cloned()
+        .unwrap_or_default();
+    let name = window.get_new_loc_name().to_string();
+    let area_m2 = parse_decimal(&window.get_new_loc_area(), "area")?;
+    let notes = optional_text(&window.get_new_loc_notes());
+
+    state.runtime.block_on(async {
+        create_location(
+            state.app.repo(),
+            LocationInput {
+                kind_id_str,
+                name,
+                area_m2,
+                parent_id_str,
+                notes,
             },
         )
         .await

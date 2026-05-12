@@ -8,9 +8,10 @@
 import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
 import { PlantingsPage, PlantingRow } from "plantings.slint";
 import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
+import { LocationsPage, LocationItem } from "locations.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow }
+export { PlantingRow, CropRow, VarietyRow, LocationItem }
 
 // One row of the "overview" card on the home page: label on the left, numeric
 // value on the right.
@@ -70,10 +71,12 @@ export component MainWindow inherits Window {
     in property <string> refresh-button-text;
     in property <string> plantings-button-text;
     in property <string> cultures-button-text;
+    in property <string> locations-button-text;
     callback toggle-language();
     callback refresh-counts();
     callback navigate-plantings();
     callback navigate-cultures();
+    callback navigate-locations();
 
     // ------- Plantings page state forwarded to PlantingsPage -------
     in property <string> plantings-title-text;
@@ -149,6 +152,30 @@ export component MainWindow inherits Window {
     in property <string> create-variety-button-text;
     callback create-variety();
 
+    // ------- Locations page state forwarded to LocationsPage -------
+    in property <string> locations-title-text;
+    in property <string> locations-list-title;
+    in property <string> empty-locations-text;
+    in property <[LocationItem]> locations;
+    in property <string> location-form-section;
+    in property <string> label-loc-name;
+    in property <string> placeholder-loc-name;
+    in property <string> label-loc-kind;
+    in property <string> label-loc-area;
+    in property <string> placeholder-loc-area;
+    in property <string> label-loc-parent;
+    in property <string> label-loc-notes;
+    in property <string> placeholder-loc-notes;
+    in property <[string]> loc-kind-labels;
+    in property <[string]> loc-parent-labels;
+    in-out property <int> loc-kind-index: 0;
+    in-out property <int> loc-parent-index: 0;
+    in-out property <string> new-loc-name;
+    in-out property <string> new-loc-area: "20";
+    in-out property <string> new-loc-notes;
+    in property <string> create-loc-button-text;
+    callback create-location();
+
     // ------- Home page -------
     if current-page == "home": home-pane := VerticalLayout {
         padding: Theme.space-2xl;
@@ -209,6 +236,10 @@ export component MainWindow inherits Window {
             SecondaryButton {
                 text: cultures-button-text;
                 clicked => { navigate-cultures(); }
+            }
+            SecondaryButton {
+                text: locations-button-text;
+                clicked => { navigate-locations(); }
             }
             SecondaryButton {
                 text: refresh-button-text;
@@ -308,5 +339,35 @@ export component MainWindow inherits Window {
         create-crop => { create-crop(); }
         create-variety => { create-variety(); }
         select-crop(idx) => { select-crop(idx); }
+    }
+
+    // ------- Locations page -------
+    if current-page == "locations": locations-pane := LocationsPage {
+        title-text: locations-title-text;
+        back-button-text: back-button-text;
+        list-title: locations-list-title;
+        empty-locations-text: empty-locations-text;
+        locations: locations;
+        form-section-title: location-form-section;
+        label-loc-name: label-loc-name;
+        placeholder-loc-name: placeholder-loc-name;
+        label-loc-kind: label-loc-kind;
+        label-loc-area: label-loc-area;
+        placeholder-loc-area: placeholder-loc-area;
+        label-loc-parent: label-loc-parent;
+        label-loc-notes: label-loc-notes;
+        placeholder-loc-notes: placeholder-loc-notes;
+        loc-kind-labels: loc-kind-labels;
+        loc-parent-labels: loc-parent-labels;
+        loc-kind-index <=> loc-kind-index;
+        loc-parent-index <=> loc-parent-index;
+        new-loc-name <=> new-loc-name;
+        new-loc-area <=> new-loc-area;
+        new-loc-notes <=> new-loc-notes;
+        create-loc-button-text: create-loc-button-text;
+        status-text: status-text;
+        status-is-error: status-is-error;
+        back => { current-page = "home"; }
+        create-location => { create-location(); }
     }
 }

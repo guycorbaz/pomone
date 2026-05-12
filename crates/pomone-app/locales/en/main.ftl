@@ -62,6 +62,24 @@ status-crop-created = Crop created
 status-variety-created = Variety created
 status-pick-crop-first = Pick a crop before creating a variety.
 
+## Locations screen
+button-locations = Locations →
+title-locations = Locations
+locations-list-title = Location hierarchy
+empty-locations = No locations yet.
+new-location-section = New location
+label-loc-name = Name
+placeholder-loc-name = Bed B
+label-loc-kind = Kind
+label-loc-area = Area (m²)
+placeholder-loc-area = 20
+label-loc-parent = Parent location
+label-loc-notes = Notes (optional)
+placeholder-loc-notes = east-west orientation, south-facing…
+button-create-location = Create location
+parent-none = (root — no parent)
+status-location-created = Location created
+
 ## Common nouns
 crop = Crop
 family = Family
