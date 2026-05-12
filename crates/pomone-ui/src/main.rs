@@ -16,7 +16,7 @@ use pomone_app::{
     create_crop, create_location, create_variety, list_crops, list_family_options,
     list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
     list_plantings, list_strata_options, list_varieties_for_crop, list_variety_options, parse_id,
-    parse_iso_date, seed_demo, services, App, AppConfig, AppError, BackendConfig, CropInput,
+    parse_iso_date, services, App, AppConfig, AppError, BackendConfig, CropInput,
     CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption,
     LocationListItem, LocationOption, ParentLocationOption, PlantingRow as AppPlantingRow,
     StrataOption, VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
@@ -88,12 +88,6 @@ fn main() -> Result<()> {
     let app = runtime
         .block_on(App::new(config))
         .context("failed to initialise App (DB connection / migrations / seed)")?;
-
-    // First-launch demo seed: one crop + two varieties + one parcel-with-bed
-    // so the Plantings screen has something to pick. No-op on subsequent runs.
-    runtime
-        .block_on(seed_demo(app.repo()))
-        .context("failed to seed demo data")?;
 
     let state = Rc::new(RefCell::new(UiState {
         app,

@@ -14,6 +14,9 @@ pub mod locations_view;
 pub mod plantings_view;
 pub mod services;
 
+#[cfg(test)]
+mod test_helpers;
+
 pub use app::App;
 pub use config::{default_config_path, AppConfig, BackendConfig};
 pub use cultures_view::{
@@ -29,5 +32,5 @@ pub use locations_view::{
 };
 pub use plantings_view::{
     list_location_options, list_plantings, list_variety_options, parse_id, parse_iso_date,
-    seed_demo, LocationOption, PlantingRow, VarietyOption,
+    LocationOption, PlantingRow, VarietyOption,
 };

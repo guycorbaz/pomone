@@ -323,13 +323,13 @@ fn variety_to_row(v: Variety) -> VarietyRow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::plantings_view::seed_demo;
+    use crate::test_helpers::seed_test_data;
     use pomone_db::{seed_defaults, SqliteRepository};
 
     async fn fresh_repo() -> SqliteRepository {
         let repo = SqliteRepository::in_memory().await.unwrap();
         seed_defaults(&repo).await.unwrap();
-        seed_demo(&repo).await.unwrap();
+        seed_test_data(&repo).await.unwrap();
         repo
     }
 
