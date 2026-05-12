@@ -114,11 +114,11 @@ fn main() -> Result<()> {
     refresh_cultures(&window, &mut state.borrow_mut())?;
     refresh_locations(&window, &mut state.borrow_mut())?;
 
-    // --- Home page callbacks ---
+    // --- Home navigation (sidebar) — refresh counts on entry ---
     {
         let state = Rc::clone(&state);
         let weak = window.as_weak();
-        window.on_refresh_counts(move || {
+        window.on_navigate_home(move || {
             let Some(window) = weak.upgrade() else {
                 return;
             };
@@ -355,16 +355,17 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_label_families(SharedString::from(i18n.t("label-families-count")));
     window.set_label_location_kinds(SharedString::from(i18n.t("label-location-kinds-count")));
     window.set_section_overview_text(SharedString::from(i18n.t("section-overview")));
-    window.set_refresh_button_text(SharedString::from(i18n.t("button-refresh")));
     window.set_language_button_text(SharedString::from(i18n.t("button-switch-language")));
-    window.set_plantings_button_text(SharedString::from(i18n.t("button-plantings")));
-    window.set_cultures_button_text(SharedString::from(i18n.t("button-cultures")));
-    window.set_locations_button_text(SharedString::from(i18n.t("button-locations")));
     window.set_current_language_tag(SharedString::from(i18n.lang().tag()));
+
+    // Sidebar nav
+    window.set_nav_home_text(SharedString::from(i18n.t("nav-home")));
+    window.set_nav_plantings_text(SharedString::from(i18n.t("nav-plantings")));
+    window.set_nav_cultures_text(SharedString::from(i18n.t("nav-cultures")));
+    window.set_nav_locations_text(SharedString::from(i18n.t("nav-locations")));
 
     // Plantings page
     window.set_plantings_title_text(SharedString::from(i18n.t("title-plantings")));
-    window.set_back_button_text(SharedString::from(i18n.t("button-back")));
     window.set_empty_state_text(SharedString::from(i18n.t("empty-plantings")));
     window.set_section_new_text(SharedString::from(i18n.t("section-new-planting")));
     window.set_label_variety(SharedString::from(i18n.t("label-variety")));
