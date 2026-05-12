@@ -32,6 +32,38 @@ status-planting-created = Plantation créée
 status-planting-failed = Échec de la création : { $message }
 status-pick-variety = Sélectionnez une variété et un lieu avant de créer.
 
+## Cultures + Variétés screen
+button-cultures = Cultures →
+title-cultures = Cultures et variétés
+crops-title = Cultures
+empty-crops = Aucune culture pour l'instant.
+varieties-title = Variétés
+empty-varieties = Aucune variété pour cette culture.
+no-crop-selected = Sélectionnez une culture pour voir et créer ses variétés.
+new-crop-section = Nouvelle culture annuelle
+new-variety-section = Nouvelle variété annuelle
+label-crop-name = Nom
+placeholder-crop-name = Tomate
+label-crop-latin = Nom latin (optionnel)
+placeholder-crop-latin = Solanum lycopersicum
+label-crop-family = Famille
+label-crop-strata = Strate
+label-variety-name = Nom de la variété
+placeholder-variety-name = Marmande
+label-variety-description = Description (optionnel)
+placeholder-variety-description = ancienne variété, fruits côtelés
+label-dtt = Jours sem.→repiq. (DTT)
+label-dtm = Jours sem.→récolte (DTM)
+label-window = Fenêtre de récolte (jours)
+placeholder-dtt = 35
+placeholder-dtm = 70
+placeholder-window = 60
+button-create-crop = Créer la culture
+button-create-variety = Créer la variété
+status-crop-created = Culture créée
+status-variety-created = Variété créée
+status-pick-crop-first = Sélectionnez une culture avant de créer une variété.
+
 ## Common nouns
 crop = Culture
 family = Famille

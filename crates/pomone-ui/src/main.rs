@@ -1,10 +1,10 @@
 //! Pomone desktop UI binary entry point (Slint).
 //!
-//! Phase 6 step 2: two screens (Home with counts + language toggle, Plantings
-//! with list + add form). The Rust side owns all data — translations come
-//! from Fluent and lists come from the repository through the
-//! `pomone_app::plantings_view` helpers — and feeds it to Slint via plain
-//! in-properties.
+//! Three screens routed by `current-page`: Home (counts + language toggle),
+//! Plantings (list + add form), Cultures (crops + varieties master-detail).
+//! The Rust side owns all data — translations come from Fluent and lists
+//! come from the repository through the `pomone_app::*_view` helpers — and
+//! feeds it to Slint via plain in-properties.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -13,9 +13,12 @@ use anyhow::{Context, Result};
 use chrono::Local;
 use fluent::FluentArgs;
 use pomone_app::{
-    list_location_options, list_plantings, list_variety_options, parse_id, parse_iso_date,
-    seed_demo, services, App, AppConfig, AppError, BackendConfig, Lang, LocationOption,
-    PlantingRow as AppPlantingRow, VarietyOption,
+    create_annual_crop, create_annual_variety, list_crops, list_family_options,
+    list_location_options, list_plantings, list_strata_options, list_varieties_for_crop,
+    list_variety_options, parse_id, parse_iso_date, seed_demo, services, AnnualCropInput,
+    AnnualVarietyInput, App, AppConfig, AppError, BackendConfig, CropRow as AppCropRow,
+    FamilyOption, Lang, LocationOption, PlantingRow as AppPlantingRow, StrataOption, VarietyOption,
+    VarietyRow as AppVarietyRow,
 };
 use pomone_domain::{LocationId, VarietyId};
 use rust_decimal::Decimal;
@@ -32,7 +35,10 @@ use std::str::FromStr;
 mod generated {
     slint::include_modules!();
 }
-use generated::{MainWindow, PlantingRow as SlintPlantingRow};
+use generated::{
+    CropRow as SlintCropRow, MainWindow, PlantingRow as SlintPlantingRow,
+    VarietyRow as SlintVarietyRow,
+};
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
 /// drives async DB calls via `Runtime::block_on` inside callbacks (SQLite
@@ -40,12 +46,22 @@ use generated::{MainWindow, PlantingRow as SlintPlantingRow};
 struct UiState {
     app: App,
     runtime: tokio::runtime::Runtime,
-    /// Stringified `VarietyId`s, parallel to the `variety-labels` Slint model.
+    /// Stringified `VarietyId`s, parallel to the Plantings page `variety-labels`.
     variety_ids: Vec<String>,
-    /// Stringified `LocationId`s, parallel to the `location-labels` Slint model.
+    /// Stringified `LocationId`s, parallel to the Plantings page `location-labels`.
     location_ids: Vec<String>,
+    /// Stringified `FamilyId`s, parallel to the Cultures page `family-labels`.
+    family_ids: Vec<String>,
+    /// Stringified `StrataId`s, parallel to the Cultures page `strata-labels`.
+    strata_ids: Vec<String>,
+    /// Stringified `CropId`s, parallel to the Cultures page `crops` model
+    /// (so a row click index resolves to a typed `CropId`).
+    crop_ids: Vec<String>,
 }
 
+// Setting up four panes' worth of callbacks in one place keeps the flow easy
+// to follow; clippy's 100-line limit is too tight for a UI entry point.
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -74,6 +90,9 @@ fn main() -> Result<()> {
         runtime,
         variety_ids: Vec::new(),
         location_ids: Vec::new(),
+        family_ids: Vec::new(),
+        strata_ids: Vec::new(),
+        crop_ids: Vec::new(),
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
@@ -82,6 +101,7 @@ fn main() -> Result<()> {
     apply_translations(&window, &state.borrow().app);
     refresh_counts(&window, &state.borrow().app, &state.borrow().runtime);
     refresh_plantings(&window, &mut state.borrow_mut())?;
+    refresh_cultures(&window, &mut state.borrow_mut())?;
 
     // --- Home page callbacks ---
     {
@@ -158,6 +178,105 @@ fn main() -> Result<()> {
         });
     }
 
+    // --- Cultures navigation ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_navigate_cultures(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            if let Err(e) = refresh_cultures(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh cultures");
+            }
+            window.set_current_page(SharedString::from("cultures"));
+            window.set_status_text(SharedString::from(""));
+            window.set_status_is_error(false);
+        });
+    }
+
+    // --- Crop selection (master-detail) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_select_crop(move |idx| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            window.set_selected_crop_index(idx);
+            let mut s = state.borrow_mut();
+            if let Err(e) = refresh_varieties_of_selected_crop(&window, &mut s) {
+                tracing::error!(error = %e, "failed to refresh varieties");
+            }
+        });
+    }
+
+    // --- Create crop ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_create_crop(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            match try_create_crop(&window, &mut s) {
+                Ok(()) => {
+                    let i18n = s.app.i18n();
+                    window.set_status_text(SharedString::from(i18n.t("status-crop-created")));
+                    window.set_status_is_error(false);
+                    window.set_new_crop_name(SharedString::from(""));
+                    window.set_new_crop_latin(SharedString::from(""));
+                    if let Err(e) = refresh_cultures(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh cultures after create");
+                    }
+                }
+                Err(e) => {
+                    let i18n = s.app.i18n();
+                    let mut args = FluentArgs::new();
+                    args.set("message", e.to_string());
+                    window.set_status_text(SharedString::from(
+                        i18n.t_args("status-planting-failed", &args),
+                    ));
+                    window.set_status_is_error(true);
+                }
+            }
+        });
+    }
+
+    // --- Create variety ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_create_variety(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            match try_create_variety(&window, &mut s) {
+                Ok(()) => {
+                    let i18n = s.app.i18n();
+                    window.set_status_text(SharedString::from(i18n.t("status-variety-created")));
+                    window.set_status_is_error(false);
+                    window.set_new_variety_name(SharedString::from(""));
+                    window.set_new_variety_description(SharedString::from(""));
+                    if let Err(e) = refresh_cultures(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh cultures after create");
+                    }
+                }
+                Err(e) => {
+                    let i18n = s.app.i18n();
+                    let mut args = FluentArgs::new();
+                    args.set("message", e.to_string());
+                    window.set_status_text(SharedString::from(
+                        i18n.t_args("status-planting-failed", &args),
+                    ));
+                    window.set_status_is_error(true);
+                }
+            }
+        });
+    }
+
     window.run().context("Slint event loop failed")?;
     Ok(())
 }
@@ -178,6 +297,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_refresh_button_text(SharedString::from(i18n.t("button-refresh")));
     window.set_language_button_text(SharedString::from(i18n.t("button-switch-language")));
     window.set_plantings_button_text(SharedString::from(i18n.t("button-plantings")));
+    window.set_cultures_button_text(SharedString::from(i18n.t("button-cultures")));
     window.set_current_language_tag(SharedString::from(i18n.lang().tag()));
 
     // Plantings page
@@ -194,6 +314,36 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_placeholder_area(SharedString::from(i18n.t("placeholder-area")));
     window.set_placeholder_count(SharedString::from(i18n.t("placeholder-count")));
     window.set_create_button_text(SharedString::from(i18n.t("button-create-planting")));
+
+    // Cultures page
+    window.set_cultures_title_text(SharedString::from(i18n.t("title-cultures")));
+    window.set_crops_title(SharedString::from(i18n.t("crops-title")));
+    window.set_empty_crops_text(SharedString::from(i18n.t("empty-crops")));
+    window.set_varieties_title(SharedString::from(i18n.t("varieties-title")));
+    window.set_empty_varieties_text(SharedString::from(i18n.t("empty-varieties")));
+    window.set_no_crop_selected_text(SharedString::from(i18n.t("no-crop-selected")));
+    window.set_new_crop_section(SharedString::from(i18n.t("new-crop-section")));
+    window.set_new_variety_section(SharedString::from(i18n.t("new-variety-section")));
+    window.set_label_crop_name(SharedString::from(i18n.t("label-crop-name")));
+    window.set_placeholder_crop_name(SharedString::from(i18n.t("placeholder-crop-name")));
+    window.set_label_crop_latin(SharedString::from(i18n.t("label-crop-latin")));
+    window.set_placeholder_crop_latin(SharedString::from(i18n.t("placeholder-crop-latin")));
+    window.set_label_crop_family(SharedString::from(i18n.t("label-crop-family")));
+    window.set_label_crop_strata(SharedString::from(i18n.t("label-crop-strata")));
+    window.set_label_variety_name(SharedString::from(i18n.t("label-variety-name")));
+    window.set_placeholder_variety_name(SharedString::from(i18n.t("placeholder-variety-name")));
+    window.set_label_variety_description(SharedString::from(i18n.t("label-variety-description")));
+    window.set_placeholder_variety_description(SharedString::from(
+        i18n.t("placeholder-variety-description"),
+    ));
+    window.set_label_dtt(SharedString::from(i18n.t("label-dtt")));
+    window.set_label_dtm(SharedString::from(i18n.t("label-dtm")));
+    window.set_label_window(SharedString::from(i18n.t("label-window")));
+    window.set_placeholder_dtt(SharedString::from(i18n.t("placeholder-dtt")));
+    window.set_placeholder_dtm(SharedString::from(i18n.t("placeholder-dtm")));
+    window.set_placeholder_window(SharedString::from(i18n.t("placeholder-window")));
+    window.set_create_crop_button_text(SharedString::from(i18n.t("button-create-crop")));
+    window.set_create_variety_button_text(SharedString::from(i18n.t("button-create-variety")));
 }
 
 fn refresh_counts(window: &MainWindow, app: &App, runtime: &tokio::runtime::Runtime) {
@@ -326,6 +476,193 @@ fn parse_count(s: &str) -> Result<u32, AppError> {
     s.trim()
         .parse::<u32>()
         .map_err(|e| AppError::Inconsistent(format!("invalid plant count '{s}': {e}")))
+}
+
+fn parse_u16(s: &str, field: &'static str) -> Result<u16, AppError> {
+    s.trim()
+        .parse::<u16>()
+        .map_err(|e| AppError::Inconsistent(format!("invalid {field} '{s}': {e}")))
+}
+
+fn parse_optional_u16(s: &str, field: &'static str) -> Result<Option<u16>, AppError> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    parse_u16(trimmed, field).map(Some)
+}
+
+fn optional_text(s: &str) -> Option<String> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_owned())
+    }
+}
+
+/// Snapshot of everything the Cultures screen needs on every refresh.
+struct CulturesSnapshot {
+    crops: Vec<AppCropRow>,
+    families: Vec<FamilyOption>,
+    strata: Vec<StrataOption>,
+}
+
+/// Reload crops + dropdown options. Also refreshes the right-side varieties
+/// for whichever crop is currently selected (or empties them if none).
+fn refresh_cultures(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let snapshot: Result<CulturesSnapshot, AppError> = state.runtime.block_on(async {
+        let crops = list_crops(state.app.repo()).await?;
+        let families = list_family_options(state.app.repo()).await?;
+        let strata = list_strata_options(state.app.repo()).await?;
+        Ok(CulturesSnapshot {
+            crops,
+            families,
+            strata,
+        })
+    });
+    let snapshot = snapshot.context("failed to load cultures data")?;
+
+    state.crop_ids = snapshot.crops.iter().map(|c| c.id.clone()).collect();
+    state.family_ids = snapshot.families.iter().map(|f| f.id.clone()).collect();
+    state.strata_ids = snapshot.strata.iter().map(|s| s.id.clone()).collect();
+
+    let crop_rows: Vec<SlintCropRow> = snapshot.crops.into_iter().map(crop_to_slint).collect();
+    window.set_crops(ModelRc::new(VecModel::from(crop_rows)));
+
+    let family_labels: Vec<SharedString> = snapshot
+        .families
+        .into_iter()
+        .map(|f| SharedString::from(f.label))
+        .collect();
+    window.set_family_labels(ModelRc::new(VecModel::from(family_labels)));
+
+    let strata_labels: Vec<SharedString> = snapshot
+        .strata
+        .into_iter()
+        .map(|s| SharedString::from(s.label))
+        .collect();
+    window.set_strata_labels(ModelRc::new(VecModel::from(strata_labels)));
+
+    // Clamp form dropdowns; keep selected-crop-index if still valid.
+    if i32_to_usize(window.get_family_index()) >= state.family_ids.len() {
+        window.set_family_index(0);
+    }
+    if i32_to_usize(window.get_strata_index()) >= state.strata_ids.len() {
+        window.set_strata_index(0);
+    }
+    let selected_idx = window.get_selected_crop_index();
+    if selected_idx < 0 || i32_to_usize(selected_idx) >= state.crop_ids.len() {
+        window.set_selected_crop_index(-1);
+    }
+    refresh_varieties_of_selected_crop(window, state)
+}
+
+/// Re-read the variety list for the currently selected crop. If no crop is
+/// selected (`selected-crop-index < 0`), the list is cleared.
+fn refresh_varieties_of_selected_crop(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let idx = window.get_selected_crop_index();
+    if idx < 0 {
+        window.set_varieties(ModelRc::new(VecModel::from(Vec::<SlintVarietyRow>::new())));
+        return Ok(());
+    }
+    let Some(crop_id_str) = state.crop_ids.get(i32_to_usize(idx)).cloned() else {
+        window.set_varieties(ModelRc::new(VecModel::from(Vec::<SlintVarietyRow>::new())));
+        return Ok(());
+    };
+    let varieties: Result<Vec<AppVarietyRow>, AppError> = state
+        .runtime
+        .block_on(async { list_varieties_for_crop(state.app.repo(), &crop_id_str).await });
+    let varieties = varieties.context("failed to load varieties")?;
+    let rows: Vec<SlintVarietyRow> = varieties.into_iter().map(variety_to_slint).collect();
+    window.set_varieties(ModelRc::new(VecModel::from(rows)));
+    Ok(())
+}
+
+fn crop_to_slint(row: AppCropRow) -> SlintCropRow {
+    SlintCropRow {
+        id: SharedString::from(row.id),
+        name: SharedString::from(row.name),
+        family_label: SharedString::from(row.family_label),
+        strata_label: SharedString::from(row.strata_label),
+        lifespan_label: SharedString::from(row.lifespan_label),
+        variety_count: usize_to_i32(row.variety_count as usize),
+    }
+}
+
+fn variety_to_slint(row: AppVarietyRow) -> SlintVarietyRow {
+    SlintVarietyRow {
+        id: SharedString::from(row.id),
+        name: SharedString::from(row.name),
+        description: SharedString::from(row.description),
+        profile_label: SharedString::from(row.profile_label),
+    }
+}
+
+fn try_create_crop(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
+    let family_idx = i32_to_usize(window.get_family_index());
+    let strata_idx = i32_to_usize(window.get_strata_index());
+    let family_id_str = state
+        .family_ids
+        .get(family_idx)
+        .ok_or_else(|| AppError::Inconsistent("no family selected".to_owned()))?
+        .clone();
+    let strata_id_str = state
+        .strata_ids
+        .get(strata_idx)
+        .ok_or_else(|| AppError::Inconsistent("no strata selected".to_owned()))?
+        .clone();
+    let name = window.get_new_crop_name().to_string();
+    let latin_name = optional_text(&window.get_new_crop_latin());
+
+    state.runtime.block_on(async {
+        create_annual_crop(
+            state.app.repo(),
+            AnnualCropInput {
+                family_id_str,
+                strata_id_str,
+                name,
+                latin_name,
+            },
+        )
+        .await
+        .map(|_| ())
+    })
+}
+
+fn try_create_variety(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
+    let idx = window.get_selected_crop_index();
+    if idx < 0 {
+        return Err(AppError::Inconsistent(
+            "no crop selected for variety create".into(),
+        ));
+    }
+    let crop_id_str = state
+        .crop_ids
+        .get(i32_to_usize(idx))
+        .ok_or_else(|| AppError::Inconsistent("selected crop index out of range".into()))?
+        .clone();
+    let name = window.get_new_variety_name().to_string();
+    let description = optional_text(&window.get_new_variety_description());
+    let days_to_transplant = parse_optional_u16(&window.get_new_variety_dtt(), "DTT")?;
+    let days_to_maturity = parse_u16(&window.get_new_variety_dtm(), "DTM")?;
+    let harvest_window_days = parse_u16(&window.get_new_variety_window(), "harvest window")?;
+
+    state.runtime.block_on(async {
+        create_annual_variety(
+            state.app.repo(),
+            AnnualVarietyInput {
+                crop_id_str,
+                name,
+                description,
+                days_to_transplant,
+                days_to_maturity,
+                harvest_window_days,
+            },
+        )
+        .await
+        .map(|_| ())
+    })
 }
 
 fn today_iso() -> String {

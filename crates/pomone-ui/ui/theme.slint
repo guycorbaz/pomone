@@ -20,10 +20,11 @@ export global Palette {
     out property <brush> surface-alt: dark ? #2D352C : #F3EDE0;
     out property <brush> overlay: dark ? #00000080 : #00000026;
 
-    // Text
-    out property <brush> text-primary: dark ? #ECE6D8 : #2A2118;
-    out property <brush> text-secondary: dark ? #BDB59F : #5B4D3E;
-    out property <brush> text-muted: dark ? #8A8472 : #8A7B6A;
+    // Text — tuned for a higher perceived contrast against both the cream
+    // light background (#FBF7F0) and the dark olive background (#1B2018).
+    out property <brush> text-primary: dark ? #F5F1E5 : #1F1810;
+    out property <brush> text-secondary: dark ? #D1CAB3 : #3F3528;
+    out property <brush> text-muted: dark ? #A09887 : #6B5D4D;
     out property <brush> text-on-primary: #FFFFFF;
     out property <brush> text-on-accent: #FFFFFF;
 
@@ -61,12 +62,12 @@ export global Theme {
     out property <length> space-3xl: 48px;
 
     // Type scale.
-    out property <length> font-size-h1: 28px;
-    out property <length> font-size-h2: 20px;
-    out property <length> font-size-h3: 16px;
-    out property <length> font-size-body: 14px;
-    out property <length> font-size-label: 12px;
-    out property <length> font-size-numeric: 22px;
+    out property <length> font-size-h1: 36px;
+    out property <length> font-size-h2: 26px;
+    out property <length> font-size-h3: 20px;
+    out property <length> font-size-body: 18px;
+    out property <length> font-size-label: 15px;
+    out property <length> font-size-numeric: 30px;
 
     out property <int> font-weight-regular: 400;
     out property <int> font-weight-medium: 500;
@@ -108,8 +109,8 @@ export component PrimaryButton inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked();
 
-    height: 36px;
-    min-width: 96px;
+    height: 44px;
+    min-width: 112px;
     horizontal-stretch: 0;
     border-radius: Theme.radius-md;
     background: !enabled ? Palette.border
@@ -148,8 +149,8 @@ export component SecondaryButton inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked();
 
-    height: 36px;
-    min-width: 96px;
+    height: 44px;
+    min-width: 112px;
     horizontal-stretch: 0;
     border-radius: Theme.radius-md;
     border-width: Theme.border-width;

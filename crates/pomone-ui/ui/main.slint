@@ -1,22 +1,23 @@
 // Pomone — root Slint window.
 //
 // MainWindow is just a router: it owns `current-page` and switches between
-// the Home and Plantings panes. Every visible string and every list model is
-// supplied by Rust through in-properties, keeping translations and data in a
-// single Rust-side source of truth.
+// the Home, Plantings and Cultures panes. Every visible string and every list
+// model is supplied by Rust through in-properties, keeping translations and
+// data in a single Rust-side source of truth.
 
 import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
 import { PlantingsPage, PlantingRow } from "plantings.slint";
+import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow }
+export { PlantingRow, CropRow, VarietyRow }
 
 // One row of the "overview" card on the home page: label on the left, numeric
 // value on the right.
 component StatRow inherits Rectangle {
     in property <string> label;
     in property <int> value;
-    height: 36px;
+    height: 44px;
     HorizontalLayout {
         spacing: Theme.space-md;
         Text {
@@ -44,10 +45,10 @@ component Divider inherits Rectangle {
 
 export component MainWindow inherits Window {
     title: "Pomone";
-    preferred-width: 880px;
-    preferred-height: 640px;
-    min-width: 520px;
-    min-height: 420px;
+    preferred-width: 1200px;
+    preferred-height: 820px;
+    min-width: 720px;
+    min-height: 560px;
     background: Palette.background;
 
     // ------- Navigation -------
@@ -68,9 +69,11 @@ export component MainWindow inherits Window {
     in property <string> current-language-tag;
     in property <string> refresh-button-text;
     in property <string> plantings-button-text;
+    in property <string> cultures-button-text;
     callback toggle-language();
     callback refresh-counts();
     callback navigate-plantings();
+    callback navigate-cultures();
 
     // ------- Plantings page state forwarded to PlantingsPage -------
     in property <string> plantings-title-text;
@@ -97,6 +100,54 @@ export component MainWindow inherits Window {
     in property <string> status-text;
     in property <bool> status-is-error: false;
     callback create-planting();
+
+    // ------- Cultures page state forwarded to CulturesPage -------
+    in property <string> cultures-title-text;
+    in property <string> crops-title;
+    in property <string> empty-crops-text;
+    in property <[CropRow]> crops;
+    in-out property <int> selected-crop-index: -1;
+
+    in property <string> new-crop-section;
+    in property <string> label-crop-name;
+    in property <string> placeholder-crop-name;
+    in property <string> label-crop-latin;
+    in property <string> placeholder-crop-latin;
+    in property <string> label-crop-family;
+    in property <string> label-crop-strata;
+    in property <[string]> family-labels;
+    in property <[string]> strata-labels;
+    in-out property <int> family-index: 0;
+    in-out property <int> strata-index: 0;
+    in-out property <string> new-crop-name;
+    in-out property <string> new-crop-latin;
+    in property <string> create-crop-button-text;
+    callback create-crop();
+    callback select-crop(int);
+
+    in property <string> varieties-title;
+    in property <string> empty-varieties-text;
+    in property <string> no-crop-selected-text;
+    in property <[VarietyRow]> varieties;
+
+    in property <string> new-variety-section;
+    in property <string> label-variety-name;
+    in property <string> placeholder-variety-name;
+    in property <string> label-variety-description;
+    in property <string> placeholder-variety-description;
+    in property <string> label-dtt;
+    in property <string> label-dtm;
+    in property <string> label-window;
+    in property <string> placeholder-dtt;
+    in property <string> placeholder-dtm;
+    in property <string> placeholder-window;
+    in-out property <string> new-variety-name;
+    in-out property <string> new-variety-description;
+    in-out property <string> new-variety-dtt: "35";
+    in-out property <string> new-variety-dtm: "70";
+    in-out property <string> new-variety-window: "60";
+    in property <string> create-variety-button-text;
+    callback create-variety();
 
     // ------- Home page -------
     if current-page == "home": home-pane := VerticalLayout {
@@ -156,6 +207,10 @@ export component MainWindow inherits Window {
                 clicked => { navigate-plantings(); }
             }
             SecondaryButton {
+                text: cultures-button-text;
+                clicked => { navigate-cultures(); }
+            }
+            SecondaryButton {
                 text: refresh-button-text;
                 clicked => { refresh-counts(); }
             }
@@ -202,5 +257,56 @@ export component MainWindow inherits Window {
         status-is-error: status-is-error;
         back => { current-page = "home"; }
         create-planting => { create-planting(); }
+    }
+
+    // ------- Cultures page -------
+    if current-page == "cultures": cultures-pane := CulturesPage {
+        title-text: cultures-title-text;
+        back-button-text: back-button-text;
+        crops-title: crops-title;
+        empty-crops-text: empty-crops-text;
+        crops: crops;
+        selected-crop-index <=> selected-crop-index;
+        new-crop-section: new-crop-section;
+        label-crop-name: label-crop-name;
+        placeholder-crop-name: placeholder-crop-name;
+        label-crop-latin: label-crop-latin;
+        placeholder-crop-latin: placeholder-crop-latin;
+        label-family: label-crop-family;
+        label-strata: label-crop-strata;
+        family-labels: family-labels;
+        strata-labels: strata-labels;
+        family-index <=> family-index;
+        strata-index <=> strata-index;
+        new-crop-name <=> new-crop-name;
+        new-crop-latin <=> new-crop-latin;
+        create-crop-button-text: create-crop-button-text;
+        varieties-title: varieties-title;
+        empty-varieties-text: empty-varieties-text;
+        no-crop-selected-text: no-crop-selected-text;
+        varieties: varieties;
+        new-variety-section: new-variety-section;
+        label-variety-name: label-variety-name;
+        placeholder-variety-name: placeholder-variety-name;
+        label-variety-description: label-variety-description;
+        placeholder-variety-description: placeholder-variety-description;
+        label-dtt: label-dtt;
+        label-dtm: label-dtm;
+        label-window: label-window;
+        placeholder-dtt: placeholder-dtt;
+        placeholder-dtm: placeholder-dtm;
+        placeholder-window: placeholder-window;
+        new-variety-name <=> new-variety-name;
+        new-variety-description <=> new-variety-description;
+        new-variety-dtt <=> new-variety-dtt;
+        new-variety-dtm <=> new-variety-dtm;
+        new-variety-window <=> new-variety-window;
+        create-variety-button-text: create-variety-button-text;
+        status-text: status-text;
+        status-is-error: status-is-error;
+        back => { current-page = "home"; }
+        create-crop => { create-crop(); }
+        create-variety => { create-variety(); }
+        select-crop(idx) => { select-crop(idx); }
     }
 }
