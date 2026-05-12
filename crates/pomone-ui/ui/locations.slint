@@ -1,0 +1,247 @@
+// Pomone — Locations (Lieux) screen.
+//
+// Left card lists every location as a flat, indent-by-depth tree. Right card
+// has the form to add a new location (Kind / Name / Area / Parent / Notes).
+//
+// The Rust side flattens the hierarchy into pre-order `LocationItem`s with
+// a `depth` field; the row indent is `depth × 24px`.
+
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
+import { ComboBox, LineEdit, ListView } from "std-widgets.slint";
+
+export struct LocationItem {
+    id: string,
+    name: string,
+    kind-label: string,
+    area-label: string,
+    parent-label: string,
+    full-path: string,
+    depth: int,
+}
+
+component LocationRowView inherits Card {
+    in property <LocationItem> entry;
+    in property <length> indent-step: 24px;
+    height: 72px;
+
+    HorizontalLayout {
+        padding: Theme.space-md;
+        spacing: Theme.space-md;
+
+        // Indent based on depth — drawn as an empty Rectangle so the rest of
+        // the row keeps the layout's stretch behaviour.
+        Rectangle {
+            width: entry.depth * root.indent-step;
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 2px;
+
+            Text {
+                text: entry.name;
+                color: Palette.text-primary;
+                font-size: Theme.font-size-body;
+                font-weight: Theme.font-weight-semibold;
+            }
+            Text {
+                text: entry.kind-label + " · " + entry.area-label
+                      + (entry.parent-label != "" ? "  ↳ " + entry.parent-label : "");
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+            }
+        }
+    }
+}
+
+export component LocationsPage inherits Rectangle {
+    background: Palette.background;
+
+    // Header
+    in property <string> title-text;
+    in property <string> back-button-text;
+
+    // List
+    in property <string> list-title;
+    in property <string> empty-locations-text;
+    in property <[LocationItem]> locations;
+
+    // Form
+    in property <string> form-section-title;
+    in property <string> label-loc-name;
+    in property <string> placeholder-loc-name;
+    in property <string> label-loc-kind;
+    in property <string> label-loc-area;
+    in property <string> placeholder-loc-area;
+    in property <string> label-loc-parent;
+    in property <string> label-loc-notes;
+    in property <string> placeholder-loc-notes;
+    in property <[string]> loc-kind-labels;
+    in property <[string]> loc-parent-labels;
+    in-out property <int> loc-kind-index: 0;
+    in-out property <int> loc-parent-index: 0;
+    in-out property <string> new-loc-name;
+    in-out property <string> new-loc-area: "20";
+    in-out property <string> new-loc-notes;
+    in property <string> create-loc-button-text;
+    callback create-location();
+
+    in property <string> status-text;
+    in property <bool> status-is-error: false;
+
+    callback back();
+
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-xl;
+
+        // Header row
+        HorizontalLayout {
+            spacing: Theme.space-md;
+            SecondaryButton {
+                text: back-button-text;
+                clicked => { back(); }
+            }
+            Text {
+                text: title-text;
+                color: Palette.primary;
+                font-size: Theme.font-size-h1;
+                font-weight: Theme.font-weight-bold;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+        }
+
+        // Body — list on the left, form on the right
+        HorizontalLayout {
+            spacing: Theme.space-xl;
+            vertical-stretch: 1;
+
+            // -------- List card --------
+            Card {
+                horizontal-stretch: 2;
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: list-title; }
+
+                    if locations.length == 0: Rectangle {
+                        height: 80px;
+                        Text {
+                            text: empty-locations-text;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-body;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            wrap: word-wrap;
+                        }
+                    }
+                    if locations.length > 0: list-area := Rectangle {
+                        min-height: 200px;
+                        preferred-height: 360px;
+                        vertical-stretch: 1;
+                        ListView {
+                            for item in locations: LocationRowView {
+                                entry: item;
+                                width: list-area.width;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -------- Form card --------
+            Card {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: form-section-title; }
+
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-loc-name;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        LineEdit {
+                            text <=> new-loc-name;
+                            placeholder-text: placeholder-loc-name;
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-loc-kind;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ComboBox {
+                            model: loc-kind-labels;
+                            current-index <=> loc-kind-index;
+                            enabled: loc-kind-labels.length > 0;
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-loc-area;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        LineEdit {
+                            text <=> new-loc-area;
+                            placeholder-text: placeholder-loc-area;
+                            input-type: decimal;
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-loc-parent;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ComboBox {
+                            model: loc-parent-labels;
+                            current-index <=> loc-parent-index;
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-loc-notes;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        LineEdit {
+                            text <=> new-loc-notes;
+                            placeholder-text: placeholder-loc-notes;
+                        }
+                    }
+
+                    PrimaryButton {
+                        text: create-loc-button-text;
+                        enabled: loc-kind-labels.length > 0;
+                        clicked => { create-location(); }
+                    }
+                }
+            }
+        }
+
+        // Shared status line
+        Text {
+            text: status-text;
+            color: status-is-error ? Palette.danger : Palette.success;
+            font-size: Theme.font-size-label;
+            wrap: word-wrap;
+        }
+    }
+}

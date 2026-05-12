@@ -64,6 +64,24 @@ status-crop-created = Culture créée
 status-variety-created = Variété créée
 status-pick-crop-first = Sélectionnez une culture avant de créer une variété.
 
+## Locations screen
+button-locations = Lieux →
+title-locations = Lieux
+locations-list-title = Hiérarchie des lieux
+empty-locations = Aucun lieu pour l'instant.
+new-location-section = Nouveau lieu
+label-loc-name = Nom
+placeholder-loc-name = Planche B
+label-loc-kind = Type
+label-loc-area = Surface (m²)
+placeholder-loc-area = 20
+label-loc-parent = Lieu parent
+label-loc-notes = Notes (optionnel)
+placeholder-loc-notes = orientation est-ouest, exposition sud…
+button-create-location = Créer le lieu
+parent-none = (racine — aucun parent)
+status-location-created = Lieu créé
+
 ## Common nouns
 crop = Culture
 family = Famille
