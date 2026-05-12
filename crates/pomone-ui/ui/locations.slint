@@ -60,7 +60,6 @@ export component LocationsPage inherits Rectangle {
 
     // Header
     in property <string> title-text;
-    in property <string> back-button-text;
 
     // List
     in property <string> list-title;
@@ -93,27 +92,16 @@ export component LocationsPage inherits Rectangle {
     in property <string> status-text;
     in property <bool> status-is-error: false;
 
-    callback back();
-
     VerticalLayout {
         padding: Theme.space-2xl;
         spacing: Theme.space-xl;
 
-        // Header row
-        HorizontalLayout {
-            spacing: Theme.space-md;
-            SecondaryButton {
-                text: back-button-text;
-                clicked => { back(); }
-            }
-            Text {
-                text: title-text;
-                color: Palette.primary;
-                font-size: Theme.font-size-h1;
-                font-weight: Theme.font-weight-bold;
-                vertical-alignment: center;
-                horizontal-stretch: 1;
-            }
+        // Screen title.
+        Text {
+            text: title-text;
+            color: Palette.primary;
+            font-size: Theme.font-size-h1;
+            font-weight: Theme.font-weight-bold;
         }
 
         // Body — list on the left, form on the right

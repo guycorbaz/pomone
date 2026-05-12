@@ -6,11 +6,12 @@
 welcome = Welcome to Pomone
 welcome-user = Welcome, { $name }!
 welcome-summary = Pomone manages your annual and pluriannual crops, from market gardening to agroforestry.
-button-refresh = Refresh
 button-switch-language = Français
-button-plantings = Plantings →
-button-back = ← Back
 button-create-planting = Create planting
+nav-home = Home
+nav-plantings = Plantings
+nav-cultures = Crops
+nav-locations = Locations
 label-strata-count = Strata
 label-families-count = Families
 label-location-kinds-count = Location kinds
@@ -31,7 +32,6 @@ status-planting-failed = Creation failed: { $message }
 status-pick-variety = Pick a variety and a location before creating.
 
 ## Cultures + Varieties screen
-button-cultures = Crops →
 title-cultures = Crops and varieties
 crops-title = Crops
 empty-crops = No crops yet.
@@ -63,7 +63,6 @@ status-variety-created = Variety created
 status-pick-crop-first = Pick a crop before creating a variety.
 
 ## Locations screen
-button-locations = Locations →
 title-locations = Locations
 locations-list-title = Location hierarchy
 empty-locations = No locations yet.

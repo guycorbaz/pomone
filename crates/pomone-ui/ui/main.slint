@@ -1,11 +1,12 @@
 // Pomone — root Slint window.
 //
-// MainWindow is just a router: it owns `current-page` and switches between
-// the Home, Plantings and Cultures panes. Every visible string and every list
-// model is supplied by Rust through in-properties, keeping translations and
-// data in a single Rust-side source of truth.
+// Layout is a persistent left sidebar (logo + navigation buttons + language
+// switch in the footer) and a content area that swaps based on `current-page`.
+// Every visible string and every list model is supplied by Rust through
+// in-properties, keeping translations and data in a single Rust-side source
+// of truth.
 
-import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, NavButton, SectionHeader } from "theme.slint";
 import { PlantingsPage, PlantingRow } from "plantings.slint";
 import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
 import { LocationsPage, LocationItem } from "locations.slint";
@@ -46,16 +47,16 @@ component Divider inherits Rectangle {
 
 export component MainWindow inherits Window {
     title: "Pomone";
-    preferred-width: 1200px;
+    preferred-width: 1280px;
     preferred-height: 820px;
-    min-width: 720px;
+    min-width: 840px;
     min-height: 560px;
     background: Palette.background;
 
     // ------- Navigation -------
     in-out property <string> current-page: "home";
 
-    // ------- Home page strings -------
+    // ------- Brand + home page strings -------
     in property <string> title-text;
     in property <string> welcome-text;
     in property <string> version-text;
@@ -68,19 +69,21 @@ export component MainWindow inherits Window {
     in property <int> count-location-kinds;
     in property <string> language-button-text;
     in property <string> current-language-tag;
-    in property <string> refresh-button-text;
-    in property <string> plantings-button-text;
-    in property <string> cultures-button-text;
-    in property <string> locations-button-text;
+
+    // ------- Sidebar nav labels -------
+    in property <string> nav-home-text;
+    in property <string> nav-plantings-text;
+    in property <string> nav-cultures-text;
+    in property <string> nav-locations-text;
+
     callback toggle-language();
-    callback refresh-counts();
+    callback navigate-home();
     callback navigate-plantings();
     callback navigate-cultures();
     callback navigate-locations();
 
     // ------- Plantings page state forwarded to PlantingsPage -------
     in property <string> plantings-title-text;
-    in property <string> back-button-text;
     in property <string> empty-state-text;
     in property <[PlantingRow]> plantings;
     in property <string> section-new-text;
@@ -179,201 +182,231 @@ export component MainWindow inherits Window {
     in property <string> create-loc-button-text;
     callback create-location();
 
-    // ------- Home page -------
-    if current-page == "home": home-pane := VerticalLayout {
-        padding: Theme.space-2xl;
-        spacing: Theme.space-xl;
+    HorizontalLayout {
+        spacing: 0px;
 
-        HorizontalLayout {
-            spacing: Theme.space-md;
-            VerticalLayout {
-                spacing: 2px;
-                horizontal-stretch: 1;
-                Text {
-                    text: title-text;
-                    color: Palette.primary;
-                    font-size: Theme.font-size-h1;
-                    font-weight: Theme.font-weight-bold;
-                }
-                Text {
-                    text: version-text;
-                    color: Palette.text-muted;
-                    font-size: Theme.font-size-label;
-                }
+        // ============ Sidebar ============
+        Rectangle {
+            width: 240px;
+            background: Palette.surface;
+
+            // Right border drawn as a thin sibling rectangle so it doesn't
+            // require switching the parent Rectangle to a full border.
+            Rectangle {
+                x: parent.width - 1px;
+                y: 0;
+                width: 1px;
+                height: parent.height;
+                background: Palette.border;
             }
-        }
 
-        Text {
-            text: welcome-text;
-            color: Palette.text-secondary;
-            font-size: Theme.font-size-body;
-            wrap: word-wrap;
-        }
-
-        Card {
             VerticalLayout {
                 padding: Theme.space-xl;
                 spacing: Theme.space-sm;
 
-                SectionHeader { text: section-overview-text; }
-                Rectangle { height: Theme.space-xs; }
+                // Logo / brand
+                VerticalLayout {
+                    spacing: 2px;
+                    Text {
+                        text: title-text;
+                        color: Palette.primary;
+                        font-size: Theme.font-size-h2;
+                        font-weight: Theme.font-weight-bold;
+                    }
+                    Text {
+                        text: version-text;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-label;
+                    }
+                }
 
-                StatRow { label: label-strata; value: count-strata; }
-                Divider { }
-                StatRow { label: label-families; value: count-families; }
-                Divider { }
-                StatRow { label: label-location-kinds; value: count-location-kinds; }
+                Rectangle { height: Theme.space-md; }
+
+                NavButton {
+                    text: nav-home-text;
+                    selected: current-page == "home";
+                    clicked => { current-page = "home"; navigate-home(); }
+                }
+                NavButton {
+                    text: nav-plantings-text;
+                    selected: current-page == "plantings";
+                    clicked => { current-page = "plantings"; navigate-plantings(); }
+                }
+                NavButton {
+                    text: nav-cultures-text;
+                    selected: current-page == "cultures";
+                    clicked => { current-page = "cultures"; navigate-cultures(); }
+                }
+                NavButton {
+                    text: nav-locations-text;
+                    selected: current-page == "locations";
+                    clicked => { current-page = "locations"; navigate-locations(); }
+                }
+
+                // Push the language footer to the bottom.
+                Rectangle { vertical-stretch: 1; }
+
+                Rectangle { height: 1px; background: Palette.border; }
+
+                HorizontalLayout {
+                    spacing: Theme.space-sm;
+                    Text {
+                        text: current-language-tag;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-label;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    SecondaryButton {
+                        text: language-button-text;
+                        clicked => { toggle-language(); }
+                    }
+                }
             }
         }
 
-        Rectangle { vertical-stretch: 1; }
+        // ============ Content ============
+        Rectangle {
+            horizontal-stretch: 1;
+            background: Palette.background;
 
-        HorizontalLayout {
-            spacing: Theme.space-md;
-            alignment: stretch;
+            // ------- Home -------
+            if current-page == "home": VerticalLayout {
+                padding: Theme.space-2xl;
+                spacing: Theme.space-xl;
 
-            PrimaryButton {
-                text: plantings-button-text;
-                clicked => { navigate-plantings(); }
-            }
-            SecondaryButton {
-                text: cultures-button-text;
-                clicked => { navigate-cultures(); }
-            }
-            SecondaryButton {
-                text: locations-button-text;
-                clicked => { navigate-locations(); }
-            }
-            SecondaryButton {
-                text: refresh-button-text;
-                clicked => { refresh-counts(); }
+                Text {
+                    text: welcome-text;
+                    color: Palette.text-secondary;
+                    font-size: Theme.font-size-body;
+                    wrap: word-wrap;
+                }
+
+                Card {
+                    VerticalLayout {
+                        padding: Theme.space-xl;
+                        spacing: Theme.space-sm;
+
+                        SectionHeader { text: section-overview-text; }
+                        Rectangle { height: Theme.space-xs; }
+
+                        StatRow { label: label-strata; value: count-strata; }
+                        Divider { }
+                        StatRow { label: label-families; value: count-families; }
+                        Divider { }
+                        StatRow { label: label-location-kinds; value: count-location-kinds; }
+                    }
+                }
+
+                Rectangle { vertical-stretch: 1; }
             }
 
-            Rectangle { horizontal-stretch: 1; }
-
-            Text {
-                text: current-language-tag;
-                color: Palette.text-muted;
-                font-size: Theme.font-size-label;
-                vertical-alignment: center;
+            // ------- Plantings -------
+            if current-page == "plantings": PlantingsPage {
+                title-text: plantings-title-text;
+                empty-state-text: empty-state-text;
+                plantings: plantings;
+                section-new-text: section-new-text;
+                label-variety: label-variety;
+                label-location: label-location;
+                label-sown-on: label-sown-on;
+                label-area: label-area;
+                label-count: label-count;
+                placeholder-date: placeholder-date;
+                placeholder-area: placeholder-area;
+                placeholder-count: placeholder-count;
+                create-button-text: create-button-text;
+                variety-labels: variety-labels;
+                location-labels: location-labels;
+                variety-index <=> variety-index;
+                location-index <=> location-index;
+                sown-on-text <=> sown-on-text;
+                area-text <=> area-text;
+                count-text <=> count-text;
+                status-text: status-text;
+                status-is-error: status-is-error;
+                create-planting => { create-planting(); }
             }
-            SecondaryButton {
-                text: language-button-text;
-                clicked => { toggle-language(); }
+
+            // ------- Cultures -------
+            if current-page == "cultures": CulturesPage {
+                title-text: cultures-title-text;
+                crops-title: crops-title;
+                empty-crops-text: empty-crops-text;
+                crops: crops;
+                selected-crop-index <=> selected-crop-index;
+                new-crop-section: new-crop-section;
+                label-crop-name: label-crop-name;
+                placeholder-crop-name: placeholder-crop-name;
+                label-crop-latin: label-crop-latin;
+                placeholder-crop-latin: placeholder-crop-latin;
+                label-family: label-crop-family;
+                label-strata: label-crop-strata;
+                family-labels: family-labels;
+                strata-labels: strata-labels;
+                family-index <=> family-index;
+                strata-index <=> strata-index;
+                new-crop-name <=> new-crop-name;
+                new-crop-latin <=> new-crop-latin;
+                create-crop-button-text: create-crop-button-text;
+                varieties-title: varieties-title;
+                empty-varieties-text: empty-varieties-text;
+                no-crop-selected-text: no-crop-selected-text;
+                varieties: varieties;
+                new-variety-section: new-variety-section;
+                label-variety-name: label-variety-name;
+                placeholder-variety-name: placeholder-variety-name;
+                label-variety-description: label-variety-description;
+                placeholder-variety-description: placeholder-variety-description;
+                label-dtt: label-dtt;
+                label-dtm: label-dtm;
+                label-window: label-window;
+                placeholder-dtt: placeholder-dtt;
+                placeholder-dtm: placeholder-dtm;
+                placeholder-window: placeholder-window;
+                new-variety-name <=> new-variety-name;
+                new-variety-description <=> new-variety-description;
+                new-variety-dtt <=> new-variety-dtt;
+                new-variety-dtm <=> new-variety-dtm;
+                new-variety-window <=> new-variety-window;
+                create-variety-button-text: create-variety-button-text;
+                status-text: status-text;
+                status-is-error: status-is-error;
+                create-crop => { create-crop(); }
+                create-variety => { create-variety(); }
+                select-crop(idx) => { select-crop(idx); }
+            }
+
+            // ------- Locations -------
+            if current-page == "locations": LocationsPage {
+                title-text: locations-title-text;
+                list-title: locations-list-title;
+                empty-locations-text: empty-locations-text;
+                locations: locations;
+                form-section-title: location-form-section;
+                label-loc-name: label-loc-name;
+                placeholder-loc-name: placeholder-loc-name;
+                label-loc-kind: label-loc-kind;
+                label-loc-length: label-loc-length;
+                placeholder-loc-length: placeholder-loc-length;
+                label-loc-width: label-loc-width;
+                placeholder-loc-width: placeholder-loc-width;
+                label-loc-parent: label-loc-parent;
+                label-loc-notes: label-loc-notes;
+                placeholder-loc-notes: placeholder-loc-notes;
+                loc-kind-labels: loc-kind-labels;
+                loc-parent-labels: loc-parent-labels;
+                loc-kind-index <=> loc-kind-index;
+                loc-parent-index <=> loc-parent-index;
+                new-loc-name <=> new-loc-name;
+                new-loc-length <=> new-loc-length;
+                new-loc-width <=> new-loc-width;
+                new-loc-notes <=> new-loc-notes;
+                create-loc-button-text: create-loc-button-text;
+                status-text: status-text;
+                status-is-error: status-is-error;
+                create-location => { create-location(); }
             }
         }
-    }
-
-    // ------- Plantings page -------
-    if current-page == "plantings": plantings-pane := PlantingsPage {
-        title-text: plantings-title-text;
-        back-button-text: back-button-text;
-        empty-state-text: empty-state-text;
-        plantings: plantings;
-        section-new-text: section-new-text;
-        label-variety: label-variety;
-        label-location: label-location;
-        label-sown-on: label-sown-on;
-        label-area: label-area;
-        label-count: label-count;
-        placeholder-date: placeholder-date;
-        placeholder-area: placeholder-area;
-        placeholder-count: placeholder-count;
-        create-button-text: create-button-text;
-        variety-labels: variety-labels;
-        location-labels: location-labels;
-        variety-index <=> variety-index;
-        location-index <=> location-index;
-        sown-on-text <=> sown-on-text;
-        area-text <=> area-text;
-        count-text <=> count-text;
-        status-text: status-text;
-        status-is-error: status-is-error;
-        back => { current-page = "home"; }
-        create-planting => { create-planting(); }
-    }
-
-    // ------- Cultures page -------
-    if current-page == "cultures": cultures-pane := CulturesPage {
-        title-text: cultures-title-text;
-        back-button-text: back-button-text;
-        crops-title: crops-title;
-        empty-crops-text: empty-crops-text;
-        crops: crops;
-        selected-crop-index <=> selected-crop-index;
-        new-crop-section: new-crop-section;
-        label-crop-name: label-crop-name;
-        placeholder-crop-name: placeholder-crop-name;
-        label-crop-latin: label-crop-latin;
-        placeholder-crop-latin: placeholder-crop-latin;
-        label-family: label-crop-family;
-        label-strata: label-crop-strata;
-        family-labels: family-labels;
-        strata-labels: strata-labels;
-        family-index <=> family-index;
-        strata-index <=> strata-index;
-        new-crop-name <=> new-crop-name;
-        new-crop-latin <=> new-crop-latin;
-        create-crop-button-text: create-crop-button-text;
-        varieties-title: varieties-title;
-        empty-varieties-text: empty-varieties-text;
-        no-crop-selected-text: no-crop-selected-text;
-        varieties: varieties;
-        new-variety-section: new-variety-section;
-        label-variety-name: label-variety-name;
-        placeholder-variety-name: placeholder-variety-name;
-        label-variety-description: label-variety-description;
-        placeholder-variety-description: placeholder-variety-description;
-        label-dtt: label-dtt;
-        label-dtm: label-dtm;
-        label-window: label-window;
-        placeholder-dtt: placeholder-dtt;
-        placeholder-dtm: placeholder-dtm;
-        placeholder-window: placeholder-window;
-        new-variety-name <=> new-variety-name;
-        new-variety-description <=> new-variety-description;
-        new-variety-dtt <=> new-variety-dtt;
-        new-variety-dtm <=> new-variety-dtm;
-        new-variety-window <=> new-variety-window;
-        create-variety-button-text: create-variety-button-text;
-        status-text: status-text;
-        status-is-error: status-is-error;
-        back => { current-page = "home"; }
-        create-crop => { create-crop(); }
-        create-variety => { create-variety(); }
-        select-crop(idx) => { select-crop(idx); }
-    }
-
-    // ------- Locations page -------
-    if current-page == "locations": locations-pane := LocationsPage {
-        title-text: locations-title-text;
-        back-button-text: back-button-text;
-        list-title: locations-list-title;
-        empty-locations-text: empty-locations-text;
-        locations: locations;
-        form-section-title: location-form-section;
-        label-loc-name: label-loc-name;
-        placeholder-loc-name: placeholder-loc-name;
-        label-loc-kind: label-loc-kind;
-        label-loc-length: label-loc-length;
-        placeholder-loc-length: placeholder-loc-length;
-        label-loc-width: label-loc-width;
-        placeholder-loc-width: placeholder-loc-width;
-        label-loc-parent: label-loc-parent;
-        label-loc-notes: label-loc-notes;
-        placeholder-loc-notes: placeholder-loc-notes;
-        loc-kind-labels: loc-kind-labels;
-        loc-parent-labels: loc-parent-labels;
-        loc-kind-index <=> loc-kind-index;
-        loc-parent-index <=> loc-parent-index;
-        new-loc-name <=> new-loc-name;
-        new-loc-length <=> new-loc-length;
-        new-loc-width <=> new-loc-width;
-        new-loc-notes <=> new-loc-notes;
-        create-loc-button-text: create-loc-button-text;
-        status-text: status-text;
-        status-is-error: status-is-error;
-        back => { current-page = "home"; }
-        create-location => { create-location(); }
     }
 }

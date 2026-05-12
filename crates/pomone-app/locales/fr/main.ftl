@@ -8,11 +8,12 @@
 welcome = Bienvenue dans Pomone
 welcome-user = Bienvenue, { $name } !
 welcome-summary = Pomone gère vos cultures annuelles et pluriannuelles, du maraîchage à l'agroforesterie.
-button-refresh = Actualiser
 button-switch-language = English
-button-plantings = Plantations →
-button-back = ← Retour
 button-create-planting = Créer la plantation
+nav-home = Accueil
+nav-plantings = Plantations
+nav-cultures = Cultures
+nav-locations = Lieux
 label-strata-count = Strates
 label-families-count = Familles
 label-location-kinds-count = Types de lieux
@@ -33,7 +34,6 @@ status-planting-failed = Échec de la création : { $message }
 status-pick-variety = Sélectionnez une variété et un lieu avant de créer.
 
 ## Cultures + Variétés screen
-button-cultures = Cultures →
 title-cultures = Cultures et variétés
 crops-title = Cultures
 empty-crops = Aucune culture pour l'instant.
@@ -65,7 +65,6 @@ status-variety-created = Variété créée
 status-pick-crop-first = Sélectionnez une culture avant de créer une variété.
 
 ## Locations screen
-button-locations = Lieux →
 title-locations = Lieux
 locations-list-title = Hiérarchie des lieux
 empty-locations = Aucun lieu pour l'instant.

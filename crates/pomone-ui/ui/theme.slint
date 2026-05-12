@@ -193,3 +193,39 @@ export component SectionHeader inherits Text {
     // Letter-spacing isn't directly settable in Slint; we approximate the
     // "uppercase eyebrow" feel through weight + colour alone.
 }
+
+// Sidebar navigation button. Filled in primary green when `selected`, ghost
+// otherwise (hover state lifts the background slightly). Text is aligned to
+// the left like every desktop sidebar.
+export component NavButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected: false;
+    callback clicked();
+
+    height: 44px;
+    border-radius: Theme.radius-md;
+    background: selected ? Palette.primary
+                : touch.pressed ? Palette.surface-alt
+                : touch.has-hover ? Palette.surface-alt
+                : transparent;
+
+    animate background { duration: Theme.transition-fast; }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+
+        Text {
+            text: root.text;
+            color: root.selected ? Palette.text-on-primary : Palette.text-primary;
+            font-size: Theme.font-size-body;
+            font-weight: root.selected ? Theme.font-weight-semibold : Theme.font-weight-medium;
+            horizontal-alignment: left;
+            vertical-alignment: center;
+            x: Theme.space-md;
+            y: 0;
+            width: parent.width - 2 * Theme.space-md;
+            height: parent.height;
+        }
+    }
+}
