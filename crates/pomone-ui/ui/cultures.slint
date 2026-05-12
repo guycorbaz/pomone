@@ -1,0 +1,429 @@
+// Pomone — Cultures (Crops) + Varieties master-detail screen.
+//
+// Left card lists Crops; clicking a row sets selected-crop-index, which the
+// Rust side observes (via a changed callback on the property is not needed —
+// we drive the data refresh from the user's row click).
+//
+// Right card lists Varieties of the currently selected Crop, plus a form to
+// add a new annual variety. A separate form below the Crops list adds a new
+// annual crop.
+
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
+import { ComboBox, LineEdit, ListView } from "std-widgets.slint";
+
+export struct CropRow {
+    id: string,
+    name: string,
+    family-label: string,
+    strata-label: string,
+    lifespan-label: string,
+    variety-count: int,
+}
+
+export struct VarietyRow {
+    id: string,
+    name: string,
+    description: string,
+    profile-label: string,
+}
+
+// A single row in the Crops list. Highlights itself when selected.
+component CropRowView inherits Rectangle {
+    in property <CropRow> entry;
+    in property <bool> selected;
+    callback clicked();
+
+    height: 76px;
+    background: selected ? Palette.surface-alt
+                : touch.has-hover ? Palette.surface-alt
+                : Palette.surface;
+    border-color: selected ? Palette.primary : Palette.border;
+    border-width: selected ? 2px : Theme.border-width;
+    border-radius: Theme.radius-md;
+    animate background, border-color { duration: Theme.transition-fast; }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+
+        VerticalLayout {
+            padding: Theme.space-md;
+            spacing: 2px;
+
+            HorizontalLayout {
+                spacing: Theme.space-md;
+                Text {
+                    text: entry.name;
+                    color: Palette.text-primary;
+                    font-size: Theme.font-size-body;
+                    font-weight: Theme.font-weight-semibold;
+                    horizontal-stretch: 1;
+                }
+                Text {
+                    text: entry.variety-count + " var.";
+                    color: Palette.primary;
+                    font-size: Theme.font-size-label;
+                    font-weight: Theme.font-weight-semibold;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                text: entry.family-label + " · " + entry.strata-label + " · " + entry.lifespan-label;
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+            }
+        }
+    }
+}
+
+component VarietyRowView inherits Card {
+    in property <VarietyRow> entry;
+    height: 88px;
+
+    VerticalLayout {
+        padding: Theme.space-md;
+        spacing: 2px;
+
+        Text {
+            text: entry.name;
+            color: Palette.text-primary;
+            font-size: Theme.font-size-body;
+            font-weight: Theme.font-weight-semibold;
+        }
+        Text {
+            text: entry.profile-label;
+            color: Palette.text-muted;
+            font-size: Theme.font-size-label;
+        }
+        if entry.description != "": Text {
+            text: entry.description;
+            color: Palette.text-secondary;
+            font-size: Theme.font-size-label;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component CulturesPage inherits Rectangle {
+    background: Palette.background;
+
+    // Header
+    in property <string> title-text;
+    in property <string> back-button-text;
+
+    // Crops side
+    in property <string> crops-title;
+    in property <string> empty-crops-text;
+    in property <[CropRow]> crops;
+    in-out property <int> selected-crop-index: -1;
+
+    in property <string> new-crop-section;
+    in property <string> label-crop-name;
+    in property <string> placeholder-crop-name;
+    in property <string> label-crop-latin;
+    in property <string> placeholder-crop-latin;
+    in property <string> label-family;
+    in property <string> label-strata;
+    in property <[string]> family-labels;
+    in property <[string]> strata-labels;
+    in-out property <int> family-index: 0;
+    in-out property <int> strata-index: 0;
+    in-out property <string> new-crop-name;
+    in-out property <string> new-crop-latin;
+    in property <string> create-crop-button-text;
+    callback create-crop();
+
+    // Varieties side
+    in property <string> varieties-title;
+    in property <string> empty-varieties-text;
+    in property <string> no-crop-selected-text;
+    in property <[VarietyRow]> varieties;
+
+    in property <string> new-variety-section;
+    in property <string> label-variety-name;
+    in property <string> placeholder-variety-name;
+    in property <string> label-variety-description;
+    in property <string> placeholder-variety-description;
+    in property <string> label-dtt;
+    in property <string> label-dtm;
+    in property <string> label-window;
+    in property <string> placeholder-dtt;
+    in property <string> placeholder-dtm;
+    in property <string> placeholder-window;
+    in-out property <string> new-variety-name;
+    in-out property <string> new-variety-description;
+    in-out property <string> new-variety-dtt: "35";
+    in-out property <string> new-variety-dtm: "70";
+    in-out property <string> new-variety-window: "60";
+    in property <string> create-variety-button-text;
+    callback create-variety();
+
+    // Shared status line at the bottom
+    in property <string> status-text;
+    in property <bool> status-is-error: false;
+
+    callback back();
+    callback select-crop(int);
+
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-xl;
+
+        // Header
+        HorizontalLayout {
+            spacing: Theme.space-md;
+            SecondaryButton {
+                text: back-button-text;
+                clicked => { back(); }
+            }
+            Text {
+                text: title-text;
+                color: Palette.primary;
+                font-size: Theme.font-size-h1;
+                font-weight: Theme.font-weight-bold;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+        }
+
+        // Master-detail body
+        HorizontalLayout {
+            spacing: Theme.space-xl;
+            vertical-stretch: 1;
+
+            // -------- Crops card --------
+            Card {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: crops-title; }
+
+                    if crops.length == 0: Rectangle {
+                        height: 80px;
+                        Text {
+                            text: empty-crops-text;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-body;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    if crops.length > 0: crop-list := Rectangle {
+                        min-height: 160px;
+                        preferred-height: 280px;
+                        vertical-stretch: 1;
+                        ListView {
+                            for crop[idx] in crops: CropRowView {
+                                entry: crop;
+                                selected: idx == selected-crop-index;
+                                width: crop-list.width;
+                                clicked => { select-crop(idx); }
+                            }
+                        }
+                    }
+
+                    Rectangle { height: Theme.space-xs; background: Palette.border; }
+                    SectionHeader { text: new-crop-section; }
+
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-crop-name;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        LineEdit {
+                            text <=> new-crop-name;
+                            placeholder-text: placeholder-crop-name;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-crop-latin;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        LineEdit {
+                            text <=> new-crop-latin;
+                            placeholder-text: placeholder-crop-latin;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-family;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ComboBox {
+                                model: family-labels;
+                                current-index <=> family-index;
+                                enabled: family-labels.length > 0;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-strata;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ComboBox {
+                                model: strata-labels;
+                                current-index <=> strata-index;
+                                enabled: strata-labels.length > 0;
+                            }
+                        }
+                    }
+                    PrimaryButton {
+                        text: create-crop-button-text;
+                        enabled: family-labels.length > 0 && strata-labels.length > 0;
+                        clicked => { create-crop(); }
+                    }
+                }
+            }
+
+            // -------- Varieties card --------
+            Card {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: varieties-title; }
+
+                    if selected-crop-index < 0: Rectangle {
+                        height: 80px;
+                        Text {
+                            text: no-crop-selected-text;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-body;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            wrap: word-wrap;
+                        }
+                    }
+                    if selected-crop-index >= 0 && varieties.length == 0: Rectangle {
+                        height: 80px;
+                        Text {
+                            text: empty-varieties-text;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-body;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    if selected-crop-index >= 0 && varieties.length > 0: var-list := Rectangle {
+                        min-height: 160px;
+                        preferred-height: 280px;
+                        vertical-stretch: 1;
+                        ListView {
+                            for v in varieties: VarietyRowView {
+                                entry: v;
+                                width: var-list.width;
+                            }
+                        }
+                    }
+
+                    Rectangle { height: Theme.space-xs; background: Palette.border; }
+                    SectionHeader { text: new-variety-section; }
+
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-variety-name;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        LineEdit {
+                            text <=> new-variety-name;
+                            placeholder-text: placeholder-variety-name;
+                            enabled: selected-crop-index >= 0;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-variety-description;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        LineEdit {
+                            text <=> new-variety-description;
+                            placeholder-text: placeholder-variety-description;
+                            enabled: selected-crop-index >= 0;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-dtt;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            LineEdit {
+                                text <=> new-variety-dtt;
+                                placeholder-text: placeholder-dtt;
+                                input-type: number;
+                                enabled: selected-crop-index >= 0;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-dtm;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            LineEdit {
+                                text <=> new-variety-dtm;
+                                placeholder-text: placeholder-dtm;
+                                input-type: number;
+                                enabled: selected-crop-index >= 0;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-window;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            LineEdit {
+                                text <=> new-variety-window;
+                                placeholder-text: placeholder-window;
+                                input-type: number;
+                                enabled: selected-crop-index >= 0;
+                            }
+                        }
+                    }
+                    PrimaryButton {
+                        text: create-variety-button-text;
+                        enabled: selected-crop-index >= 0;
+                        clicked => { create-variety(); }
+                    }
+                }
+            }
+        }
+
+        // Shared status line
+        Text {
+            text: status-text;
+            color: status-is-error ? Palette.danger : Palette.success;
+            font-size: Theme.font-size-label;
+            wrap: word-wrap;
+        }
+    }
+}

@@ -63,7 +63,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
       - name: Run coverage
-        run: cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info --fail-under-lines 80
+        # UI/CLI entry points are thin Slint↔Rust glue and `clap` plumbing —
+        # the binary `main.rs` files can't be exercised headlessly, so we
+        # exclude them from the line-coverage gate. The MariaDB backend
+        # stays counted at 0% because its tests live behind `#[ignore]`
+        # (need a running MariaDB container); the headline number still
+        # has to clear 80% across everything else.
+        run: |
+          cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info \
+            --ignore-filename-regex '(pomone-(ui|cli)/src/main\.rs|crates/pomone-(ui|cli)/src/main\.rs)' \
+            --fail-under-lines 80
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:

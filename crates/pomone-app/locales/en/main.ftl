@@ -30,6 +30,38 @@ status-planting-created = Planting created
 status-planting-failed = Creation failed: { $message }
 status-pick-variety = Pick a variety and a location before creating.
 
+## Cultures + Varieties screen
+button-cultures = Crops →
+title-cultures = Crops and varieties
+crops-title = Crops
+empty-crops = No crops yet.
+varieties-title = Varieties
+empty-varieties = No varieties for this crop.
+no-crop-selected = Pick a crop to see and create its varieties.
+new-crop-section = New annual crop
+new-variety-section = New annual variety
+label-crop-name = Name
+placeholder-crop-name = Tomato
+label-crop-latin = Latin name (optional)
+placeholder-crop-latin = Solanum lycopersicum
+label-crop-family = Family
+label-crop-strata = Stratum
+label-variety-name = Variety name
+placeholder-variety-name = Marmande
+label-variety-description = Description (optional)
+placeholder-variety-description = heritage variety, ribbed fruit
+label-dtt = Sow→transplant days (DTT)
+label-dtm = Sow→harvest days (DTM)
+label-window = Harvest window (days)
+placeholder-dtt = 35
+placeholder-dtm = 70
+placeholder-window = 60
+button-create-crop = Create crop
+button-create-variety = Create variety
+status-crop-created = Crop created
+status-variety-created = Variety created
+status-pick-crop-first = Pick a crop before creating a variety.
+
 ## Common nouns
 crop = Crop
 family = Family
