@@ -70,6 +70,54 @@ pub async fn create_annual_planting_from_sowing(
     Ok(planting)
 }
 
+/// Create a perennial planting (a long-lived productive plant tracked by
+/// yearly harvests). Rejects annual varieties — the caller must use
+/// [`create_annual_planting_from_sowing`] for those.
+pub async fn create_perennial_planting(
+    repo: &dyn Repository,
+    variety_id: VarietyId,
+    location_id: LocationId,
+    established_on: NaiveDate,
+    expected_removal_on: Option<NaiveDate>,
+    area_m2: Decimal,
+    plants_count: u32,
+    name: Option<String>,
+    notes: Option<String>,
+) -> AppResult<Planting> {
+    let variety = repo
+        .variety_get(variety_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound {
+            kind: "variety",
+            id: variety_id.to_string(),
+        })?;
+    let crop = repo
+        .crop_get(variety.crop_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound {
+            kind: "crop",
+            id: variety.crop_id.to_string(),
+        })?;
+    if !crop.lifespan.is_recurring() {
+        return Err(AppError::Inconsistent(
+            "perennial planting requires a recurring pluriannual crop (apple, raspberry…)".into(),
+        ));
+    }
+    let schedule = PlantingSchedule::perennial(established_on, expected_removal_on)?;
+    let planting = Planting::new(
+        variety_id,
+        location_id,
+        crop.lifespan,
+        area_m2,
+        plants_count,
+        schedule,
+        name,
+        notes,
+    )?;
+    repo.planting_create(&planting).await?;
+    Ok(planting)
+}
+
 /// Verify cross-entity invariants on an existing planting:
 /// - Its variety still exists.
 /// - Its variety's crop still exists.
@@ -326,6 +374,54 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[tokio::test]
+    async fn create_perennial_planting_persists_with_recurring_variety() {
+        let (repo, vid, lid) = setup_perennial().await;
+        let p = create_perennial_planting(
+            &repo,
+            vid,
+            lid,
+            d(2026, 3, 15),
+            Some(d(2056, 12, 31)),
+            dec!(2000),
+            50,
+            Some("Verger Sud".into()),
+            None,
+        )
+        .await
+        .unwrap();
+        match p.schedule {
+            PlantingSchedule::Perennial {
+                established_on,
+                expected_removal_on,
+            } => {
+                assert_eq!(established_on, d(2026, 3, 15));
+                assert_eq!(expected_removal_on, Some(d(2056, 12, 31)));
+            }
+            PlantingSchedule::Cycle { .. } => panic!("expected Perennial schedule"),
+        }
+        assert_eq!(repo.planting_get(p.id).await.unwrap().unwrap(), p);
+    }
+
+    #[tokio::test]
+    async fn create_perennial_planting_rejects_annual_variety() {
+        let (repo, vid, lid) = setup_annual().await;
+        let err = create_perennial_planting(
+            &repo,
+            vid,
+            lid,
+            d(2026, 3, 15),
+            None,
+            dec!(10),
+            5,
+            None,
+            None,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(_)));
     }
 
     #[tokio::test]

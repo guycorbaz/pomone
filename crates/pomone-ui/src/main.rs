@@ -49,6 +49,9 @@ struct UiState {
     runtime: tokio::runtime::Runtime,
     /// Stringified `VarietyId`s, parallel to the Plantings page `variety-labels`.
     variety_ids: Vec<String>,
+    /// Parallel to `variety_ids`: tells the planting form which date fields
+    /// to show (sowing for annuals, establishment + removal for perennials).
+    variety_is_annuals_plantings: Vec<bool>,
     /// Stringified `LocationId`s, parallel to the Plantings page `location-labels`.
     location_ids: Vec<String>,
     /// Stringified `FamilyId`s, parallel to the Cultures page `family-labels`.
@@ -93,6 +96,7 @@ fn main() -> Result<()> {
         app,
         runtime,
         variety_ids: Vec::new(),
+        variety_is_annuals_plantings: Vec::new(),
         location_ids: Vec::new(),
         family_ids: Vec::new(),
         strata_ids: Vec::new(),
@@ -103,7 +107,9 @@ fn main() -> Result<()> {
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
-    window.set_sown_on_text(SharedString::from(today_iso()));
+    let today = today_iso();
+    window.set_sown_on_text(SharedString::from(today.clone()));
+    window.set_established_on_text(SharedString::from(today));
 
     apply_translations(&window, &state.borrow().app);
     refresh_counts(&window, &state.borrow().app, &state.borrow().runtime);
@@ -380,6 +386,9 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_label_variety(SharedString::from(i18n.t("label-variety")));
     window.set_label_location(SharedString::from(i18n.t("label-location")));
     window.set_label_sown_on(SharedString::from(i18n.t("label-sown-on")));
+    window.set_label_established_on(SharedString::from(i18n.t("label-established-on")));
+    window.set_label_removal_on(SharedString::from(i18n.t("label-removal-on")));
+    window.set_placeholder_removal_date(SharedString::from(i18n.t("placeholder-removal-date")));
     window.set_label_area(SharedString::from(i18n.t("label-area")));
     window.set_label_count(SharedString::from(i18n.t("label-plants-count")));
     window.set_placeholder_date(SharedString::from(i18n.t("placeholder-date")));
@@ -518,6 +527,7 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
     let snapshot = snapshot.context("failed to load plantings data")?;
 
     state.variety_ids = snapshot.varieties.iter().map(|v| v.id.clone()).collect();
+    state.variety_is_annuals_plantings = snapshot.varieties.iter().map(|v| v.is_annual).collect();
     state.location_ids = snapshot.locations.iter().map(|l| l.id.clone()).collect();
 
     let variety_labels: Vec<SharedString> = snapshot
@@ -526,6 +536,8 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
         .map(|v| SharedString::from(v.label))
         .collect();
     window.set_variety_labels(ModelRc::new(VecModel::from(variety_labels)));
+    let variety_is_annuals: Vec<bool> = state.variety_is_annuals_plantings.clone();
+    window.set_variety_is_annuals(ModelRc::new(VecModel::from(variety_is_annuals)));
 
     let location_labels: Vec<SharedString> = snapshot
         .locations
@@ -561,7 +573,8 @@ fn to_slint_row(row: AppPlantingRow) -> SlintPlantingRow {
     }
 }
 
-/// Read the form fields, validate them, build typed IDs, and call the service.
+/// Read the form fields, validate them, build typed IDs, and call the right
+/// service depending on whether the picked variety is annual or perennial.
 fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
     let variety_idx = i32_to_usize(window.get_variety_index());
     let location_idx = i32_to_usize(window.get_location_index());
@@ -573,27 +586,57 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), A
         .location_ids
         .get(location_idx)
         .ok_or_else(|| AppError::Inconsistent("no location selected".to_owned()))?;
+    let is_annual = state
+        .variety_is_annuals_plantings
+        .get(variety_idx)
+        .copied()
+        .unwrap_or(true);
 
     let variety_id: VarietyId = parse_id(variety_id_str)?;
     let location_id: LocationId = parse_id(location_id_str)?;
-    let sown_on = parse_iso_date(&window.get_sown_on_text())?;
     let area_m2 = parse_decimal(&window.get_area_text(), "area")?;
     let plants_count = parse_count(&window.get_count_text())?;
 
-    state.runtime.block_on(async {
-        services::create_annual_planting_from_sowing(
-            state.app.repo(),
-            variety_id,
-            location_id,
-            sown_on,
-            area_m2,
-            plants_count,
-            None,
-            None,
-        )
-        .await
-        .map(|_| ())
-    })
+    if is_annual {
+        let sown_on = parse_iso_date(&window.get_sown_on_text())?;
+        state.runtime.block_on(async {
+            services::create_annual_planting_from_sowing(
+                state.app.repo(),
+                variety_id,
+                location_id,
+                sown_on,
+                area_m2,
+                plants_count,
+                None,
+                None,
+            )
+            .await
+            .map(|_| ())
+        })
+    } else {
+        let established_on = parse_iso_date(&window.get_established_on_text())?;
+        let removal_text = window.get_removal_on_text();
+        let expected_removal_on = if removal_text.trim().is_empty() {
+            None
+        } else {
+            Some(parse_iso_date(&removal_text)?)
+        };
+        state.runtime.block_on(async {
+            services::create_perennial_planting(
+                state.app.repo(),
+                variety_id,
+                location_id,
+                established_on,
+                expected_removal_on,
+                area_m2,
+                plants_count,
+                None,
+                None,
+            )
+            .await
+            .map(|_| ())
+        })
+    }
 }
 
 fn parse_decimal(s: &str, field: &'static str) -> Result<Decimal, AppError> {

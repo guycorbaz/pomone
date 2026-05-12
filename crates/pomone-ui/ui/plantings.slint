@@ -84,21 +84,37 @@ export component PlantingsPage inherits Rectangle {
     in property <string> label-variety;
     in property <string> label-location;
     in property <string> label-sown-on;
+    in property <string> label-established-on;
+    in property <string> label-removal-on;
     in property <string> label-area;
     in property <string> label-count;
     in property <string> placeholder-date;
+    in property <string> placeholder-removal-date;
     in property <string> placeholder-area;
     in property <string> placeholder-count;
     in property <string> create-button-text;
     in property <[string]> variety-labels;
     in property <[string]> location-labels;
+    // Parallel to variety-labels: drives which date fields the form shows.
+    in property <[bool]> variety-is-annuals;
 
     // Form state (read back by Rust on "create" callback)
     in-out property <int> variety-index: 0;
     in-out property <int> location-index: 0;
     in-out property <string> sown-on-text;
+    in-out property <string> established-on-text;
+    in-out property <string> removal-on-text;
     in-out property <string> area-text: "20";
     in-out property <string> count-text: "20";
+
+    // True if the variety currently selected in the dropdown is annual.
+    // Drives whether the form shows the Sowing field (annual) or the
+    // Establishment + Expected removal pair (perennial). Defaults to true
+    // so the form looks right when no variety exists yet.
+    out property <bool> selected-variety-is-annual:
+        variety-is-annuals.length > variety-index && variety-index >= 0
+        ? variety-is-annuals[variety-index]
+        : true;
 
     // Status line below the form (Rust fills with success or error message)
     in property <string> status-text;
@@ -183,12 +199,14 @@ export component PlantingsPage inherits Rectangle {
                     }
                 }
 
-                // Row 2 — date + area + count
-                HorizontalLayout {
+                // Row 2 — dates depend on whether the variety is annual.
+                // Annual: a single sowing date.
+                // Perennial: establishment + expected removal (optional).
+                if selected-variety-is-annual: HorizontalLayout {
                     spacing: Theme.space-md;
                     VerticalLayout {
                         spacing: Theme.space-xs;
-                        horizontal-stretch: 2;
+                        horizontal-stretch: 1;
                         Text {
                             text: label-sown-on;
                             color: Palette.text-secondary;
@@ -199,6 +217,39 @@ export component PlantingsPage inherits Rectangle {
                             placeholder-text: placeholder-date;
                         }
                     }
+                }
+                if !selected-variety-is-annual: HorizontalLayout {
+                    spacing: Theme.space-md;
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-established-on;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> established-on-text;
+                            placeholder-text: placeholder-date;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-removal-on;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> removal-on-text;
+                            placeholder-text: placeholder-removal-date;
+                        }
+                    }
+                }
+                // Row 3 — area + count (same for both schedule kinds).
+                HorizontalLayout {
+                    spacing: Theme.space-md;
                     VerticalLayout {
                         spacing: Theme.space-xs;
                         horizontal-stretch: 1;
