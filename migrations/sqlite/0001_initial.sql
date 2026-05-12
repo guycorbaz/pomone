@@ -34,7 +34,8 @@ CREATE TABLE location (
     parent_id     BLOB    REFERENCES location(id) ON DELETE RESTRICT,
     kind_id       BLOB    NOT NULL REFERENCES location_kind(id) ON DELETE RESTRICT,
     name          TEXT    NOT NULL,
-    area_m2       TEXT    NOT NULL,
+    length_m      TEXT    NOT NULL,
+    width_m       TEXT    NOT NULL,
     notes         TEXT
 ) STRICT;
 

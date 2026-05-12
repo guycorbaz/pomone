@@ -35,6 +35,19 @@ pub(crate) fn require_positive_area(area: Decimal) -> DomainResult<Decimal> {
     }
 }
 
+/// Reject zero or negative dimensions (length or width in meters). Returns a
+/// structured error tagged with the field name so the UI can localize.
+pub(crate) fn require_positive_dimension(
+    value: Decimal,
+    field: &'static str,
+) -> DomainResult<Decimal> {
+    if value > Decimal::ZERO {
+        Ok(value)
+    } else {
+        Err(DomainError::NonPositiveValue { field, value })
+    }
+}
+
 /// Reject zero counts.
 pub(crate) fn require_positive_count(count: u32) -> DomainResult<u32> {
     if count > 0 {

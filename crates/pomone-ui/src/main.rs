@@ -415,8 +415,10 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_label_loc_name(SharedString::from(i18n.t("label-loc-name")));
     window.set_placeholder_loc_name(SharedString::from(i18n.t("placeholder-loc-name")));
     window.set_label_loc_kind(SharedString::from(i18n.t("label-loc-kind")));
-    window.set_label_loc_area(SharedString::from(i18n.t("label-loc-area")));
-    window.set_placeholder_loc_area(SharedString::from(i18n.t("placeholder-loc-area")));
+    window.set_label_loc_length(SharedString::from(i18n.t("label-loc-length")));
+    window.set_placeholder_loc_length(SharedString::from(i18n.t("placeholder-loc-length")));
+    window.set_label_loc_width(SharedString::from(i18n.t("label-loc-width")));
+    window.set_placeholder_loc_width(SharedString::from(i18n.t("placeholder-loc-width")));
     window.set_label_loc_parent(SharedString::from(i18n.t("label-loc-parent")));
     window.set_label_loc_notes(SharedString::from(i18n.t("label-loc-notes")));
     window.set_placeholder_loc_notes(SharedString::from(i18n.t("placeholder-loc-notes")));
@@ -801,6 +803,7 @@ fn location_to_slint(item: LocationListItem) -> SlintLocationItem {
         name: SharedString::from(item.name),
         kind_label: SharedString::from(item.kind_label),
         area_label: SharedString::from(item.area_label),
+        dimensions_label: SharedString::from(item.dimensions_label),
         parent_label: SharedString::from(item.parent_label),
         full_path: SharedString::from(item.full_path),
         depth: usize_to_i32(item.depth as usize),
@@ -821,7 +824,8 @@ fn try_create_location(window: &MainWindow, state: &mut UiState) -> Result<(), A
         .cloned()
         .unwrap_or_default();
     let name = window.get_new_loc_name().to_string();
-    let area_m2 = parse_decimal(&window.get_new_loc_area(), "area")?;
+    let length_m = parse_decimal(&window.get_new_loc_length(), "length")?;
+    let width_m = parse_decimal(&window.get_new_loc_width(), "width")?;
     let notes = optional_text(&window.get_new_loc_notes());
 
     state.runtime.block_on(async {
@@ -830,7 +834,8 @@ fn try_create_location(window: &MainWindow, state: &mut UiState) -> Result<(), A
             LocationInput {
                 kind_id_str,
                 name,
-                area_m2,
+                length_m,
+                width_m,
                 parent_id_str,
                 notes,
             },

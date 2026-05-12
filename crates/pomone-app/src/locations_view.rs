@@ -20,13 +20,16 @@ const MAX_TREE_DEPTH: u32 = 50;
 ///
 /// `depth` is the number of ancestors (0 for roots). The UI renders an
 /// indent proportional to it. `full_path` is a `/`-separated label string
-/// suitable for the parent dropdown.
+/// suitable for the parent dropdown. `dimensions_label` shows
+/// `"L × W = area m²"`; `area_label` keeps the legacy single-figure form
+/// for compact lists.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocationListItem {
     pub id: String,
     pub name: String,
     pub kind_label: String,
     pub area_label: String,
+    pub dimensions_label: String,
     pub parent_label: String,
     pub full_path: String,
     pub depth: u32,
@@ -94,7 +97,8 @@ fn walk(
             kind_label: kind_by_id
                 .get(&child.kind_id)
                 .map_or_else(|| "?".to_owned(), |k| k.name.clone()),
-            area_label: format_area(child.area_m2),
+            area_label: format_area(child.area_m2()),
+            dimensions_label: format_dimensions(child.length_m, child.width_m, child.area_m2()),
             parent_label,
             full_path: build_full_path(child, by_id),
             depth,
@@ -132,6 +136,13 @@ fn build_full_path(loc: &Location, by_id: &HashMap<LocationId, &Location>) -> St
 fn format_area(area: Decimal) -> String {
     let s = area.normalize().to_string();
     format!("{s} m²")
+}
+
+fn format_dimensions(length: Decimal, width: Decimal, area: Decimal) -> String {
+    let l = length.normalize();
+    let w = width.normalize();
+    let a = area.normalize();
+    format!("{l} × {w} m = {a} m²")
 }
 
 /// `LocationKind` options as a dropdown, sorted by name.
@@ -181,7 +192,8 @@ pub async fn list_parent_options(
 pub struct LocationInput {
     pub kind_id_str: String,
     pub name: String,
-    pub area_m2: Decimal,
+    pub length_m: Decimal,
+    pub width_m: Decimal,
     /// Empty string means "create as root".
     pub parent_id_str: String,
     pub notes: Option<String>,
@@ -198,7 +210,14 @@ pub async fn create_location(repo: &dyn Repository, input: LocationInput) -> App
         let id: LocationId = crate::plantings_view::parse_id(input.parent_id_str.trim())?;
         Some(id)
     };
-    let location = Location::new(kind_id, input.name, input.area_m2, parent_id, input.notes)?;
+    let location = Location::new(
+        kind_id,
+        input.name,
+        input.length_m,
+        input.width_m,
+        parent_id,
+        input.notes,
+    )?;
     repo.location_create(&location)
         .await
         .map_err(AppError::from)?;
@@ -268,7 +287,8 @@ mod tests {
             LocationInput {
                 kind_id_str: verger,
                 name: "Verger Sud".to_owned(),
-                area_m2: dec!(500),
+                length_m: dec!(25),
+                width_m: dec!(20),
                 parent_id_str: String::new(),
                 notes: None,
             },
@@ -303,7 +323,8 @@ mod tests {
             LocationInput {
                 kind_id_str: planche,
                 name: "Planche B".to_owned(),
-                area_m2: dec!(25),
+                length_m: dec!(25),
+                width_m: dec!(1),
                 parent_id_str: jardin_id,
                 notes: Some("orientation est-ouest".to_owned()),
             },
@@ -327,7 +348,8 @@ mod tests {
             LocationInput {
                 kind_id_str: kinds[0].id.clone(),
                 name: "   ".to_owned(),
-                area_m2: dec!(10),
+                length_m: dec!(5),
+                width_m: dec!(2),
                 parent_id_str: String::new(),
                 notes: None,
             },
@@ -345,7 +367,8 @@ mod tests {
             LocationInput {
                 kind_id_str: "not-a-uuid".to_owned(),
                 name: "X".to_owned(),
-                area_m2: dec!(10),
+                length_m: dec!(5),
+                width_m: dec!(2),
                 parent_id_str: String::new(),
                 notes: None,
             },
@@ -374,7 +397,8 @@ mod tests {
                 LocationInput {
                     kind_id_str: parcelle.clone(),
                     name: name.to_owned(),
-                    area_m2: dec!(10),
+                    length_m: dec!(5),
+                    width_m: dec!(2),
                     parent_id_str: last_id.clone(),
                     notes: None,
                 },

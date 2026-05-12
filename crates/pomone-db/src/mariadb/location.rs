@@ -9,7 +9,7 @@ use rust_decimal::Decimal;
 use sqlx::Row;
 use uuid::Uuid;
 
-const COLUMNS: &str = "id, parent_id, kind_id, name, area_m2, notes";
+const COLUMNS: &str = "id, parent_id, kind_id, name, length_m, width_m, notes";
 
 #[async_trait]
 impl LocationRepo for MariaDbRepository {
@@ -45,14 +45,15 @@ impl LocationRepo for MariaDbRepository {
 
     async fn location_create(&self, l: &Location) -> DbResult<()> {
         sqlx::query(
-            "INSERT INTO location (id, parent_id, kind_id, name, area_m2, notes) \
-             VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO location (id, parent_id, kind_id, name, length_m, width_m, notes) \
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(l.id.as_uuid())
         .bind(l.parent_id.map(LocationId::as_uuid))
         .bind(l.kind_id.as_uuid())
         .bind(&l.name)
-        .bind(l.area_m2)
+        .bind(l.length_m)
+        .bind(l.width_m)
         .bind(l.notes.as_deref())
         .execute(&self.pool)
         .await?;
@@ -65,12 +66,13 @@ impl LocationRepo for MariaDbRepository {
         }
         let result = sqlx::query(
             "UPDATE location SET parent_id = ?, kind_id = ?, name = ?, \
-             area_m2 = ?, notes = ? WHERE id = ?",
+             length_m = ?, width_m = ?, notes = ? WHERE id = ?",
         )
         .bind(l.parent_id.map(LocationId::as_uuid))
         .bind(l.kind_id.as_uuid())
         .bind(&l.name)
-        .bind(l.area_m2)
+        .bind(l.length_m)
+        .bind(l.width_m)
         .bind(l.notes.as_deref())
         .bind(l.id.as_uuid())
         .execute(&self.pool)
@@ -137,7 +139,8 @@ fn row_to_location(row: sqlx::mysql::MySqlRow) -> DbResult<Location> {
         parent_id: parent_id.map(LocationId::from),
         kind_id: LocationKindId::from(kind_id),
         name: row.try_get("name")?,
-        area_m2: row.try_get::<Decimal, _>("area_m2")?,
+        length_m: row.try_get::<Decimal, _>("length_m")?,
+        width_m: row.try_get::<Decimal, _>("width_m")?,
         notes: row.try_get("notes")?,
     })
 }

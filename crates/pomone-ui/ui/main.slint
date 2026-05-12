@@ -161,8 +161,10 @@ export component MainWindow inherits Window {
     in property <string> label-loc-name;
     in property <string> placeholder-loc-name;
     in property <string> label-loc-kind;
-    in property <string> label-loc-area;
-    in property <string> placeholder-loc-area;
+    in property <string> label-loc-length;
+    in property <string> placeholder-loc-length;
+    in property <string> label-loc-width;
+    in property <string> placeholder-loc-width;
     in property <string> label-loc-parent;
     in property <string> label-loc-notes;
     in property <string> placeholder-loc-notes;
@@ -171,7 +173,8 @@ export component MainWindow inherits Window {
     in-out property <int> loc-kind-index: 0;
     in-out property <int> loc-parent-index: 0;
     in-out property <string> new-loc-name;
-    in-out property <string> new-loc-area: "20";
+    in-out property <string> new-loc-length: "5";
+    in-out property <string> new-loc-width: "2";
     in-out property <string> new-loc-notes;
     in property <string> create-loc-button-text;
     callback create-location();
@@ -352,8 +355,10 @@ export component MainWindow inherits Window {
         label-loc-name: label-loc-name;
         placeholder-loc-name: placeholder-loc-name;
         label-loc-kind: label-loc-kind;
-        label-loc-area: label-loc-area;
-        placeholder-loc-area: placeholder-loc-area;
+        label-loc-length: label-loc-length;
+        placeholder-loc-length: placeholder-loc-length;
+        label-loc-width: label-loc-width;
+        placeholder-loc-width: placeholder-loc-width;
         label-loc-parent: label-loc-parent;
         label-loc-notes: label-loc-notes;
         placeholder-loc-notes: placeholder-loc-notes;
@@ -362,7 +367,8 @@ export component MainWindow inherits Window {
         loc-kind-index <=> loc-kind-index;
         loc-parent-index <=> loc-parent-index;
         new-loc-name <=> new-loc-name;
-        new-loc-area <=> new-loc-area;
+        new-loc-length <=> new-loc-length;
+        new-loc-width <=> new-loc-width;
         new-loc-notes <=> new-loc-notes;
         create-loc-button-text: create-loc-button-text;
         status-text: status-text;

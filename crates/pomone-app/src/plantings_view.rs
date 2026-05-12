@@ -259,11 +259,14 @@ pub async fn seed_demo(repo: &dyn Repository) -> AppResult<()> {
     )?;
     repo.variety_create(&roma).await?;
 
-    // Locations: a Jardin parcel containing one Planche.
+    // Locations: a Jardin parcel containing one Planche. Demo dimensions
+    // line up with common market-garden conventions (a 20 m × 10 m garden
+    // plot containing a 25 m × 0.8 m permanent bed).
     let jardin = Location::new(
         parcelle_kind.id,
         "Jardin Pomone",
-        Decimal::from(200),
+        Decimal::from(20),
+        Decimal::from(10),
         None,
         Some("jardin de démonstration (généré au premier lancement)".to_owned()),
     )?;
@@ -272,7 +275,8 @@ pub async fn seed_demo(repo: &dyn Repository) -> AppResult<()> {
     let planche = Location::new(
         planche_kind.id,
         "Planche A",
-        Decimal::from(20),
+        Decimal::from(25),
+        rust_decimal::Decimal::new(8, 1), // 0.8 m
         Some(jardin.id),
         None,
     )?;
