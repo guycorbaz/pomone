@@ -105,6 +105,10 @@ export component Card inherits Rectangle {
 
 // Primary action button. The TouchArea wraps the visual content so its hit-
 // box always matches the painted button — that's the idiomatic Slint pattern.
+// FocusScope sits as a sibling beneath the TouchArea (in z-order) so the
+// TouchArea still wins for mouse events but the FocusScope catches Tab/Space
+// /Enter. The focus ring is drawn *inside* the button bounds (inset) so it
+// never overlaps the next widget in the layout.
 export component PrimaryButton inherits Rectangle {
     in property <string> text;
     in property <bool> enabled: true;
@@ -121,10 +125,24 @@ export component PrimaryButton inherits Rectangle {
 
     animate background { duration: Theme.transition-fast; }
 
+    focus-scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if ((event.text == " " || event.text == "\n") && root.enabled) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     touch := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
         clicked => {
             if (root.enabled) {
+                focus-scope.focus();
                 root.clicked();
             }
         }
@@ -141,6 +159,19 @@ export component PrimaryButton inherits Rectangle {
             width: parent.width - 2 * Theme.space-lg;
             height: parent.height;
         }
+    }
+
+    // Inset focus ring — sits on top, transparent background so it doesn't
+    // intercept clicks; the inset keeps it inside the button bounds.
+    if focus-scope.has-focus: Rectangle {
+        x: 2px;
+        y: 2px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        border-color: Palette.focus-ring;
+        border-width: Theme.focus-ring-width;
+        border-radius: Theme.radius-md - 2px;
+        background: transparent;
     }
 }
 
@@ -163,10 +194,24 @@ export component SecondaryButton inherits Rectangle {
 
     animate background { duration: Theme.transition-fast; }
 
+    focus-scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if ((event.text == " " || event.text == "\n") && root.enabled) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     touch := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
         clicked => {
             if (root.enabled) {
+                focus-scope.focus();
                 root.clicked();
             }
         }
@@ -183,6 +228,17 @@ export component SecondaryButton inherits Rectangle {
             width: parent.width - 2 * Theme.space-lg;
             height: parent.height;
         }
+    }
+
+    if focus-scope.has-focus: Rectangle {
+        x: 2px;
+        y: 2px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        border-color: Palette.focus-ring;
+        border-width: Theme.focus-ring-width;
+        border-radius: Theme.radius-md - 2px;
+        background: transparent;
     }
 }
 
@@ -205,8 +261,8 @@ export component ThemedLineEdit inherits LineEdit {
 // Custom dropdown that matches `ThemedLineEdit`'s visual weight.
 // `std-widgets::ComboBox` doesn't expose `font-size`, so we build a small
 // popup-based replacement: a clickable "field" that displays the current
-// label and opens a list below it on click. No keyboard navigation yet
-// — clicks only.
+// label and opens a list below it on click. Keyboard nav: Up/Down change
+// the selection in place; Enter / Space open the popup; Escape closes it.
 export component ThemedComboBox inherits Rectangle {
     in property <[string]> model;
     in-out property <int> current-index: 0;
@@ -220,10 +276,39 @@ export component ThemedComboBox inherits Rectangle {
     background: enabled ? Palette.surface : Palette.surface-alt;
     animate background, border-color { duration: Theme.transition-fast; }
 
+    focus-scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (!root.enabled || root.model.length == 0) {
+                return reject;
+            }
+            if (event.text == Key.DownArrow) {
+                if (root.current-index < root.model.length - 1) {
+                    root.current-index += 1;
+                }
+                return accept;
+            }
+            if (event.text == Key.UpArrow) {
+                if (root.current-index > 0) {
+                    root.current-index -= 1;
+                }
+                return accept;
+            }
+            if (event.text == " " || event.text == "\n") {
+                popup.show();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     touch := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
         clicked => {
             if (root.enabled && root.model.length > 0) {
+                focus-scope.focus();
                 popup.show();
             }
         }
@@ -253,6 +338,18 @@ export component ThemedComboBox inherits Rectangle {
             height: parent.height;
             vertical-alignment: center;
         }
+    }
+
+    // Inset focus ring identical to the buttons.
+    if focus-scope.has-focus: Rectangle {
+        x: 2px;
+        y: 2px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        border-color: Palette.focus-ring;
+        border-width: Theme.focus-ring-width;
+        border-radius: Theme.radius-md - 2px;
+        background: transparent;
     }
 
     popup := PopupWindow {
@@ -319,9 +416,24 @@ export component NavButton inherits Rectangle {
 
     animate background { duration: Theme.transition-fast; }
 
+    focus-scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == "\n") {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
     touch := TouchArea {
         mouse-cursor: pointer;
-        clicked => { root.clicked(); }
+        clicked => {
+            focus-scope.focus();
+            root.clicked();
+        }
 
         Text {
             text: root.text;
@@ -335,5 +447,16 @@ export component NavButton inherits Rectangle {
             width: parent.width - 2 * Theme.space-md;
             height: parent.height;
         }
+    }
+
+    if focus-scope.has-focus: Rectangle {
+        x: 2px;
+        y: 2px;
+        width: parent.width - 4px;
+        height: parent.height - 4px;
+        border-color: Palette.focus-ring;
+        border-width: Theme.focus-ring-width;
+        border-radius: Theme.radius-md - 2px;
+        background: transparent;
     }
 }
