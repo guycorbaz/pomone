@@ -8,10 +8,7 @@
 use crate::error::{AppError, AppResult};
 use chrono::NaiveDate;
 use pomone_db::Repository;
-use pomone_domain::{
-    AnnualProfile, Crop, Family, Lifespan, Location, LocationId, LocationKind, PruningSeason,
-    Variety, VarietyProfile,
-};
+use pomone_domain::{Location, LocationId};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -202,114 +199,12 @@ pub fn parse_iso_date(s: &str) -> AppResult<NaiveDate> {
     })
 }
 
-/// Seed the database with one annual crop (Tomate) + two varieties (Roma,
-/// Marmande) and a parcel/bed pair so the Plantings screen has something to
-/// pick from on first launch.
-///
-/// Idempotent: if any `Crop` already exists, the seed is skipped — the user
-/// has either run this seed before or created their own crops.
-///
-/// This is a temporary scaffold that will go away once the Cultures /
-/// Variétés / Parcelles screens land.
-pub async fn seed_demo(repo: &dyn Repository) -> AppResult<()> {
-    if !repo.crop_list().await?.is_empty() {
-        return Ok(());
-    }
-
-    // Resolve the required lookup rows. seed_defaults should have placed them
-    // there before us; if any is missing, the seed has been customised and
-    // we leave demo data alone.
-    let solanaceae = find_family_by_latin(repo, "Solanaceae").await?;
-    let herbacee = find_strata_by_name(repo, "Herbacée").await?;
-    let parcelle_kind = find_kind_by_name(repo, "Parcelle").await?;
-    let planche_kind = find_kind_by_name(repo, "Planche").await?;
-
-    let (Some(family), Some(strata), Some(parcelle_kind), Some(planche_kind)) =
-        (solanaceae, herbacee, parcelle_kind, planche_kind)
-    else {
-        return Ok(());
-    };
-
-    // Crop + 2 varieties (Tomate Marmande, Tomate Roma)
-    let tomato = Crop::new(
-        family.id,
-        strata.id,
-        "Tomate",
-        Some("Solanum lycopersicum".to_owned()),
-        Lifespan::Annual,
-        PruningSeason::Summer,
-    )?;
-    repo.crop_create(&tomato).await?;
-
-    let marmande = Variety::new(
-        tomato.id,
-        Lifespan::Annual,
-        "Marmande",
-        Some("ancienne variété, fruits côtelés, mi-précoce".to_owned()),
-        VarietyProfile::Annual(AnnualProfile::new(Some(35), 70, 60)?),
-    )?;
-    repo.variety_create(&marmande).await?;
-
-    let roma = Variety::new(
-        tomato.id,
-        Lifespan::Annual,
-        "Roma",
-        Some("tomate allongée à sauce, productive".to_owned()),
-        VarietyProfile::Annual(AnnualProfile::new(Some(30), 65, 50)?),
-    )?;
-    repo.variety_create(&roma).await?;
-
-    // Locations: a Jardin parcel containing one Planche. Demo dimensions
-    // line up with common market-garden conventions (a 20 m × 10 m garden
-    // plot containing a 25 m × 0.8 m permanent bed).
-    let jardin = Location::new(
-        parcelle_kind.id,
-        "Jardin Pomone",
-        Decimal::from(20),
-        Decimal::from(10),
-        None,
-        Some("jardin de démonstration (généré au premier lancement)".to_owned()),
-    )?;
-    repo.location_create(&jardin).await?;
-
-    let planche = Location::new(
-        planche_kind.id,
-        "Planche A",
-        Decimal::from(25),
-        rust_decimal::Decimal::new(8, 1), // 0.8 m
-        Some(jardin.id),
-        None,
-    )?;
-    repo.location_create(&planche).await?;
-
-    Ok(())
-}
-
-async fn find_family_by_latin(repo: &dyn Repository, latin: &str) -> AppResult<Option<Family>> {
-    let families = repo.family_list().await?;
-    Ok(families
-        .into_iter()
-        .find(|f| f.latin_name.as_deref() == Some(latin)))
-}
-
-async fn find_strata_by_name(
-    repo: &dyn Repository,
-    name: &str,
-) -> AppResult<Option<pomone_domain::Strata>> {
-    let strata = repo.strata_list().await?;
-    Ok(strata.into_iter().find(|s| s.name == name))
-}
-
-async fn find_kind_by_name(repo: &dyn Repository, name: &str) -> AppResult<Option<LocationKind>> {
-    let kinds = repo.location_kind_list().await?;
-    Ok(kinds.into_iter().find(|k| k.name == name))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::services::create_annual_planting_from_sowing;
-    use pomone_db::{seed_defaults, CropRepo, LocationRepo, SqliteRepository, VarietyRepo};
+    use crate::test_helpers::seed_test_data;
+    use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, VarietyRepo};
     use pomone_domain::{LocationId, VarietyId};
     use rust_decimal_macros::dec;
 
@@ -320,41 +215,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn seed_demo_creates_crop_and_varieties() {
-        let repo = fresh_repo().await;
-        seed_demo(&repo).await.unwrap();
-        let crops = repo.crop_list().await.unwrap();
-        assert_eq!(crops.len(), 1);
-        assert_eq!(crops[0].name, "Tomate");
-        let varieties = repo.variety_list().await.unwrap();
-        assert_eq!(varieties.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn seed_demo_creates_parcelle_with_planche_child() {
-        let repo = fresh_repo().await;
-        seed_demo(&repo).await.unwrap();
-        let locations = repo.location_list().await.unwrap();
-        assert_eq!(locations.len(), 2);
-        let parent = locations.iter().find(|l| l.parent_id.is_none()).unwrap();
-        let child = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
-        assert_eq!(child.parent_id, Some(parent.id));
-    }
-
-    #[tokio::test]
-    async fn seed_demo_is_idempotent_when_crops_exist() {
-        let repo = fresh_repo().await;
-        seed_demo(&repo).await.unwrap();
-        let first_count = repo.crop_list().await.unwrap().len();
-        seed_demo(&repo).await.unwrap();
-        let second_count = repo.crop_list().await.unwrap().len();
-        assert_eq!(first_count, second_count);
-    }
-
-    #[tokio::test]
     async fn variety_options_labelled_with_crop_name() {
         let repo = fresh_repo().await;
-        seed_demo(&repo).await.unwrap();
+        seed_test_data(&repo).await.unwrap();
         let opts = list_variety_options(&repo).await.unwrap();
         assert_eq!(opts.len(), 2);
         assert!(opts.iter().all(|o| o.label.starts_with("Tomate · ")));
@@ -364,7 +227,7 @@ mod tests {
     #[tokio::test]
     async fn location_options_include_parent_prefix() {
         let repo = fresh_repo().await;
-        seed_demo(&repo).await.unwrap();
+        seed_test_data(&repo).await.unwrap();
         let opts = list_location_options(&repo).await.unwrap();
         let child = opts.iter().find(|o| o.label.contains(" / ")).unwrap();
         assert!(child.label.starts_with("Jardin Pomone / "));
@@ -373,7 +236,7 @@ mod tests {
     #[tokio::test]
     async fn plantings_list_is_empty_on_fresh_seed() {
         let repo = fresh_repo().await;
-        seed_demo(&repo).await.unwrap();
+        seed_test_data(&repo).await.unwrap();
         let rows = list_plantings(&repo).await.unwrap();
         assert!(rows.is_empty());
     }
@@ -381,7 +244,7 @@ mod tests {
     #[tokio::test]
     async fn plantings_list_returns_a_row_after_create() {
         let repo = fresh_repo().await;
-        seed_demo(&repo).await.unwrap();
+        seed_test_data(&repo).await.unwrap();
         let varieties = repo.variety_list().await.unwrap();
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
