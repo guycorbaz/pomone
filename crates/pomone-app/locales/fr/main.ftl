@@ -48,6 +48,29 @@ label-crop-latin = Nom latin (optionnel)
 placeholder-crop-latin = Solanum lycopersicum
 label-crop-family = Famille
 label-crop-strata = Strate
+label-lifespan = Cycle de vie
+label-lifespan-years = Années de vie
+placeholder-lifespan-years = 30
+label-years-to-first-yield = Années avant première récolte
+placeholder-years-to-first-yield = 3
+label-pruning = Taille
+lifespan-annual = Annuelle
+lifespan-pluriannual-single = Pluriannuelle cycle unique
+lifespan-pluriannual-recurring = Pluriannuelle récurrente
+pruning-none-label = Sans taille
+pruning-winter-label = Taille d'hiver
+pruning-summer-label = Taille d'été
+pruning-both-label = Taille hiver + été
+label-bud-break-doy = Débourrement (jour de l'année)
+placeholder-bud-break-doy = 80
+label-flowering-doy = Floraison (jour de l'année)
+placeholder-flowering-doy = 120
+label-harvest-start-doy = Début récolte (jour de l'année)
+placeholder-harvest-start-doy = 220
+label-harvest-end-doy = Fin récolte (jour de l'année)
+placeholder-harvest-end-doy = 280
+label-yield-kg = Rendement attendu (kg/plant, optionnel)
+placeholder-yield-kg = 15.5
 label-variety-name = Nom de la variété
 placeholder-variety-name = Marmande
 label-variety-description = Description (optionnel)
@@ -91,18 +114,6 @@ planting = Plantation
 strata = Strate
 variety = Variété
 yearly-harvest = Récolte annuelle
-
-## Lifespan labels
-lifespan-annual = Annuelle
-lifespan-pluriannual = Pluriannuelle
-lifespan-pluriannual-recurring = Pluriannuelle récurrente
-lifespan-pluriannual-single-cycle = Bisannuelle ou cycle unique pluriannuel
-
-## Pruning seasons
-pruning-both = Hiver et été
-pruning-none = Pas de taille
-pruning-summer = Été
-pruning-winter = Hiver
 
 ## Errors
 error-config = Erreur de configuration : { $message }

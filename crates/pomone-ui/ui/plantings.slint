@@ -4,8 +4,8 @@
 // of truth for translations). The Rust side also owns the list models and
 // callbacks (parse the date, build the typed IDs, run the service).
 
-import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
-import { ComboBox, LineEdit, ListView, ScrollView } from "std-widgets.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
+import { ListView, ScrollView } from "std-widgets.slint";
 
 // Row of the plantings list. Mirrors `pomone_app::PlantingRow` field-for-field;
 // the Rust binding converts at the boundary.
@@ -21,7 +21,7 @@ export struct PlantingRow {
 // One row in the list. Plain Card with structured content.
 component PlantingRowView inherits Card {
     in property <PlantingRow> entry;
-    height: 112px;
+    height: 124px;
 
     VerticalLayout {
         padding: Theme.space-lg;
@@ -161,7 +161,7 @@ export component PlantingsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ComboBox {
+                        ThemedComboBox {
                             model: variety-labels;
                             current-index <=> variety-index;
                             enabled: variety-labels.length > 0;
@@ -175,7 +175,7 @@ export component PlantingsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ComboBox {
+                        ThemedComboBox {
                             model: location-labels;
                             current-index <=> location-index;
                             enabled: location-labels.length > 0;
@@ -194,7 +194,7 @@ export component PlantingsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        LineEdit {
+                        ThemedLineEdit {
                             text <=> sown-on-text;
                             placeholder-text: placeholder-date;
                         }
@@ -207,7 +207,7 @@ export component PlantingsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        LineEdit {
+                        ThemedLineEdit {
                             text <=> area-text;
                             placeholder-text: placeholder-area;
                             input-type: decimal;
@@ -221,7 +221,7 @@ export component PlantingsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        LineEdit {
+                        ThemedLineEdit {
                             text <=> count-text;
                             placeholder-text: placeholder-count;
                             input-type: number;

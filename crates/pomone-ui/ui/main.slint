@@ -19,7 +19,7 @@ export { PlantingRow, CropRow, VarietyRow, LocationItem }
 component StatRow inherits Rectangle {
     in property <string> label;
     in property <int> value;
-    height: 44px;
+    height: 48px;
     HorizontalLayout {
         spacing: Theme.space-md;
         Text {
@@ -47,10 +47,10 @@ component Divider inherits Rectangle {
 
 export component MainWindow inherits Window {
     title: "Pomone";
-    preferred-width: 1280px;
-    preferred-height: 820px;
-    min-width: 840px;
-    min-height: 560px;
+    preferred-width: 1320px;
+    preferred-height: 860px;
+    min-width: 880px;
+    min-height: 600px;
     background: Palette.background;
 
     // ------- Navigation -------
@@ -127,6 +127,18 @@ export component MainWindow inherits Window {
     in-out property <int> strata-index: 0;
     in-out property <string> new-crop-name;
     in-out property <string> new-crop-latin;
+    in property <string> label-lifespan;
+    in property <[string]> lifespan-labels;
+    in-out property <int> new-crop-lifespan-index: 0;
+    in property <string> label-lifespan-years;
+    in property <string> placeholder-lifespan-years;
+    in-out property <string> new-crop-lifespan-years: "30";
+    in property <string> label-years-to-first-yield;
+    in property <string> placeholder-years-to-first-yield;
+    in-out property <string> new-crop-years-to-first-yield: "3";
+    in property <string> label-pruning;
+    in property <[string]> pruning-labels;
+    in-out property <int> new-crop-pruning-index: 0;
     in property <string> create-crop-button-text;
     callback create-crop();
     callback select-crop(int);
@@ -135,6 +147,7 @@ export component MainWindow inherits Window {
     in property <string> empty-varieties-text;
     in property <string> no-crop-selected-text;
     in property <[VarietyRow]> varieties;
+    in-out property <bool> selected-crop-is-annual: true;
 
     in property <string> new-variety-section;
     in property <string> label-variety-name;
@@ -152,6 +165,21 @@ export component MainWindow inherits Window {
     in-out property <string> new-variety-dtt: "35";
     in-out property <string> new-variety-dtm: "70";
     in-out property <string> new-variety-window: "60";
+    in property <string> label-bud-break-doy;
+    in property <string> label-flowering-doy;
+    in property <string> label-harvest-start-doy;
+    in property <string> label-harvest-end-doy;
+    in property <string> label-yield-kg;
+    in property <string> placeholder-bud-break-doy;
+    in property <string> placeholder-flowering-doy;
+    in property <string> placeholder-harvest-start-doy;
+    in property <string> placeholder-harvest-end-doy;
+    in property <string> placeholder-yield-kg;
+    in-out property <string> new-variety-bud-break-doy;
+    in-out property <string> new-variety-flowering-doy;
+    in-out property <string> new-variety-harvest-start-doy: "220";
+    in-out property <string> new-variety-harvest-end-doy: "280";
+    in-out property <string> new-variety-yield-kg;
     in property <string> create-variety-button-text;
     callback create-variety();
 
@@ -348,11 +376,24 @@ export component MainWindow inherits Window {
                 strata-index <=> strata-index;
                 new-crop-name <=> new-crop-name;
                 new-crop-latin <=> new-crop-latin;
+                label-lifespan: label-lifespan;
+                lifespan-labels: lifespan-labels;
+                new-crop-lifespan-index <=> new-crop-lifespan-index;
+                label-lifespan-years: label-lifespan-years;
+                placeholder-lifespan-years: placeholder-lifespan-years;
+                new-crop-lifespan-years <=> new-crop-lifespan-years;
+                label-years-to-first-yield: label-years-to-first-yield;
+                placeholder-years-to-first-yield: placeholder-years-to-first-yield;
+                new-crop-years-to-first-yield <=> new-crop-years-to-first-yield;
+                label-pruning: label-pruning;
+                pruning-labels: pruning-labels;
+                new-crop-pruning-index <=> new-crop-pruning-index;
                 create-crop-button-text: create-crop-button-text;
                 varieties-title: varieties-title;
                 empty-varieties-text: empty-varieties-text;
                 no-crop-selected-text: no-crop-selected-text;
                 varieties: varieties;
+                selected-crop-is-annual: selected-crop-is-annual;
                 new-variety-section: new-variety-section;
                 label-variety-name: label-variety-name;
                 placeholder-variety-name: placeholder-variety-name;
@@ -369,6 +410,21 @@ export component MainWindow inherits Window {
                 new-variety-dtt <=> new-variety-dtt;
                 new-variety-dtm <=> new-variety-dtm;
                 new-variety-window <=> new-variety-window;
+                label-bud-break-doy: label-bud-break-doy;
+                label-flowering-doy: label-flowering-doy;
+                label-harvest-start-doy: label-harvest-start-doy;
+                label-harvest-end-doy: label-harvest-end-doy;
+                label-yield-kg: label-yield-kg;
+                placeholder-bud-break-doy: placeholder-bud-break-doy;
+                placeholder-flowering-doy: placeholder-flowering-doy;
+                placeholder-harvest-start-doy: placeholder-harvest-start-doy;
+                placeholder-harvest-end-doy: placeholder-harvest-end-doy;
+                placeholder-yield-kg: placeholder-yield-kg;
+                new-variety-bud-break-doy <=> new-variety-bud-break-doy;
+                new-variety-flowering-doy <=> new-variety-flowering-doy;
+                new-variety-harvest-start-doy <=> new-variety-harvest-start-doy;
+                new-variety-harvest-end-doy <=> new-variety-harvest-end-doy;
+                new-variety-yield-kg <=> new-variety-yield-kg;
                 create-variety-button-text: create-variety-button-text;
                 status-text: status-text;
                 status-is-error: status-is-error;

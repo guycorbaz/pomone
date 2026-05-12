@@ -13,15 +13,15 @@ use anyhow::{Context, Result};
 use chrono::Local;
 use fluent::FluentArgs;
 use pomone_app::{
-    create_annual_crop, create_annual_variety, create_location, list_crops, list_family_options,
+    create_crop, create_location, create_variety, list_crops, list_family_options,
     list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
     list_plantings, list_strata_options, list_varieties_for_crop, list_variety_options, parse_id,
-    parse_iso_date, seed_demo, services, AnnualCropInput, AnnualVarietyInput, App, AppConfig,
-    AppError, BackendConfig, CropRow as AppCropRow, FamilyOption, Lang, LocationInput,
-    LocationKindOption, LocationListItem, LocationOption, ParentLocationOption,
-    PlantingRow as AppPlantingRow, StrataOption, VarietyOption, VarietyRow as AppVarietyRow,
+    parse_iso_date, seed_demo, services, App, AppConfig, AppError, BackendConfig, CropInput,
+    CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption,
+    LocationListItem, LocationOption, ParentLocationOption, PlantingRow as AppPlantingRow,
+    StrataOption, VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
 };
-use pomone_domain::{LocationId, VarietyId};
+use pomone_domain::{LocationId, PruningSeason, VarietyId};
 use rust_decimal::Decimal;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::str::FromStr;
@@ -58,6 +58,8 @@ struct UiState {
     /// Stringified `CropId`s, parallel to the Cultures page `crops` model
     /// (so a row click index resolves to a typed `CropId`).
     crop_ids: Vec<String>,
+    /// Parallel to `crop_ids`: tells the UI which variety form to show.
+    crop_is_annuals: Vec<bool>,
     /// Stringified `LocationKindId`s, parallel to the Locations page
     /// `loc-kind-labels` model.
     location_kind_ids: Vec<String>,
@@ -101,6 +103,7 @@ fn main() -> Result<()> {
         family_ids: Vec::new(),
         strata_ids: Vec::new(),
         crop_ids: Vec::new(),
+        crop_is_annuals: Vec::new(),
         location_kind_ids: Vec::new(),
         parent_location_ids: Vec::new(),
     }));
@@ -216,6 +219,15 @@ fn main() -> Result<()> {
             };
             window.set_selected_crop_index(idx);
             let mut s = state.borrow_mut();
+            // Update the bool that drives the variety form's conditional
+            // rendering. Default to true (annual) if the index is out of
+            // range — that matches the default form panel.
+            let is_annual = s
+                .crop_is_annuals
+                .get(i32_to_usize(idx))
+                .copied()
+                .unwrap_or(true);
+            window.set_selected_crop_is_annual(is_annual);
             if let Err(e) = refresh_varieties_of_selected_crop(&window, &mut s) {
                 tracing::error!(error = %e, "failed to refresh varieties");
             }
@@ -343,6 +355,9 @@ fn main() -> Result<()> {
 }
 
 /// Refresh every string the UI displays based on the active language.
+// Five panes' worth of labels in one place keeps the flow easy to follow;
+// clippy's 100-line cap is too tight for a UI translation broadcast.
+#[allow(clippy::too_many_lines)]
 fn apply_translations(window: &MainWindow, app: &App) {
     let i18n = app.i18n();
     window.set_title_text(SharedString::from("Pomone"));
@@ -393,6 +408,46 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_placeholder_crop_latin(SharedString::from(i18n.t("placeholder-crop-latin")));
     window.set_label_crop_family(SharedString::from(i18n.t("label-crop-family")));
     window.set_label_crop_strata(SharedString::from(i18n.t("label-crop-strata")));
+    window.set_label_lifespan(SharedString::from(i18n.t("label-lifespan")));
+    window.set_label_lifespan_years(SharedString::from(i18n.t("label-lifespan-years")));
+    window.set_placeholder_lifespan_years(SharedString::from(i18n.t("placeholder-lifespan-years")));
+    window.set_label_years_to_first_yield(SharedString::from(i18n.t("label-years-to-first-yield")));
+    window.set_placeholder_years_to_first_yield(SharedString::from(
+        i18n.t("placeholder-years-to-first-yield"),
+    ));
+    window.set_label_pruning(SharedString::from(i18n.t("label-pruning")));
+    let lifespan_labels: Vec<SharedString> = [
+        i18n.t("lifespan-annual"),
+        i18n.t("lifespan-pluriannual-single"),
+        i18n.t("lifespan-pluriannual-recurring"),
+    ]
+    .into_iter()
+    .map(SharedString::from)
+    .collect();
+    window.set_lifespan_labels(ModelRc::new(VecModel::from(lifespan_labels)));
+    let pruning_labels: Vec<SharedString> = [
+        i18n.t("pruning-none-label"),
+        i18n.t("pruning-winter-label"),
+        i18n.t("pruning-summer-label"),
+        i18n.t("pruning-both-label"),
+    ]
+    .into_iter()
+    .map(SharedString::from)
+    .collect();
+    window.set_pruning_labels(ModelRc::new(VecModel::from(pruning_labels)));
+    window.set_label_bud_break_doy(SharedString::from(i18n.t("label-bud-break-doy")));
+    window.set_placeholder_bud_break_doy(SharedString::from(i18n.t("placeholder-bud-break-doy")));
+    window.set_label_flowering_doy(SharedString::from(i18n.t("label-flowering-doy")));
+    window.set_placeholder_flowering_doy(SharedString::from(i18n.t("placeholder-flowering-doy")));
+    window.set_label_harvest_start_doy(SharedString::from(i18n.t("label-harvest-start-doy")));
+    window.set_placeholder_harvest_start_doy(SharedString::from(
+        i18n.t("placeholder-harvest-start-doy"),
+    ));
+    window.set_label_harvest_end_doy(SharedString::from(i18n.t("label-harvest-end-doy")));
+    window
+        .set_placeholder_harvest_end_doy(SharedString::from(i18n.t("placeholder-harvest-end-doy")));
+    window.set_label_yield_kg(SharedString::from(i18n.t("label-yield-kg")));
+    window.set_placeholder_yield_kg(SharedString::from(i18n.t("placeholder-yield-kg")));
     window.set_label_variety_name(SharedString::from(i18n.t("label-variety-name")));
     window.set_placeholder_variety_name(SharedString::from(i18n.t("placeholder-variety-name")));
     window.set_label_variety_description(SharedString::from(i18n.t("label-variety-description")));
@@ -604,6 +659,7 @@ fn refresh_cultures(window: &MainWindow, state: &mut UiState) -> Result<()> {
     let snapshot = snapshot.context("failed to load cultures data")?;
 
     state.crop_ids = snapshot.crops.iter().map(|c| c.id.clone()).collect();
+    state.crop_is_annuals = snapshot.crops.iter().map(|c| c.is_annual).collect();
     state.family_ids = snapshot.families.iter().map(|f| f.id.clone()).collect();
     state.strata_ids = snapshot.strata.iter().map(|s| s.id.clone()).collect();
 
@@ -666,7 +722,9 @@ fn crop_to_slint(row: AppCropRow) -> SlintCropRow {
         family_label: SharedString::from(row.family_label),
         strata_label: SharedString::from(row.strata_label),
         lifespan_label: SharedString::from(row.lifespan_label),
+        pruning_label: SharedString::from(row.pruning_label),
         variety_count: usize_to_i32(row.variety_count as usize),
+        is_annual: row.is_annual,
     }
 }
 
@@ -676,6 +734,29 @@ fn variety_to_slint(row: AppVarietyRow) -> SlintVarietyRow {
         name: SharedString::from(row.name),
         description: SharedString::from(row.description),
         profile_label: SharedString::from(row.profile_label),
+    }
+}
+
+fn lifespan_kind_from_index(idx: i32) -> Result<LifespanKind, AppError> {
+    match idx {
+        0 => Ok(LifespanKind::Annual),
+        1 => Ok(LifespanKind::PluriannualSingleCycle),
+        2 => Ok(LifespanKind::PluriannualRecurring),
+        other => Err(AppError::Inconsistent(format!(
+            "unexpected lifespan dropdown index {other}"
+        ))),
+    }
+}
+
+fn pruning_from_index(idx: i32) -> Result<PruningSeason, AppError> {
+    match idx {
+        0 => Ok(PruningSeason::None),
+        1 => Ok(PruningSeason::Winter),
+        2 => Ok(PruningSeason::Summer),
+        3 => Ok(PruningSeason::Both),
+        other => Err(AppError::Inconsistent(format!(
+            "unexpected pruning dropdown index {other}"
+        ))),
     }
 }
 
@@ -694,15 +775,38 @@ fn try_create_crop(window: &MainWindow, state: &mut UiState) -> Result<(), AppEr
         .clone();
     let name = window.get_new_crop_name().to_string();
     let latin_name = optional_text(&window.get_new_crop_latin());
+    let lifespan_kind = lifespan_kind_from_index(window.get_new_crop_lifespan_index())?;
+    let pruning_season = pruning_from_index(window.get_new_crop_pruning_index())?;
+    // Only parse the pluriannual fields when they're actually needed — leaves
+    // pristine defaults for the Annual case and gives clearer errors for the
+    // other two.
+    let (lifespan_years, years_to_first_yield) = match lifespan_kind {
+        LifespanKind::Annual => (0, 0),
+        LifespanKind::PluriannualSingleCycle => (
+            parse_u8(&window.get_new_crop_lifespan_years(), "lifespan years")?,
+            0,
+        ),
+        LifespanKind::PluriannualRecurring => (
+            parse_u8(&window.get_new_crop_lifespan_years(), "lifespan years")?,
+            parse_u8(
+                &window.get_new_crop_years_to_first_yield(),
+                "years to first yield",
+            )?,
+        ),
+    };
 
     state.runtime.block_on(async {
-        create_annual_crop(
+        create_crop(
             state.app.repo(),
-            AnnualCropInput {
+            CropInput {
                 family_id_str,
                 strata_id_str,
                 name,
                 latin_name,
+                lifespan_kind,
+                lifespan_years,
+                years_to_first_yield,
+                pruning_season,
             },
         )
         .await
@@ -724,25 +828,67 @@ fn try_create_variety(window: &MainWindow, state: &mut UiState) -> Result<(), Ap
         .clone();
     let name = window.get_new_variety_name().to_string();
     let description = optional_text(&window.get_new_variety_description());
-    let days_to_transplant = parse_optional_u16(&window.get_new_variety_dtt(), "DTT")?;
-    let days_to_maturity = parse_u16(&window.get_new_variety_dtm(), "DTM")?;
-    let harvest_window_days = parse_u16(&window.get_new_variety_window(), "harvest window")?;
+    let is_annual = window.get_selected_crop_is_annual();
+    let profile_kind = if is_annual {
+        VarietyProfileKind::Annual
+    } else {
+        VarietyProfileKind::Pluriannual
+    };
 
-    state.runtime.block_on(async {
-        create_annual_variety(
-            state.app.repo(),
-            AnnualVarietyInput {
-                crop_id_str,
-                name,
-                description,
-                days_to_transplant,
-                days_to_maturity,
-                harvest_window_days,
-            },
-        )
-        .await
-        .map(|_| ())
-    })
+    // Parse only the fields relevant to the chosen profile kind; the others
+    // stay at zero/None and are ignored by the service.
+    let mut input = VarietyInput {
+        crop_id_str,
+        name,
+        description,
+        profile_kind,
+        days_to_transplant: None,
+        days_to_maturity: 0,
+        harvest_window_days: 0,
+        bud_break_doy: None,
+        flowering_doy: None,
+        harvest_start_doy: 0,
+        harvest_end_doy: 0,
+        expected_yield_kg_per_plant: None,
+    };
+    if is_annual {
+        input.days_to_transplant = parse_optional_u16(&window.get_new_variety_dtt(), "DTT")?;
+        input.days_to_maturity = parse_u16(&window.get_new_variety_dtm(), "DTM")?;
+        input.harvest_window_days = parse_u16(&window.get_new_variety_window(), "harvest window")?;
+    } else {
+        input.bud_break_doy =
+            parse_optional_u16(&window.get_new_variety_bud_break_doy(), "bud break DOY")?;
+        input.flowering_doy =
+            parse_optional_u16(&window.get_new_variety_flowering_doy(), "flowering DOY")?;
+        input.harvest_start_doy = parse_u16(
+            &window.get_new_variety_harvest_start_doy(),
+            "harvest start DOY",
+        )?;
+        input.harvest_end_doy =
+            parse_u16(&window.get_new_variety_harvest_end_doy(), "harvest end DOY")?;
+        input.expected_yield_kg_per_plant =
+            parse_optional_decimal(&window.get_new_variety_yield_kg(), "yield")?;
+    }
+
+    state
+        .runtime
+        .block_on(async { create_variety(state.app.repo(), input).await.map(|_| ()) })
+}
+
+fn parse_u8(s: &str, field: &'static str) -> Result<u8, AppError> {
+    s.trim()
+        .parse::<u8>()
+        .map_err(|e| AppError::Inconsistent(format!("invalid {field} '{s}': {e}")))
+}
+
+fn parse_optional_decimal(s: &str, field: &'static str) -> Result<Option<Decimal>, AppError> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    Decimal::from_str(trimmed)
+        .map(Some)
+        .map_err(|e| AppError::Inconsistent(format!("invalid {field} '{s}': {e}")))
 }
 
 /// Snapshot of everything the Locations screen needs on every refresh.

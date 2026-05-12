@@ -17,9 +17,9 @@ pub mod services;
 pub use app::App;
 pub use config::{default_config_path, AppConfig, BackendConfig};
 pub use cultures_view::{
-    create_annual_crop, create_annual_variety, list_crops, list_family_options,
-    list_strata_options, list_varieties_for_crop, AnnualCropInput, AnnualVarietyInput, CropRow,
-    FamilyOption, StrataOption, VarietyRow,
+    create_crop, create_variety, list_crops, list_family_options, list_strata_options,
+    list_varieties_for_crop, CropInput, CropRow, FamilyOption, LifespanKind, StrataOption,
+    VarietyInput, VarietyProfileKind, VarietyRow,
 };
 pub use error::{AppError, AppResult};
 pub use i18n::{I18n, Lang};

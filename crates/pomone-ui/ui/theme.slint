@@ -1,3 +1,4 @@
+import { LineEdit } from "std-widgets.slint";
 // Pomone design tokens.
 //
 // Two globals are exposed:
@@ -62,12 +63,12 @@ export global Theme {
     out property <length> space-3xl: 48px;
 
     // Type scale.
-    out property <length> font-size-h1: 36px;
-    out property <length> font-size-h2: 26px;
-    out property <length> font-size-h3: 20px;
+    out property <length> font-size-h1: 38px;
+    out property <length> font-size-h2: 28px;
+    out property <length> font-size-h3: 22px;
     out property <length> font-size-body: 18px;
-    out property <length> font-size-label: 15px;
-    out property <length> font-size-numeric: 30px;
+    out property <length> font-size-label: 17px;
+    out property <length> font-size-numeric: 32px;
 
     out property <int> font-weight-regular: 400;
     out property <int> font-weight-medium: 500;
@@ -109,8 +110,8 @@ export component PrimaryButton inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked();
 
-    height: 44px;
-    min-width: 112px;
+    height: 48px;
+    min-width: 120px;
     horizontal-stretch: 0;
     border-radius: Theme.radius-md;
     background: !enabled ? Palette.border
@@ -149,8 +150,8 @@ export component SecondaryButton inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked();
 
-    height: 44px;
-    min-width: 112px;
+    height: 48px;
+    min-width: 120px;
     horizontal-stretch: 0;
     border-radius: Theme.radius-md;
     border-width: Theme.border-width;
@@ -194,6 +195,113 @@ export component SectionHeader inherits Text {
     // "uppercase eyebrow" feel through weight + colour alone.
 }
 
+// LineEdit wrapper that forces our body font size — `std-widgets` defaults
+// to the platform-native font scale, which renders noticeably smaller than
+// our typography token.
+export component ThemedLineEdit inherits LineEdit {
+    font-size: Theme.font-size-body;
+}
+
+// Custom dropdown that matches `ThemedLineEdit`'s visual weight.
+// `std-widgets::ComboBox` doesn't expose `font-size`, so we build a small
+// popup-based replacement: a clickable "field" that displays the current
+// label and opens a list below it on click. No keyboard navigation yet
+// — clicks only.
+export component ThemedComboBox inherits Rectangle {
+    in property <[string]> model;
+    in-out property <int> current-index: 0;
+    in property <bool> enabled: true;
+
+    height: 48px;
+    min-width: 120px;
+    border-radius: Theme.radius-md;
+    border-width: Theme.border-width;
+    border-color: enabled ? Palette.border-strong : Palette.border;
+    background: enabled ? Palette.surface : Palette.surface-alt;
+    animate background, border-color { duration: Theme.transition-fast; }
+
+    touch := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled && root.model.length > 0) {
+                popup.show();
+            }
+        }
+
+        // Current value
+        Text {
+            text: root.model.length > root.current-index
+                  && root.current-index >= 0
+                  ? root.model[root.current-index]
+                  : "";
+            color: Palette.text-primary;
+            font-size: Theme.font-size-body;
+            x: Theme.space-md;
+            y: 0;
+            width: parent.width - 2 * Theme.space-md - 16px;
+            height: parent.height;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        // Caret
+        Text {
+            text: "▾";
+            color: Palette.text-muted;
+            font-size: Theme.font-size-label;
+            x: parent.width - Theme.space-md - 12px;
+            width: 12px;
+            height: parent.height;
+            vertical-alignment: center;
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0;
+        y: root.height + 2px;
+        width: root.width;
+
+        Rectangle {
+            background: Palette.surface;
+            border-width: Theme.border-width;
+            border-color: Palette.border-strong;
+            border-radius: Theme.radius-md;
+
+            VerticalLayout {
+                padding: 4px;
+                spacing: 0px;
+                for item[idx] in root.model: option := Rectangle {
+                    height: 40px;
+                    border-radius: Theme.radius-sm;
+                    background: idx == root.current-index ? Palette.surface-alt
+                                : option-touch.has-hover ? Palette.surface-alt
+                                : transparent;
+
+                    option-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.current-index = idx;
+                            popup.close();
+                        }
+                        Text {
+                            text: item;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: idx == root.current-index
+                                         ? Theme.font-weight-semibold
+                                         : Theme.font-weight-regular;
+                            x: Theme.space-md;
+                            y: 0;
+                            width: parent.width - 2 * Theme.space-md;
+                            height: parent.height;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // Sidebar navigation button. Filled in primary green when `selected`, ghost
 // otherwise (hover state lifts the background slightly). Text is aligned to
 // the left like every desktop sidebar.
@@ -202,7 +310,7 @@ export component NavButton inherits Rectangle {
     in property <bool> selected: false;
     callback clicked();
 
-    height: 44px;
+    height: 48px;
     border-radius: Theme.radius-md;
     background: selected ? Palette.primary
                 : touch.pressed ? Palette.surface-alt
