@@ -327,6 +327,29 @@ fn main() -> Result<()> {
         });
     }
 
+    // --- Calendar event click: jump to the Plantings list ---
+    //
+    // We don't yet have a per-planting detail screen, so clicking an event
+    // routes to the Plantings list as the closest available destination.
+    // The `planting_id` is logged for now — the next step (a detail view)
+    // can pick it up from there.
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_calendar_event_clicked(move |pid| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            tracing::info!(planting_id = %pid, "calendar event clicked");
+            if let Err(e) = refresh_plantings(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh plantings");
+            }
+            window.set_current_page(SharedString::from("plantings"));
+            window.set_status_text(SharedString::from(""));
+            window.set_status_is_error(false);
+        });
+    }
+
     // --- Calendar navigation + month nav ---
     {
         let state = Rc::clone(&state);
@@ -1272,6 +1295,7 @@ fn refresh_calendar(window: &MainWindow, state: &mut UiState) -> Result<()> {
                         kind: kind_to_int(e.kind),
                         glyph: SharedString::from(i18n.t(kind_glyph_key(e.kind))),
                         label: SharedString::from(e.label.clone()),
+                        planting_id: SharedString::from(e.planting_id.clone()),
                     })
                     .collect()
             })

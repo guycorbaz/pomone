@@ -25,6 +25,8 @@ export struct CalendarEvent {
     glyph: string,
     // Long label for tooltips / overflow text — typically "<Crop> · <Variety>".
     label: string,
+    // Stringified PlantingId — emitted on click so the host can navigate.
+    planting-id: string,
 }
 
 export struct CalendarDay {
@@ -35,13 +37,18 @@ export struct CalendarDay {
     events: [CalendarEvent],
 }
 
-// Small pill that visualises one event. Background colour is derived from
-// `kind` via a ternary chain so the screen stays self-contained.
+// Small pill that visualises one event. Clickable: emits `clicked` with the
+// planting-id so the host can route to the relevant Planting.
 component EventPill inherits Rectangle {
     in property <CalendarEvent> event;
+    callback clicked(string);
 
     height: 18px;
+    min-width: 0;
     border-radius: Theme.radius-sm;
+    clip: true;
+    // Background mapped from the numeric kind via a ternary chain so the
+    // palette stays in one place (no top-level functions in Slint).
     background: event.kind == 0 ? Palette.primary           // Sowing
               : event.kind == 1 ? Palette.primary-hover     // Transplanting
               : event.kind == 2 ? Palette.accent            // HarvestStart
@@ -50,32 +57,47 @@ component EventPill inherits Rectangle {
               : event.kind == 5 ? Palette.danger            // Removal
               : event.kind == 6 ? Palette.warning           // BudBreak
               :                   Palette.accent-hover;     // Flowering
+    // Lift the pill on hover so it visibly responds to the cursor — keeps
+    // the colour mapping intact but signals interactivity.
+    opacity: touch.has-hover ? 0.85 : 1.0;
+    animate opacity { duration: Theme.transition-fast; }
 
-    HorizontalLayout {
-        padding-left: 6px;
-        padding-right: 6px;
-        spacing: 4px;
-        Text {
-            text: event.glyph;
-            color: Palette.text-on-primary;
-            font-size: Theme.font-size-label;
-            font-weight: Theme.font-weight-semibold;
-            vertical-alignment: center;
-        }
-        Text {
-            text: event.label;
-            color: Palette.text-on-primary;
-            font-size: Theme.font-size-label;
-            vertical-alignment: center;
-            overflow: elide;
-            horizontal-stretch: 1;
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(event.planting-id); }
+
+        HorizontalLayout {
+            padding-left: 6px;
+            padding-right: 6px;
+            spacing: 4px;
+            Text {
+                text: event.glyph;
+                color: Palette.text-on-primary;
+                font-size: Theme.font-size-label;
+                font-weight: Theme.font-weight-semibold;
+                vertical-alignment: center;
+            }
+            Text {
+                text: event.label;
+                color: Palette.text-on-primary;
+                font-size: Theme.font-size-label;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
         }
     }
 }
 
 component DayCell inherits Rectangle {
     in property <CalendarDay> day;
+    callback event-clicked(string);
 
+    // min-width 0 + clip means the cell never pushes the grid column wider
+    // than its share — long event labels elide inside their pill instead
+    // of inflating the cell.
+    min-width: 0;
+    clip: true;
     border-width: Theme.border-width;
     border-color: Palette.border;
     border-radius: Theme.radius-sm;
@@ -100,7 +122,13 @@ component DayCell inherits Rectangle {
         for ev[i] in day.events: Rectangle {
             visible: i < 3;
             height: i < 3 ? 18px : 0;
-            EventPill { event: ev; width: parent.width; height: 18px; }
+            min-width: 0;
+            EventPill {
+                event: ev;
+                width: parent.width;
+                height: 18px;
+                clicked(pid) => { root.event-clicked(pid); }
+            }
         }
         if day.events.length > 3: Text {
             text: "+" + (day.events.length - 3);
@@ -135,6 +163,7 @@ export component CalendarPage inherits Rectangle {
     callback prev-month();
     callback next-month();
     callback go-today();
+    callback event-clicked(string);
 
     // True if the events array on any day is non-empty.
     property <bool> any-events:
@@ -197,7 +226,9 @@ export component CalendarPage inherits Rectangle {
                     }
                 }
 
-                // Weekday header row, 7 columns to match the grid below.
+                // Weekday header row, 7 columns. Each cell stretches with
+                // `horizontal-stretch: 1` so the columns line up with the day
+                // grid below (which uses the same scheme on every DayCell).
                 GridLayout {
                     spacing: Theme.space-xs;
                     Row {
@@ -207,6 +238,8 @@ export component CalendarPage inherits Rectangle {
                             font-size: Theme.font-size-label;
                             font-weight: Theme.font-weight-semibold;
                             horizontal-alignment: center;
+                            horizontal-stretch: 1;
+                            min-width: 0;
                         }
                     }
                 }
@@ -217,58 +250,58 @@ export component CalendarPage inherits Rectangle {
                     spacing: Theme.space-xs;
 
                     Row {
-                        DayCell { day: days[0]; min-height: 110px; }
-                        DayCell { day: days[1]; min-height: 110px; }
-                        DayCell { day: days[2]; min-height: 110px; }
-                        DayCell { day: days[3]; min-height: 110px; }
-                        DayCell { day: days[4]; min-height: 110px; }
-                        DayCell { day: days[5]; min-height: 110px; }
-                        DayCell { day: days[6]; min-height: 110px; }
+                        DayCell { day: days[0]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[1]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[2]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[3]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[4]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[5]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[6]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
                     }
                     Row {
-                        DayCell { day: days[7]; min-height: 110px; }
-                        DayCell { day: days[8]; min-height: 110px; }
-                        DayCell { day: days[9]; min-height: 110px; }
-                        DayCell { day: days[10]; min-height: 110px; }
-                        DayCell { day: days[11]; min-height: 110px; }
-                        DayCell { day: days[12]; min-height: 110px; }
-                        DayCell { day: days[13]; min-height: 110px; }
+                        DayCell { day: days[7]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[8]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[9]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[10]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[11]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[12]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[13]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
                     }
                     Row {
-                        DayCell { day: days[14]; min-height: 110px; }
-                        DayCell { day: days[15]; min-height: 110px; }
-                        DayCell { day: days[16]; min-height: 110px; }
-                        DayCell { day: days[17]; min-height: 110px; }
-                        DayCell { day: days[18]; min-height: 110px; }
-                        DayCell { day: days[19]; min-height: 110px; }
-                        DayCell { day: days[20]; min-height: 110px; }
+                        DayCell { day: days[14]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[15]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[16]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[17]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[18]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[19]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[20]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
                     }
                     Row {
-                        DayCell { day: days[21]; min-height: 110px; }
-                        DayCell { day: days[22]; min-height: 110px; }
-                        DayCell { day: days[23]; min-height: 110px; }
-                        DayCell { day: days[24]; min-height: 110px; }
-                        DayCell { day: days[25]; min-height: 110px; }
-                        DayCell { day: days[26]; min-height: 110px; }
-                        DayCell { day: days[27]; min-height: 110px; }
+                        DayCell { day: days[21]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[22]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[23]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[24]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[25]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[26]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[27]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
                     }
                     Row {
-                        DayCell { day: days[28]; min-height: 110px; }
-                        DayCell { day: days[29]; min-height: 110px; }
-                        DayCell { day: days[30]; min-height: 110px; }
-                        DayCell { day: days[31]; min-height: 110px; }
-                        DayCell { day: days[32]; min-height: 110px; }
-                        DayCell { day: days[33]; min-height: 110px; }
-                        DayCell { day: days[34]; min-height: 110px; }
+                        DayCell { day: days[28]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[29]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[30]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[31]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[32]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[33]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[34]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
                     }
                     Row {
-                        DayCell { day: days[35]; min-height: 110px; }
-                        DayCell { day: days[36]; min-height: 110px; }
-                        DayCell { day: days[37]; min-height: 110px; }
-                        DayCell { day: days[38]; min-height: 110px; }
-                        DayCell { day: days[39]; min-height: 110px; }
-                        DayCell { day: days[40]; min-height: 110px; }
-                        DayCell { day: days[41]; min-height: 110px; }
+                        DayCell { day: days[35]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[36]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[37]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[38]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[39]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[40]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
+                        DayCell { day: days[41]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; event-clicked(pid) => { root.event-clicked(pid); } }
                     }
                 }
             }

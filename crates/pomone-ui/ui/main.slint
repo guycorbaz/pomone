@@ -232,6 +232,7 @@ export component MainWindow inherits Window {
     callback prev-month();
     callback next-month();
     callback go-today();
+    callback calendar-event-clicked(string);
 
     HorizontalLayout {
         spacing: 0px;
@@ -481,6 +482,7 @@ export component MainWindow inherits Window {
                 prev-month => { prev-month(); }
                 next-month => { next-month(); }
                 go-today => { go-today(); }
+                event-clicked(pid) => { calendar-event-clicked(pid); }
             }
 
             // ------- Locations -------
