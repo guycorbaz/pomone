@@ -1,0 +1,183 @@
+//! Presentation-layer helpers for the per-planting yearly-harvest table.
+//!
+//! Mirrors the other `*_view` modules: returns flat string DTOs so the
+//! Slint UI doesn't see `Decimal`. Both `expected` and `actual` yields
+//! are optional on the domain side; this module turns `None` into a dash
+//! placeholder so the table column is always non-empty.
+
+use crate::error::{AppError, AppResult};
+use pomone_db::Repository;
+use pomone_domain::{PlantingId, YearlyHarvest};
+use rust_decimal::Decimal;
+use std::str::FromStr;
+use uuid::Uuid;
+
+/// One row of the yearly-harvest table on the Planting detail screen.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct YearlyHarvestRow {
+    pub year: i32,
+    pub expected_label: String,
+    pub actual_label: String,
+    pub variance_label: String,
+    pub notes: String,
+}
+
+/// Format an optional `Decimal` kilograms value as `"X.Y kg"` or `"—"`.
+fn fmt_kg(opt: Option<Decimal>) -> String {
+    match opt {
+        Some(v) => format!("{} kg", v.normalize()),
+        None => "—".to_owned(),
+    }
+}
+
+/// Format the variance (actual − expected) with a leading sign when both
+/// sides are known, or `"—"` when one is missing.
+fn fmt_variance(h: &YearlyHarvest) -> String {
+    match h.variance_kg() {
+        Some(v) if v >= Decimal::ZERO => format!("+{} kg", v.normalize()),
+        Some(v) => format!("{} kg", v.normalize()),
+        None => "—".to_owned(),
+    }
+}
+
+fn to_row(h: &YearlyHarvest) -> YearlyHarvestRow {
+    YearlyHarvestRow {
+        year: h.year,
+        expected_label: fmt_kg(h.expected_yield_kg),
+        actual_label: fmt_kg(h.actual_yield_kg),
+        variance_label: fmt_variance(h),
+        notes: h.notes.clone().unwrap_or_default(),
+    }
+}
+
+/// Return the harvests recorded for `planting_id_str`, sorted by year ascending.
+pub async fn list_yearly_harvests_for_planting(
+    repo: &dyn Repository,
+    planting_id_str: &str,
+) -> AppResult<Vec<YearlyHarvestRow>> {
+    let uuid = Uuid::from_str(planting_id_str).map_err(|e| {
+        AppError::Inconsistent(format!("invalid PlantingId '{planting_id_str}': {e}"))
+    })?;
+    let id = PlantingId::from(uuid);
+    let mut harvests = repo.yearly_harvest_list_for_planting(id).await?;
+    harvests.sort_by_key(|h| h.year);
+    Ok(harvests.iter().map(to_row).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::{create_perennial_planting, record_yearly_harvest};
+    use chrono::NaiveDate;
+    use pomone_db::{
+        CropRepo, FamilyRepo, LocationKindRepo, LocationRepo, SqliteRepository, StrataRepo,
+        VarietyRepo,
+    };
+    use pomone_domain::{
+        Crop, Family, Lifespan, Location, LocationKind, PluriannualProfile, PruningSeason, Strata,
+        Variety,
+    };
+    use rust_decimal_macros::dec;
+
+    /// Build a fully seeded perennial setup ready for harvest tests.
+    async fn setup_perennial() -> (SqliteRepository, String) {
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        let f = Family::new("Rosaceae", None, None).unwrap();
+        let s = Strata::new("Arborée", None, None, None, 500).unwrap();
+        let k = LocationKind::new("Verger", None).unwrap();
+        repo.family_create(&f).await.unwrap();
+        repo.strata_create(&s).await.unwrap();
+        repo.location_kind_create(&k).await.unwrap();
+        let crop = Crop::new(
+            f.id,
+            s.id,
+            "Pommier",
+            None,
+            Lifespan::perennial(40, 3).unwrap(),
+            PruningSeason::Winter,
+        )
+        .unwrap();
+        repo.crop_create(&crop).await.unwrap();
+        let variety = Variety::new(
+            crop.id,
+            Lifespan::perennial(40, 3).unwrap(),
+            "Reine des Reinettes",
+            None,
+            pomone_domain::VarietyProfile::Pluriannual(
+                PluriannualProfile::new(Some(80), Some(120), 220, 280, None).unwrap(),
+            ),
+        )
+        .unwrap();
+        repo.variety_create(&variety).await.unwrap();
+        let location = Location::new(k.id, "Verger Est", dec!(20), dec!(5), None, None).unwrap();
+        repo.location_create(&location).await.unwrap();
+        let planting = create_perennial_planting(
+            &repo,
+            variety.id,
+            location.id,
+            NaiveDate::from_ymd_opt(2026, 3, 15).unwrap(),
+            None,
+            dec!(100),
+            10,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        (repo, planting.id.to_string())
+    }
+
+    #[tokio::test]
+    async fn list_is_empty_until_a_harvest_is_recorded() {
+        let (repo, pid) = setup_perennial().await;
+        let rows = list_yearly_harvests_for_planting(&repo, &pid)
+            .await
+            .unwrap();
+        assert!(rows.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_returns_rows_sorted_by_year_with_variance() {
+        let (repo, pid) = setup_perennial().await;
+        let uuid_id = pomone_domain::PlantingId::from(Uuid::from_str(&pid).unwrap());
+
+        record_yearly_harvest(&repo, uuid_id, 2031, Some(dec!(50)), Some(dec!(60)), None)
+            .await
+            .unwrap();
+        record_yearly_harvest(
+            &repo,
+            uuid_id,
+            2029,
+            Some(dec!(40)),
+            None,
+            Some("ramp-up".into()),
+        )
+        .await
+        .unwrap();
+        record_yearly_harvest(&repo, uuid_id, 2030, Some(dec!(45)), Some(dec!(30)), None)
+            .await
+            .unwrap();
+
+        let rows = list_yearly_harvests_for_planting(&repo, &pid)
+            .await
+            .unwrap();
+        let years: Vec<_> = rows.iter().map(|r| r.year).collect();
+        assert_eq!(years, vec![2029, 2030, 2031]);
+
+        assert_eq!(rows[0].actual_label, "—");
+        assert_eq!(rows[0].variance_label, "—");
+        assert_eq!(rows[0].notes, "ramp-up");
+
+        assert_eq!(rows[1].variance_label, "-15 kg");
+        assert_eq!(rows[2].variance_label, "+10 kg");
+    }
+
+    #[tokio::test]
+    async fn invalid_uuid_is_rejected_cleanly() {
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        let err = list_yearly_harvests_for_planting(&repo, "not-a-uuid")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(_)));
+    }
+}

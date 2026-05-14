@@ -16,14 +16,15 @@ use pomone_app::{
     create_crop, create_location, create_variety, get_planting_detail, list_crops,
     list_events_in_range, list_family_options, list_location_kind_options, list_location_options,
     list_locations_tree, list_parent_options, list_plantings, list_strata_options,
-    list_varieties_for_crop, list_variety_options, parse_id, parse_iso_date, services, App,
-    AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind,
-    CropInput, CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput,
-    LocationKindOption, LocationListItem, LocationOption, ParentLocationOption,
-    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow, StrataOption, VarietyInput,
-    VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
+    list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting, parse_id,
+    parse_iso_date, services, App, AppConfig, AppError, BackendConfig,
+    CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput, CropRow as AppCropRow,
+    FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption, LocationListItem,
+    LocationOption, ParentLocationOption, PlantingDetail as AppPlantingDetail,
+    PlantingRow as AppPlantingRow, StrataOption, VarietyInput, VarietyOption, VarietyProfileKind,
+    VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
-use pomone_domain::{LocationId, PruningSeason, VarietyId};
+use pomone_domain::{LocationId, PlantingId, PruningSeason, VarietyId};
 use rust_decimal::Decimal;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::str::FromStr;
@@ -42,6 +43,7 @@ use generated::{
     CalendarDay as SlintCalendarDay, CalendarEvent as SlintCalendarEvent, CropRow as SlintCropRow,
     DetailLine as SlintDetailLine, LocationItem as SlintLocationItem, MainWindow,
     PlantingRow as SlintPlantingRow, VarietyRow as SlintVarietyRow,
+    YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -81,6 +83,10 @@ struct UiState {
     /// screen. Stored at the moment the user opens a planting so the
     /// detail view can route back to either the list or the calendar.
     detail_previous_page: String,
+    /// Stringified `PlantingId` currently shown on the detail screen.
+    /// Needed by the yearly-harvest "Record" callback, which doesn't get
+    /// the id passed back through Slint.
+    detail_planting_id: String,
 }
 
 // Setting up four panes' worth of callbacks in one place keeps the flow easy
@@ -119,6 +125,7 @@ fn main() -> Result<()> {
         calendar_year: today_local.year(),
         calendar_month: today_local.month(),
         detail_previous_page: "plantings".to_owned(),
+        detail_planting_id: String::new(),
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
@@ -354,6 +361,44 @@ fn main() -> Result<()> {
                 return;
             };
             open_planting_detail(&window, &mut state.borrow_mut(), &pid, "calendar");
+        });
+    }
+
+    // --- Record yearly harvest from the detail screen ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_record_harvest(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            match try_record_harvest(&window, &mut s) {
+                Ok(()) => {
+                    let i18n = s.app.i18n();
+                    window.set_harvest_status_text(SharedString::from(
+                        i18n.t("status-harvest-recorded"),
+                    ));
+                    window.set_harvest_status_is_error(false);
+                    window.set_new_harvest_year(SharedString::from(""));
+                    window.set_new_harvest_expected(SharedString::from(""));
+                    window.set_new_harvest_actual(SharedString::from(""));
+                    window.set_new_harvest_notes(SharedString::from(""));
+                    let pid = s.detail_planting_id.clone();
+                    if let Err(e) = refresh_planting_detail(&window, &mut s, &pid) {
+                        tracing::error!(error = %e, "failed to refresh detail after harvest");
+                    }
+                }
+                Err(e) => {
+                    let i18n = s.app.i18n();
+                    let mut args = FluentArgs::new();
+                    args.set("message", e.to_string());
+                    window.set_harvest_status_text(SharedString::from(
+                        i18n.t_args("status-planting-failed", &args),
+                    ));
+                    window.set_harvest_status_is_error(true);
+                }
+            }
         });
     }
 
@@ -652,6 +697,24 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_detail_name_label(SharedString::from(i18n.t("label-planting-name")));
     window.set_detail_notes_label(SharedString::from(i18n.t("label-planting-notes")));
     window.set_detail_empty_state_text(SharedString::from(i18n.t("empty-planting-detail")));
+
+    // Yearly-harvest section labels — content rows come from refresh_planting_detail.
+    window.set_harvest_section_title(SharedString::from(i18n.t("section-yearly-harvest")));
+    window.set_harvest_empty_text(SharedString::from(i18n.t("empty-yearly-harvest")));
+    window.set_harvest_header_year(SharedString::from(i18n.t("harvest-header-year")));
+    window.set_harvest_header_expected(SharedString::from(i18n.t("harvest-header-expected")));
+    window.set_harvest_header_actual(SharedString::from(i18n.t("harvest-header-actual")));
+    window.set_harvest_header_variance(SharedString::from(i18n.t("harvest-header-variance")));
+    window.set_harvest_header_notes(SharedString::from(i18n.t("harvest-header-notes")));
+    window.set_harvest_form_section(SharedString::from(i18n.t("section-record-harvest")));
+    window.set_harvest_label_year(SharedString::from(i18n.t("label-harvest-year")));
+    window.set_harvest_label_expected(SharedString::from(i18n.t("label-harvest-expected")));
+    window.set_harvest_label_actual(SharedString::from(i18n.t("label-harvest-actual")));
+    window.set_harvest_label_notes(SharedString::from(i18n.t("label-harvest-notes")));
+    window.set_harvest_placeholder_year(SharedString::from(i18n.t("placeholder-harvest-year")));
+    window.set_harvest_placeholder_kg(SharedString::from(i18n.t("placeholder-harvest-kg")));
+    window.set_harvest_placeholder_notes(SharedString::from(i18n.t("placeholder-harvest-notes")));
+    window.set_harvest_record_button(SharedString::from(i18n.t("button-record-harvest")));
 
     // Locations page
     window.set_locations_title_text(SharedString::from(i18n.t("title-locations")));
@@ -1246,15 +1309,58 @@ fn open_planting_detail(
     }
 }
 
+/// Read the harvest form fields, validate them, then call the existing
+/// `record_yearly_harvest` service. The form expects a year (required) and
+/// optional expected/actual kg + notes; either yield being set is enough
+/// to make the entry useful.
+fn try_record_harvest(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
+    if state.detail_planting_id.is_empty() {
+        return Err(AppError::Inconsistent(
+            "no planting selected for harvest record".into(),
+        ));
+    }
+    let planting_id: PlantingId = parse_id(&state.detail_planting_id)?;
+    let year = parse_i32(&window.get_new_harvest_year(), "year")?;
+    let expected = parse_optional_decimal(&window.get_new_harvest_expected(), "expected yield")?;
+    let actual = parse_optional_decimal(&window.get_new_harvest_actual(), "actual yield")?;
+    let notes = optional_text(&window.get_new_harvest_notes());
+
+    state.runtime.block_on(async {
+        services::record_yearly_harvest(
+            state.app.repo(),
+            planting_id,
+            year,
+            expected,
+            actual,
+            notes,
+        )
+        .await
+        .map(|_| ())
+    })
+}
+
+fn parse_i32(s: &str, field: &'static str) -> Result<i32, AppError> {
+    s.trim()
+        .parse::<i32>()
+        .map_err(|e| AppError::Inconsistent(format!("invalid {field} '{s}': {e}")))
+}
+
 fn refresh_planting_detail(
     window: &MainWindow,
     state: &mut UiState,
     planting_id: &str,
 ) -> Result<()> {
-    let detail: Result<AppPlantingDetail, AppError> = state
-        .runtime
-        .block_on(async { get_planting_detail(state.app.repo(), planting_id).await });
-    let detail = detail.context("failed to load planting detail")?;
+    let snapshot: Result<(AppPlantingDetail, Vec<AppYearlyHarvestRow>), AppError> =
+        state.runtime.block_on(async {
+            let detail = get_planting_detail(state.app.repo(), planting_id).await?;
+            // The yearly-harvest table is empty for annuals; querying it
+            // anyway keeps the code path uniform and the SQL is a no-op.
+            let harvests = list_yearly_harvests_for_planting(state.app.repo(), planting_id).await?;
+            Ok((detail, harvests))
+        });
+    let (detail, harvests) = snapshot.context("failed to load planting detail")?;
+
+    planting_id.clone_into(&mut state.detail_planting_id);
 
     let i18n = state.app.i18n();
     let lines: Vec<SlintDetailLine> = detail
@@ -1263,6 +1369,16 @@ fn refresh_planting_detail(
         .map(|l| SlintDetailLine {
             label: SharedString::from(i18n.t(l.label_key)),
             value: SharedString::from(l.value),
+        })
+        .collect();
+    let harvest_rows: Vec<SlintYearlyHarvestRow> = harvests
+        .into_iter()
+        .map(|h| SlintYearlyHarvestRow {
+            year: h.year,
+            expected_label: SharedString::from(h.expected_label),
+            actual_label: SharedString::from(h.actual_label),
+            variance_label: SharedString::from(h.variance_label),
+            notes: SharedString::from(h.notes),
         })
         .collect();
 
@@ -1274,6 +1390,11 @@ fn refresh_planting_detail(
     window.set_detail_notes_value(SharedString::from(detail.notes.unwrap_or_default()));
     window.set_detail_schedule_lines(ModelRc::new(VecModel::from(lines)));
     window.set_detail_has_detail(true);
+    window.set_detail_is_perennial(detail.is_perennial);
+    window.set_harvest_rows(ModelRc::new(VecModel::from(harvest_rows)));
+    // Clear stale form/status from the previous detail open.
+    window.set_harvest_status_text(SharedString::from(""));
+    window.set_harvest_status_is_error(false);
     Ok(())
 }
 
