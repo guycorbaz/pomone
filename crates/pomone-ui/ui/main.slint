@@ -354,9 +354,9 @@ export component MainWindow inherits Window {
     in property <string> settings-migrate-warning;
     in-out property <string> settings-status-text;
     in property <bool> settings-status-is-error: false;
-    callback settings-test-backend();
-    callback settings-save-backend();
-    callback settings-save-and-migrate();
+    callback settings-test-backend(int, string, string, string, string, string, string);
+    callback settings-save-backend(int, string, string, string, string, string, string);
+    callback settings-save-and-migrate(int, string, string, string, string, string, string);
 
     init => {
         // Claim focus for the global shortcut scope at startup so Ctrl+1..6
@@ -775,9 +775,15 @@ export component MainWindow inherits Window {
                 migrate-warning-text: settings-migrate-warning;
                 status-text <=> settings-status-text;
                 status-is-error: settings-status-is-error;
-                test-backend => { settings-test-backend(); }
-                save-backend => { settings-save-backend(); }
-                save-and-migrate => { settings-save-and-migrate(); }
+                test-backend(k, sp, h, po, u, pw, db) => {
+                    settings-test-backend(k, sp, h, po, u, pw, db);
+                }
+                save-backend(k, sp, h, po, u, pw, db) => {
+                    settings-save-backend(k, sp, h, po, u, pw, db);
+                }
+                save-and-migrate(k, sp, h, po, u, pw, db) => {
+                    settings-save-and-migrate(k, sp, h, po, u, pw, db);
+                }
             }
 
             // ------- Strata -------

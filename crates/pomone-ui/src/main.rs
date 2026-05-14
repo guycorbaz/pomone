@@ -430,56 +430,92 @@ fn main() -> Result<()> {
     {
         let state = Rc::clone(&state);
         let weak = window.as_weak();
-        window.on_settings_test_backend(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let s = state.borrow();
-            let new_backend = match read_backend_from_form(&window) {
-                Ok(b) => b,
-                Err(text) => {
-                    window.set_settings_status_text(SharedString::from(text));
-                    window.set_settings_status_is_error(true);
+        window.on_settings_test_backend(
+            move |kind, sqlite_path, host, port, user, password, db| {
+                let Some(window) = weak.upgrade() else {
                     return;
+                };
+                let s = state.borrow();
+                let form = SettingsFormValues {
+                    kind,
+                    sqlite_path: sqlite_path.into(),
+                    host: host.into(),
+                    port: port.into(),
+                    user: user.into(),
+                    password: password.into(),
+                    database: db.into(),
+                };
+                tracing::info!(?form, "test backend invoked");
+                let new_backend = match form.into_backend() {
+                    Ok(b) => b,
+                    Err(text) => {
+                        window.set_settings_status_text(SharedString::from(text));
+                        window.set_settings_status_is_error(true);
+                        return;
+                    }
+                };
+                match s.runtime.block_on(test_backend(&new_backend)) {
+                    Ok(()) => {
+                        window.set_settings_status_text(SharedString::from(
+                            s.app.i18n().t("settings-test-ok"),
+                        ));
+                        window.set_settings_status_is_error(false);
+                    }
+                    Err(e) => {
+                        let mut args = FluentArgs::new();
+                        args.set("message", e.to_string());
+                        window.set_settings_status_text(SharedString::from(
+                            s.app.i18n().t_args("status-planting-failed", &args),
+                        ));
+                        window.set_settings_status_is_error(true);
+                    }
                 }
-            };
-            match s.runtime.block_on(test_backend(&new_backend)) {
-                Ok(()) => {
-                    window.set_settings_status_text(SharedString::from(
-                        s.app.i18n().t("settings-test-ok"),
-                    ));
-                    window.set_settings_status_is_error(false);
-                }
-                Err(e) => {
-                    let mut args = FluentArgs::new();
-                    args.set("message", e.to_string());
-                    window.set_settings_status_text(SharedString::from(
-                        s.app.i18n().t_args("status-planting-failed", &args),
-                    ));
-                    window.set_settings_status_is_error(true);
-                }
-            }
-        });
+            },
+        );
     }
     {
         let state = Rc::clone(&state);
         let weak = window.as_weak();
-        window.on_settings_save_backend(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            try_swap_backend(&window, state.clone(), false);
-        });
+        window.on_settings_save_backend(
+            move |kind, sqlite_path, host, port, user, password, db| {
+                let Some(window) = weak.upgrade() else {
+                    return;
+                };
+                let form = SettingsFormValues {
+                    kind,
+                    sqlite_path: sqlite_path.into(),
+                    host: host.into(),
+                    port: port.into(),
+                    user: user.into(),
+                    password: password.into(),
+                    database: db.into(),
+                };
+                tracing::info!(?form, "save backend invoked");
+                try_swap_backend(&window, state.clone(), form, false);
+            },
+        );
     }
     {
         let state = Rc::clone(&state);
         let weak = window.as_weak();
-        window.on_settings_save_and_migrate(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            try_swap_backend(&window, state.clone(), true);
-        });
+        window.on_settings_save_and_migrate(
+            move |kind, sqlite_path, host, port, user, password, db| {
+                let Some(window) = weak.upgrade() else {
+                    return;
+                };
+                let form = SettingsFormValues {
+                    kind,
+                    sqlite_path: sqlite_path.into(),
+                    host: host.into(),
+                    port: port.into(),
+                    user: user.into(),
+                    password: password.into(),
+                    database: db.into(),
+                };
+                tracing::info!(?form, "save+migrate backend invoked");
+                try_swap_backend(&window, state.clone(), form, true);
+            },
+        );
     }
 
     // --- Planting row click → open detail ---
@@ -1603,41 +1639,55 @@ fn split_mariadb_url(url: &str) -> (String, String, String, String, String) {
     (host, port, user, password, db)
 }
 
-/// Read the Settings form and assemble a [`BackendConfig`]. Returns a
-/// short, localized validation message on error.
-fn read_backend_from_form(window: &MainWindow) -> Result<BackendConfig, String> {
-    if window.get_settings_backend_kind_index() == 0 {
-        let path = window.get_settings_sqlite_path();
-        let trimmed = path.trim();
-        if trimmed.is_empty() {
-            return Err("SQLite path is required".to_owned());
-        }
-        Ok(BackendConfig::Sqlite {
-            path: PathBuf::from(trimmed),
-        })
-    } else {
-        let host = window.get_settings_mariadb_host().trim().to_owned();
-        let port = window.get_settings_mariadb_port().trim().to_owned();
-        let user = window.get_settings_mariadb_user().trim().to_owned();
-        let password = window.get_settings_mariadb_password().to_string();
-        let db = window.get_settings_mariadb_database().trim().to_owned();
-        if host.is_empty() || user.is_empty() || db.is_empty() {
-            return Err("MariaDB host, user and database are required".to_owned());
-        }
-        let port = if port.is_empty() {
-            "3306".to_owned()
+/// Snapshot of the Settings form values, captured at the moment a button
+/// is clicked. Going through callback args (rather than property reads)
+/// dodges any propagation hiccup in the `<=>` chain between MainWindow
+/// and the SettingsPage subcomponent.
+#[derive(Debug, Clone)]
+struct SettingsFormValues {
+    kind: i32,
+    sqlite_path: String,
+    host: String,
+    port: String,
+    user: String,
+    password: String,
+    database: String,
+}
+
+impl SettingsFormValues {
+    fn into_backend(self) -> Result<BackendConfig, String> {
+        if self.kind == 0 {
+            let trimmed = self.sqlite_path.trim();
+            if trimmed.is_empty() {
+                return Err("SQLite path is required".to_owned());
+            }
+            Ok(BackendConfig::Sqlite {
+                path: PathBuf::from(trimmed),
+            })
         } else {
-            port
-        };
-        // sqlx accepts `mysql://user:pass@host:port/db`. Password may
-        // contain URL-reserved chars; for v1 we trust the user — a
-        // proper percent-encoder is a follow-up if needed.
-        let url = if password.is_empty() {
-            format!("mysql://{user}@{host}:{port}/{db}")
-        } else {
-            format!("mysql://{user}:{password}@{host}:{port}/{db}")
-        };
-        Ok(BackendConfig::Mariadb { url })
+            let host = self.host.trim().to_owned();
+            let port = self.port.trim().to_owned();
+            let user = self.user.trim().to_owned();
+            let password = self.password;
+            let db = self.database.trim().to_owned();
+            if host.is_empty() || user.is_empty() || db.is_empty() {
+                return Err("MariaDB host, user and database are required".to_owned());
+            }
+            let port = if port.is_empty() {
+                "3306".to_owned()
+            } else {
+                port
+            };
+            // sqlx accepts `mysql://user:pass@host:port/db`. Password may
+            // contain URL-reserved chars; for v1 we trust the user — a
+            // proper percent-encoder is a follow-up if needed.
+            let url = if password.is_empty() {
+                format!("mysql://{user}@{host}:{port}/{db}")
+            } else {
+                format!("mysql://{user}:{password}@{host}:{port}/{db}")
+            };
+            Ok(BackendConfig::Mariadb { url })
+        }
     }
 }
 
@@ -1661,8 +1711,13 @@ fn format_migration_report(report: &MigrationReport, i18n: &pomone_app::I18n) ->
 /// Wire the Save / Save+Migrate buttons. Validates the form, calls
 /// `App::swap_backend`, refreshes every screen so the new data shows up,
 /// and writes a localized status line.
-fn try_swap_backend(window: &MainWindow, state: Rc<RefCell<UiState>>, migrate: bool) {
-    let new_backend = match read_backend_from_form(window) {
+fn try_swap_backend(
+    window: &MainWindow,
+    state: Rc<RefCell<UiState>>,
+    form: SettingsFormValues,
+    migrate: bool,
+) {
+    let new_backend = match form.into_backend() {
         Ok(b) => b,
         Err(text) => {
             window.set_settings_status_text(SharedString::from(text));

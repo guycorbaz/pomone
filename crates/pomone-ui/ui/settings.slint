@@ -49,9 +49,17 @@ export component SettingsPage inherits Rectangle {
     in-out property <string> status-text;
     in property <bool> status-is-error: false;
 
-    callback test-backend();
-    callback save-backend();
-    callback save-and-migrate();
+    // Callbacks pass the form values as arguments instead of relying on
+    // `<=>` chains to propagate them back to the host — the chain across
+    // the MainWindow ↔ SettingsPage boundary turned out to leave the
+    // outer properties at their initial values, so the Rust handler
+    // would read empty strings even after the user filled the form.
+    // Argument order mirrors the SQLite branch first, then MariaDB.
+    callback test-backend(int /* kind */, string /* sqlite-path */,
+        string /* host */, string /* port */, string /* user */,
+        string /* password */, string /* db */);
+    callback save-backend(int, string, string, string, string, string, string);
+    callback save-and-migrate(int, string, string, string, string, string, string);
 
     ScrollView {
         VerticalLayout {
@@ -213,16 +221,28 @@ export component SettingsPage inherits Rectangle {
                         spacing: Theme.space-md;
                         SecondaryButton {
                             text: test-button-text;
-                            clicked => { test-backend(); }
+                            clicked => {
+                                test-backend(backend-kind-index, sqlite-path,
+                                    mariadb-host, mariadb-port, mariadb-user,
+                                    mariadb-password, mariadb-database);
+                            }
                         }
                         Rectangle { horizontal-stretch: 1; }
                         SecondaryButton {
                             text: save-button-text;
-                            clicked => { save-backend(); }
+                            clicked => {
+                                save-backend(backend-kind-index, sqlite-path,
+                                    mariadb-host, mariadb-port, mariadb-user,
+                                    mariadb-password, mariadb-database);
+                            }
                         }
                         PrimaryButton {
                             text: save-migrate-button-text;
-                            clicked => { save-and-migrate(); }
+                            clicked => {
+                                save-and-migrate(backend-kind-index, sqlite-path,
+                                    mariadb-host, mariadb-port, mariadb-user,
+                                    mariadb-password, mariadb-database);
+                            }
                         }
                     }
 
