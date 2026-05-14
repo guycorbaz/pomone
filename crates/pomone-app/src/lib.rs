@@ -16,6 +16,7 @@ pub mod locations_view;
 pub mod planting_detail_view;
 pub mod plantings_view;
 pub mod services;
+pub mod strata_view;
 
 #[cfg(test)]
 mod test_helpers;
@@ -40,3 +41,4 @@ pub use plantings_view::{
     list_location_options, list_plantings, list_variety_options, parse_id, parse_iso_date,
     LocationOption, PlantingRow, VarietyOption,
 };
+pub use strata_view::{create_strata, delete_strata, list_strata_rows, StrataInput, StrataRow};

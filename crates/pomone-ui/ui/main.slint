@@ -12,9 +12,10 @@ import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
 import { LocationsPage, LocationItem } from "locations.slint";
 import { CalendarPage, CalendarDay, CalendarEvent } from "calendar.slint";
 import { PlantingDetailPage, DetailLine, YearlyHarvestRow } from "planting_detail.slint";
+import { StrataPage, StrataItem } from "strata.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, DetailLine, YearlyHarvestRow }
+export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, DetailLine, YearlyHarvestRow, StrataItem }
 
 // One row of the "overview" card on the home page: label on the left, numeric
 // value on the right.
@@ -78,6 +79,7 @@ export component MainWindow inherits Window {
     in property <string> nav-cultures-text;
     in property <string> nav-locations-text;
     in property <string> nav-calendar-text;
+    in property <string> nav-strata-text;
 
     callback toggle-language();
     callback navigate-home();
@@ -85,6 +87,7 @@ export component MainWindow inherits Window {
     callback navigate-cultures();
     callback navigate-locations();
     callback navigate-calendar();
+    callback navigate-strata();
 
     // ------- Plantings page state forwarded to PlantingsPage -------
     in property <string> plantings-title-text;
@@ -282,6 +285,35 @@ export component MainWindow inherits Window {
     in-out property <string> new-harvest-notes;
     callback record-harvest();
 
+    // ------- Strata page state forwarded to StrataPage -------
+    in property <string> strata-title-text;
+    in property <string> strata-list-title;
+    in property <string> strata-empty-text;
+    in property <[StrataItem]> strata-items;
+    in property <string> strata-delete-text;
+    in property <string> strata-in-use-text;
+    in property <string> strata-form-section;
+    in property <string> strata-label-name;
+    in property <string> strata-placeholder-name;
+    in property <string> strata-label-description;
+    in property <string> strata-placeholder-description;
+    in property <string> strata-label-height-min;
+    in property <string> strata-placeholder-height-min;
+    in property <string> strata-label-height-max;
+    in property <string> strata-placeholder-height-max;
+    in property <string> strata-label-sort-order;
+    in property <string> strata-placeholder-sort-order;
+    in property <string> strata-create-button-text;
+    in property <string> strata-status-text;
+    in property <bool> strata-status-is-error: false;
+    in-out property <string> new-strata-name;
+    in-out property <string> new-strata-description;
+    in-out property <string> new-strata-min-height;
+    in-out property <string> new-strata-max-height;
+    in-out property <string> new-strata-sort-order: "50";
+    callback create-strata();
+    callback delete-strata(string);
+
     HorizontalLayout {
         spacing: 0px;
 
@@ -346,6 +378,11 @@ export component MainWindow inherits Window {
                     text: nav-calendar-text;
                     selected: current-page == "calendar";
                     clicked => { current-page = "calendar"; navigate-calendar(); }
+                }
+                NavButton {
+                    text: nav-strata-text;
+                    selected: current-page == "strata";
+                    clicked => { current-page = "strata"; navigate-strata(); }
                 }
 
                 // Push the language footer to the bottom.
@@ -563,6 +600,37 @@ export component MainWindow inherits Window {
                 create-crop => { create-crop(); }
                 create-variety => { create-variety(); }
                 select-crop(idx) => { select-crop(idx); }
+            }
+
+            // ------- Strata -------
+            if current-page == "strata": StrataPage {
+                title-text: strata-title-text;
+                list-title: strata-list-title;
+                empty-text: strata-empty-text;
+                strata: strata-items;
+                delete-text: strata-delete-text;
+                in-use-text: strata-in-use-text;
+                form-section-title: strata-form-section;
+                label-name: strata-label-name;
+                placeholder-name: strata-placeholder-name;
+                label-description: strata-label-description;
+                placeholder-description: strata-placeholder-description;
+                label-height-min: strata-label-height-min;
+                placeholder-height-min: strata-placeholder-height-min;
+                label-height-max: strata-label-height-max;
+                placeholder-height-max: strata-placeholder-height-max;
+                label-sort-order: strata-label-sort-order;
+                placeholder-sort-order: strata-placeholder-sort-order;
+                create-button-text: strata-create-button-text;
+                status-text: strata-status-text;
+                status-is-error: strata-status-is-error;
+                new-strata-name <=> new-strata-name;
+                new-strata-description <=> new-strata-description;
+                new-strata-min-height <=> new-strata-min-height;
+                new-strata-max-height <=> new-strata-max-height;
+                new-strata-sort-order <=> new-strata-sort-order;
+                create-strata => { create-strata(); }
+                delete-strata(id) => { delete-strata(id); }
             }
 
             // ------- Calendar -------
