@@ -10,6 +10,7 @@ pub mod calendar_view;
 pub mod config;
 pub mod cultures_view;
 pub mod error;
+pub mod harvest_view;
 pub mod i18n;
 pub mod locations_view;
 pub mod planting_detail_view;
@@ -28,6 +29,7 @@ pub use cultures_view::{
     VarietyInput, VarietyProfileKind, VarietyRow,
 };
 pub use error::{AppError, AppResult};
+pub use harvest_view::{list_yearly_harvests_for_planting, YearlyHarvestRow};
 pub use i18n::{I18n, Lang};
 pub use locations_view::{
     create_location, list_location_kind_options, list_locations_tree, list_parent_options,

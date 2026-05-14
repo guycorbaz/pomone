@@ -34,6 +34,9 @@ pub struct PlantingDetail {
     /// Schedule entries: sowing/transplant/harvest for `Cycle`, establishment
     /// + (optional) removal for `Perennial`. Always non-empty.
     pub schedule_lines: Vec<DetailLine>,
+    /// True iff the underlying schedule is `Perennial`. The UI uses this to
+    /// decide whether to render the yearly-harvest section.
+    pub is_perennial: bool,
 }
 
 /// Format `Some(date)` as `YYYY-MM-DD`, `None` as a dash placeholder.
@@ -125,6 +128,7 @@ pub async fn get_planting_detail(repo: &dyn Repository, id_str: &str) -> AppResu
         None => location.name.clone(),
     };
 
+    let is_perennial = matches!(planting.schedule, PlantingSchedule::Perennial { .. });
     Ok(PlantingDetail {
         id: planting.id.to_string(),
         variety_label,
@@ -134,6 +138,7 @@ pub async fn get_planting_detail(repo: &dyn Repository, id_str: &str) -> AppResu
         name: planting.name.clone(),
         notes: planting.notes.clone(),
         schedule_lines: schedule_lines(&planting),
+        is_perennial,
     })
 }
 

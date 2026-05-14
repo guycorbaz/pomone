@@ -100,6 +100,25 @@ label-first-harvest = First harvest
 label-last-harvest = Last harvest
 empty-planting-detail = Planting not found.
 
+## Yearly harvest (perennials)
+section-yearly-harvest = Yearly harvests
+section-record-harvest = Record a harvest
+empty-yearly-harvest = No harvest recorded yet.
+harvest-header-year = Year
+harvest-header-expected = Expected
+harvest-header-actual = Actual
+harvest-header-variance = Variance
+harvest-header-notes = Notes
+label-harvest-year = Year
+label-harvest-expected = Expected yield (kg)
+label-harvest-actual = Actual yield (kg)
+label-harvest-notes = Notes (optional)
+placeholder-harvest-year = 2030
+placeholder-harvest-kg = 50
+placeholder-harvest-notes = late frost, hard pruning…
+button-record-harvest = Record
+status-harvest-recorded = Harvest recorded
+
 ## Calendar screen
 nav-calendar = Calendar
 title-calendar = Calendar

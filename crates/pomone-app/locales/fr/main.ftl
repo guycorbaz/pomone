@@ -102,6 +102,25 @@ label-first-harvest = Première récolte
 label-last-harvest = Dernière récolte
 empty-planting-detail = Plantation introuvable.
 
+## Yearly harvest (perennials)
+section-yearly-harvest = Récoltes annuelles
+section-record-harvest = Enregistrer une récolte
+empty-yearly-harvest = Aucune récolte enregistrée pour le moment.
+harvest-header-year = Année
+harvest-header-expected = Attendu
+harvest-header-actual = Réel
+harvest-header-variance = Écart
+harvest-header-notes = Notes
+label-harvest-year = Année
+label-harvest-expected = Rendement attendu (kg)
+label-harvest-actual = Rendement réel (kg)
+label-harvest-notes = Notes (optionnel)
+placeholder-harvest-year = 2030
+placeholder-harvest-kg = 50
+placeholder-harvest-notes = gelée tardive, taille sévère…
+button-record-harvest = Enregistrer
+status-harvest-recorded = Récolte enregistrée
+
 ## Calendar screen
 nav-calendar = Calendrier
 title-calendar = Calendrier

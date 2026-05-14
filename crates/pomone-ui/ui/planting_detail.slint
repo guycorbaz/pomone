@@ -5,11 +5,19 @@
 // chooses which lines to emit based on Cycle vs Perennial), and a "summary"
 // card with location, area, plants count, optional name and notes.
 
-import { Palette, Theme, Card, SecondaryButton, SectionHeader } from "theme.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit } from "theme.slint";
 
 export struct DetailLine {
     label: string,
     value: string,
+}
+
+export struct YearlyHarvestRow {
+    year: int,
+    expected-label: string,
+    actual-label: string,
+    variance-label: string,
+    notes: string,
 }
 
 export component PlantingDetailPage inherits Rectangle {
@@ -38,7 +46,34 @@ export component PlantingDetailPage inherits Rectangle {
     in property <string> empty-state-text;    // shown when no detail loaded
     in property <bool> has-detail;
 
+    // ---------- Yearly harvest section (perennials only) ----------
+    in property <bool> is-perennial;
+    in property <string> harvest-section-title;
+    in property <string> harvest-empty-text;
+    in property <string> harvest-header-year;
+    in property <string> harvest-header-expected;
+    in property <string> harvest-header-actual;
+    in property <string> harvest-header-variance;
+    in property <string> harvest-header-notes;
+    in property <[YearlyHarvestRow]> harvest-rows;
+    in property <string> harvest-form-section;
+    in property <string> harvest-label-year;
+    in property <string> harvest-label-expected;
+    in property <string> harvest-label-actual;
+    in property <string> harvest-label-notes;
+    in property <string> harvest-placeholder-year;
+    in property <string> harvest-placeholder-kg;
+    in property <string> harvest-placeholder-notes;
+    in property <string> harvest-record-button;
+    in property <string> harvest-status-text;
+    in property <bool> harvest-status-is-error: false;
+    in-out property <string> new-harvest-year;
+    in-out property <string> new-harvest-expected;
+    in-out property <string> new-harvest-actual;
+    in-out property <string> new-harvest-notes;
+
     callback go-back();
+    callback record-harvest();
 
     VerticalLayout {
         padding: Theme.space-2xl;
@@ -199,6 +234,181 @@ export component PlantingDetailPage inherits Rectangle {
                             font-size: Theme.font-size-body;
                             wrap: word-wrap;
                         }
+                    }
+                }
+            }
+        }
+
+        // ---------- Yearly harvest (perennials only) ----------
+        if has-detail && is-perennial: Card {
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-md;
+
+                SectionHeader { text: harvest-section-title; }
+
+                // Header row + body rows, side-by-side via plain
+                // HorizontalLayout (so column widths follow content).
+                VerticalLayout {
+                    spacing: Theme.space-xs;
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: harvest-header-year;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            width: 80px;
+                        }
+                        Text {
+                            text: harvest-header-expected;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            width: 120px;
+                        }
+                        Text {
+                            text: harvest-header-actual;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            width: 120px;
+                        }
+                        Text {
+                            text: harvest-header-variance;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            width: 120px;
+                        }
+                        Text {
+                            text: harvest-header-notes;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            horizontal-stretch: 1;
+                        }
+                    }
+
+                    if harvest-rows.length == 0: Text {
+                        text: harvest-empty-text;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-body;
+                        horizontal-alignment: center;
+                    }
+
+                    for row in harvest-rows: HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: row.year;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                            width: 80px;
+                        }
+                        Text {
+                            text: row.expected-label;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            width: 120px;
+                        }
+                        Text {
+                            text: row.actual-label;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            width: 120px;
+                        }
+                        Text {
+                            text: row.variance-label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-body;
+                            width: 120px;
+                        }
+                        Text {
+                            text: row.notes;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-body;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Palette.border; }
+
+                // Add / update form
+                SectionHeader { text: harvest-form-section; }
+
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: harvest-label-year;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-harvest-year;
+                            placeholder-text: harvest-placeholder-year;
+                            input-type: number;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: harvest-label-expected;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-harvest-expected;
+                            placeholder-text: harvest-placeholder-kg;
+                            input-type: decimal;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: harvest-label-actual;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-harvest-actual;
+                            placeholder-text: harvest-placeholder-kg;
+                            input-type: decimal;
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: Theme.space-xs;
+                    Text {
+                        text: harvest-label-notes;
+                        color: Palette.text-secondary;
+                        font-size: Theme.font-size-label;
+                    }
+                    ThemedLineEdit {
+                        text <=> new-harvest-notes;
+                        placeholder-text: harvest-placeholder-notes;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    PrimaryButton {
+                        text: harvest-record-button;
+                        clicked => { record-harvest(); }
+                    }
+                    Text {
+                        text: harvest-status-text;
+                        color: harvest-status-is-error ? Palette.danger : Palette.success;
+                        font-size: Theme.font-size-label;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
                     }
                 }
             }
