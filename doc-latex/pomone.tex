@@ -2,8 +2,10 @@
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage[french]{babel}
+\usepackage{babel}
+\babelprovide[import,main]{french}
 \usepackage{lmodern}
+\usepackage{amssymb}
 \usepackage{microtype}
 \usepackage{geometry}
 \geometry{margin=2.5cm}
@@ -39,6 +41,19 @@
   showstringspaces=false,
   xleftmargin=0pt,
   xrightmargin=0pt,
+  extendedchars=true,
+  inputencoding=utf8,
+  literate=%
+    {é}{{\'e}}1 {è}{{\`e}}1 {ê}{{\^e}}1 {ë}{{\"e}}1
+    {à}{{\`a}}1 {â}{{\^a}}1
+    {ô}{{\^o}}1 {ö}{{\"o}}1
+    {î}{{\^\i}}1 {ï}{{\"\i}}1
+    {ù}{{\`u}}1 {û}{{\^u}}1 {ü}{{\"u}}1
+    {ç}{{\c{c}}}1
+    {É}{{\'E}}1 {È}{{\`E}}1 {Ê}{{\^E}}1
+    {—}{{---}}1 {–}{{--}}1
+    {…}{{\ldots}}1 {«}{{<<\,}}2 {»}{{\,>>}}2
+    {→}{{$\to$}}1 {←}{{$\leftarrow$}}1
 }
 
 \usepackage{tcolorbox}
