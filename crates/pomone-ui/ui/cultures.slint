@@ -9,7 +9,7 @@
 // annual crop.
 
 import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
-import { ListView } from "std-widgets.slint";
+import { ListView, ScrollView } from "std-widgets.slint";
 
 export struct CropRow {
     id: string,
@@ -202,7 +202,12 @@ export component CulturesPage inherits Rectangle {
 
     callback select-crop(int);
 
-    VerticalLayout {
+    // The cultures page stacks a title, two large master-detail cards with
+    // ListViews and full create-crop / create-variety forms — easy to push
+    // the bottom off-screen on smaller windows. Wrap in ScrollView so the
+    // create forms stay reachable.
+    ScrollView {
+        VerticalLayout {
         padding: Theme.space-2xl;
         spacing: Theme.space-xl;
 
@@ -602,6 +607,7 @@ export component CulturesPage inherits Rectangle {
             color: status-is-error ? Palette.danger : Palette.success;
             font-size: Theme.font-size-label;
             wrap: word-wrap;
+        }
         }
     }
 }

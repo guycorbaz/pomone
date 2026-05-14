@@ -23,6 +23,7 @@ export struct PlantingRow {
 // signal interactivity.
 component PlantingRowView inherits Card {
     in property <PlantingRow> entry;
+    in property <string> plants-suffix;     // localized "plants" / "plants"
     callback clicked(string);
     height: 124px;
     background: touch.has-hover ? Palette.surface-alt : Palette.surface;
@@ -69,7 +70,7 @@ component PlantingRowView inherits Card {
                     horizontal-stretch: 1;
                 }
                 Text {
-                    text: entry.plants-count + " " + "plants";
+                    text: entry.plants-count + " " + plants-suffix;
                     color: Palette.text-muted;
                     font-size: Theme.font-size-label;
                     horizontal-alignment: right;
@@ -88,6 +89,7 @@ export component PlantingsPage inherits Rectangle {
 
     // List
     in property <[PlantingRow]> plantings;
+    in property <string> plants-suffix;
 
     // Form section
     in property <string> section-new-text;
@@ -166,6 +168,7 @@ export component PlantingsPage inherits Rectangle {
             ListView {
                 for item in plantings: PlantingRowView {
                     entry: item;
+                    plants-suffix: plants-suffix;
                     width: list-area.width;
                     clicked(pid) => { row-clicked(pid); }
                 }

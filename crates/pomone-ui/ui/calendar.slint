@@ -13,6 +13,7 @@
 // numeric `kind` (0..=7) and we resolve it against the theme palette here.
 
 import { Palette, Theme, Card, SecondaryButton, SectionHeader } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
 
 export struct CalendarEvent {
     // Numeric kind, mirrors `pomone_app::CalendarEventKind`:
@@ -171,7 +172,11 @@ export component CalendarPage inherits Rectangle {
     // enough to overflow the Slint compiler's stack on Windows runners.
     in property <bool> any-events;
 
-    VerticalLayout {
+    // The 6×7 grid + legend pushes the page below typical viewports on a
+    // smaller window — scroll keeps the legend reachable without shrinking
+    // the day cells below readable size.
+    ScrollView {
+        VerticalLayout {
         padding: Theme.space-2xl;
         spacing: Theme.space-xl;
 
@@ -329,6 +334,7 @@ export component CalendarPage inherits Rectangle {
                     }
                 }
             }
+        }
         }
     }
 }

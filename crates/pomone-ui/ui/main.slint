@@ -93,6 +93,7 @@ export component MainWindow inherits Window {
     in property <string> plantings-title-text;
     in property <string> empty-state-text;
     in property <[PlantingRow]> plantings;
+    in property <string> plants-suffix;
     in property <string> section-new-text;
     in property <string> label-variety;
     in property <string> label-location;
@@ -116,7 +117,10 @@ export component MainWindow inherits Window {
     in-out property <string> removal-on-text;
     in-out property <string> area-text: "20";
     in-out property <string> count-text: "20";
-    in property <string> status-text;
+    // Status banners are `in-out` so the page-level auto-clear Timers can
+    // wipe them after a few seconds. Rust pushes the message via the
+    // generated setter; Slint's Timer flips the text back to "" later.
+    in-out property <string> status-text;
     in property <bool> status-is-error: false;
     callback create-planting();
 
@@ -277,7 +281,7 @@ export component MainWindow inherits Window {
     in property <string> harvest-placeholder-kg;
     in property <string> harvest-placeholder-notes;
     in property <string> harvest-record-button;
-    in property <string> harvest-status-text;
+    in-out property <string> harvest-status-text;
     in property <bool> harvest-status-is-error: false;
     in-out property <string> new-harvest-year;
     in-out property <string> new-harvest-expected;
@@ -304,7 +308,7 @@ export component MainWindow inherits Window {
     in property <string> strata-label-sort-order;
     in property <string> strata-placeholder-sort-order;
     in property <string> strata-create-button-text;
-    in property <string> strata-status-text;
+    in-out property <string> strata-status-text;
     in property <bool> strata-status-is-error: false;
     in-out property <string> new-strata-name;
     in-out property <string> new-strata-description;
@@ -313,6 +317,85 @@ export component MainWindow inherits Window {
     in-out property <string> new-strata-sort-order: "50";
     callback create-strata();
     callback delete-strata(string);
+
+    init => {
+        // Claim focus for the global shortcut scope at startup so Ctrl+1..6
+        // and calendar arrow keys are picked up before any LineEdit grabs
+        // focus. When the user clicks into a text input the LineEdit takes
+        // focus and global shortcuts pause — clicking outside, or pressing
+        // Tab back out, restores them.
+        shortcuts.focus();
+    }
+
+    shortcuts := FocusScope {
+        key-pressed(event) => {
+            // Sidebar shortcuts: Ctrl+1..6 mirror the sidebar order.
+            if (event.modifiers.control) {
+                if (event.text == "1") {
+                    root.current-page = "home";
+                    root.navigate-home();
+                    return accept;
+                }
+                if (event.text == "2") {
+                    root.current-page = "plantings";
+                    root.navigate-plantings();
+                    return accept;
+                }
+                if (event.text == "3") {
+                    root.current-page = "cultures";
+                    root.navigate-cultures();
+                    return accept;
+                }
+                if (event.text == "4") {
+                    root.current-page = "locations";
+                    root.navigate-locations();
+                    return accept;
+                }
+                if (event.text == "5") {
+                    root.current-page = "calendar";
+                    root.navigate-calendar();
+                    return accept;
+                }
+                if (event.text == "6") {
+                    root.current-page = "strata";
+                    root.navigate-strata();
+                    return accept;
+                }
+            }
+            // Calendar arrows: Left/Right step prev/next month when on the
+            // calendar page (avoids hijacking the keys elsewhere).
+            if (root.current-page == "calendar") {
+                if (event.text == Key.LeftArrow) {
+                    root.prev-month();
+                    return accept;
+                }
+                if (event.text == Key.RightArrow) {
+                    root.next-month();
+                    return accept;
+                }
+            }
+            return reject;
+        }
+    }
+
+    // Auto-clear each status banner ~4 seconds after Rust pushes a message.
+    // The Timer's `running` binding tracks the text being non-empty; the
+    // trigger clears the text, which stops the timer until the next push.
+    Timer {
+        interval: 4s;
+        running: root.status-text != "";
+        triggered => { root.status-text = ""; }
+    }
+    Timer {
+        interval: 4s;
+        running: root.harvest-status-text != "";
+        triggered => { root.harvest-status-text = ""; }
+    }
+    Timer {
+        interval: 4s;
+        running: root.strata-status-text != "";
+        triggered => { root.strata-status-text = ""; }
+    }
 
     HorizontalLayout {
         spacing: 0px;
@@ -448,6 +531,7 @@ export component MainWindow inherits Window {
                 title-text: plantings-title-text;
                 empty-state-text: empty-state-text;
                 plantings: plantings;
+                plants-suffix: plants-suffix;
                 section-new-text: section-new-text;
                 label-variety: label-variety;
                 label-location: label-location;
