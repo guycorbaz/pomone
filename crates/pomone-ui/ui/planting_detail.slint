@@ -1,0 +1,207 @@
+// Pomone — read-only Planting detail screen.
+//
+// Header carries the variety label and a Back button; below it, two cards:
+// a "schedule" card built from a list of label/value lines (the Rust side
+// chooses which lines to emit based on Cycle vs Perennial), and a "summary"
+// card with location, area, plants count, optional name and notes.
+
+import { Palette, Theme, Card, SecondaryButton, SectionHeader } from "theme.slint";
+
+export struct DetailLine {
+    label: string,
+    value: string,
+}
+
+export component PlantingDetailPage inherits Rectangle {
+    background: Palette.background;
+
+    in property <string> title-text;
+    in property <string> back-button-text;
+    in property <string> variety-label;
+    in property <string> location-label;
+    in property <string> area-label;
+    in property <int> plants-count;
+
+    in property <string> name-label;          // localized "Name"
+    in property <string> name-value;          // empty if not set
+    in property <string> notes-label;         // localized "Notes"
+    in property <string> notes-value;         // empty if not set
+
+    in property <string> section-schedule-text;
+    in property <string> section-summary-text;
+    in property <string> label-location;
+    in property <string> label-area;
+    in property <string> label-plants-count;
+
+    in property <[DetailLine]> schedule-lines;
+
+    in property <string> empty-state-text;    // shown when no detail loaded
+    in property <bool> has-detail;
+
+    callback go-back();
+
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-xl;
+
+        // ---------- Header ----------
+        HorizontalLayout {
+            spacing: Theme.space-md;
+            VerticalLayout {
+                spacing: 2px;
+                horizontal-stretch: 1;
+                Text {
+                    text: title-text;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-label;
+                    font-weight: Theme.font-weight-medium;
+                }
+                Text {
+                    text: has-detail ? variety-label : "";
+                    color: Palette.primary;
+                    font-size: Theme.font-size-h1;
+                    font-weight: Theme.font-weight-bold;
+                }
+            }
+            SecondaryButton {
+                text: back-button-text;
+                clicked => { go-back(); }
+            }
+        }
+
+        if !has-detail: Card {
+            VerticalLayout {
+                padding: Theme.space-xl;
+                Text {
+                    text: empty-state-text;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-body;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        if has-detail: HorizontalLayout {
+            spacing: Theme.space-xl;
+            vertical-stretch: 1;
+
+            // -------- Schedule card --------
+            Card {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: section-schedule-text; }
+
+                    for line in schedule-lines: HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: line.label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: line.value;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                        }
+                    }
+                }
+            }
+
+            // -------- Summary card --------
+            Card {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: section-summary-text; }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: label-location;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: location-label;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: label-area;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: area-label;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: label-plants-count;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: plants-count;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                        }
+                    }
+
+                    // Optional name + notes appear only when set on the planting.
+                    if name-value != "": HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: name-label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: name-value;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                        }
+                    }
+                    if notes-value != "": VerticalLayout {
+                        spacing: 2px;
+                        Text {
+                            text: notes-label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        Text {
+                            text: notes-value;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

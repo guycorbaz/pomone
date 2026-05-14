@@ -11,9 +11,10 @@ import { PlantingsPage, PlantingRow } from "plantings.slint";
 import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
 import { LocationsPage, LocationItem } from "locations.slint";
 import { CalendarPage, CalendarDay, CalendarEvent } from "calendar.slint";
+import { PlantingDetailPage, DetailLine } from "planting_detail.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent }
+export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, DetailLine }
 
 // One row of the "overview" card on the home page: label on the left, numeric
 // value on the right.
@@ -234,6 +235,25 @@ export component MainWindow inherits Window {
     callback next-month();
     callback go-today();
     callback calendar-event-clicked(string);
+    callback planting-row-clicked(string);
+
+    // ------- Planting detail page state forwarded to PlantingDetailPage -------
+    in property <string> detail-title-text;
+    in property <string> detail-back-button-text;
+    in property <string> detail-variety-label;
+    in property <string> detail-location-label;
+    in property <string> detail-area-label;
+    in property <int> detail-plants-count;
+    in property <string> detail-name-label;
+    in property <string> detail-name-value;
+    in property <string> detail-notes-label;
+    in property <string> detail-notes-value;
+    in property <string> detail-section-schedule-text;
+    in property <string> detail-section-summary-text;
+    in property <string> detail-empty-state-text;
+    in property <bool> detail-has-detail;
+    in property <[DetailLine]> detail-schedule-lines;
+    callback detail-go-back();
 
     HorizontalLayout {
         spacing: 0px;
@@ -390,6 +410,30 @@ export component MainWindow inherits Window {
                 status-text: status-text;
                 status-is-error: status-is-error;
                 create-planting => { create-planting(); }
+                row-clicked(pid) => { planting-row-clicked(pid); }
+            }
+
+            // ------- Planting detail -------
+            if current-page == "planting-detail": PlantingDetailPage {
+                title-text: detail-title-text;
+                back-button-text: detail-back-button-text;
+                variety-label: detail-variety-label;
+                location-label: detail-location-label;
+                area-label: detail-area-label;
+                plants-count: detail-plants-count;
+                name-label: detail-name-label;
+                name-value: detail-name-value;
+                notes-label: detail-notes-label;
+                notes-value: detail-notes-value;
+                section-schedule-text: detail-section-schedule-text;
+                section-summary-text: detail-section-summary-text;
+                label-location: label-location;
+                label-area: label-area;
+                label-plants-count: label-count;
+                empty-state-text: detail-empty-state-text;
+                has-detail: detail-has-detail;
+                schedule-lines: detail-schedule-lines;
+                go-back => { detail-go-back(); }
             }
 
             // ------- Cultures -------
