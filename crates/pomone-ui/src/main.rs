@@ -17,13 +17,13 @@ use pomone_app::{
     get_planting_detail, list_crops, list_events_in_range, list_family_options,
     list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
     list_plantings, list_strata_options, list_strata_rows, list_varieties_for_crop,
-    list_variety_options, list_yearly_harvests_for_planting, parse_id, parse_iso_date, services,
-    App, AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind,
-    CropInput, CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput,
-    LocationKindOption, LocationListItem, LocationOption, ParentLocationOption,
-    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow, StrataInput, StrataOption,
-    StrataRow as AppStrataRow, VarietyInput, VarietyOption, VarietyProfileKind,
-    VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
+    list_variety_options, list_yearly_harvests_for_planting, parse_id, services, App, AppConfig,
+    AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput,
+    CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption,
+    LocationListItem, LocationOption, ParentLocationOption, PlantingDetail as AppPlantingDetail,
+    PlantingRow as AppPlantingRow, StrataInput, StrataOption, StrataRow as AppStrataRow,
+    VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
+    YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{LocationId, PlantingId, PruningSeason, VarietyId};
 use rust_decimal::Decimal;
@@ -205,13 +205,9 @@ fn main() -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    let i18n = s.app.i18n();
-                    let mut args = FluentArgs::new();
-                    args.set("message", e.to_string());
-                    window.set_status_text(SharedString::from(
-                        i18n.t_args("status-planting-failed", &args),
-                    ));
-                    window.set_status_is_error(true);
+                    let (text, is_err) = render_form_error(s.app.i18n(), e);
+                    window.set_status_text(text);
+                    window.set_status_is_error(is_err);
                 }
             }
         });
@@ -280,13 +276,9 @@ fn main() -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    let i18n = s.app.i18n();
-                    let mut args = FluentArgs::new();
-                    args.set("message", e.to_string());
-                    window.set_status_text(SharedString::from(
-                        i18n.t_args("status-planting-failed", &args),
-                    ));
-                    window.set_status_is_error(true);
+                    let (text, is_err) = render_form_error(s.app.i18n(), e);
+                    window.set_status_text(text);
+                    window.set_status_is_error(is_err);
                 }
             }
         });
@@ -330,13 +322,9 @@ fn main() -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    let i18n = s.app.i18n();
-                    let mut args = FluentArgs::new();
-                    args.set("message", e.to_string());
-                    window.set_status_text(SharedString::from(
-                        i18n.t_args("status-planting-failed", &args),
-                    ));
-                    window.set_status_is_error(true);
+                    let (text, is_err) = render_form_error(s.app.i18n(), e);
+                    window.set_status_text(text);
+                    window.set_status_is_error(is_err);
                 }
             }
         });
@@ -384,13 +372,9 @@ fn main() -> Result<()> {
                     refresh_counts(&window, &s.app, &s.runtime);
                 }
                 Err(e) => {
-                    let i18n = s.app.i18n();
-                    let mut args = FluentArgs::new();
-                    args.set("message", e.to_string());
-                    window.set_strata_status_text(SharedString::from(
-                        i18n.t_args("status-planting-failed", &args),
-                    ));
-                    window.set_strata_status_is_error(true);
+                    let (text, is_err) = render_form_error(s.app.i18n(), e);
+                    window.set_strata_status_text(text);
+                    window.set_strata_status_is_error(is_err);
                 }
             }
         });
@@ -419,13 +403,9 @@ fn main() -> Result<()> {
                     refresh_counts(&window, &s.app, &s.runtime);
                 }
                 Err(e) => {
-                    let i18n = s.app.i18n();
-                    let mut args = FluentArgs::new();
-                    args.set("message", e.to_string());
-                    window.set_strata_status_text(SharedString::from(
-                        i18n.t_args("status-planting-failed", &args),
-                    ));
-                    window.set_strata_status_is_error(true);
+                    let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
+                    window.set_strata_status_text(text);
+                    window.set_strata_status_is_error(is_err);
                 }
             }
         });
@@ -481,13 +461,9 @@ fn main() -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    let i18n = s.app.i18n();
-                    let mut args = FluentArgs::new();
-                    args.set("message", e.to_string());
-                    window.set_harvest_status_text(SharedString::from(
-                        i18n.t_args("status-planting-failed", &args),
-                    ));
-                    window.set_harvest_status_is_error(true);
+                    let (text, is_err) = render_form_error(s.app.i18n(), e);
+                    window.set_harvest_status_text(text);
+                    window.set_harvest_status_is_error(is_err);
                 }
             }
         });
@@ -616,13 +592,9 @@ fn main() -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    let i18n = s.app.i18n();
-                    let mut args = FluentArgs::new();
-                    args.set("message", e.to_string());
-                    window.set_status_text(SharedString::from(
-                        i18n.t_args("status-planting-failed", &args),
-                    ));
-                    window.set_status_is_error(true);
+                    let (text, is_err) = render_form_error(s.app.i18n(), e);
+                    window.set_status_text(text);
+                    window.set_status_is_error(is_err);
                 }
             }
         });
@@ -736,6 +708,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_placeholder_area(SharedString::from(i18n.t("placeholder-area")));
     window.set_placeholder_count(SharedString::from(i18n.t("placeholder-count")));
     window.set_create_button_text(SharedString::from(i18n.t("button-create-planting")));
+    window.set_plants_suffix(SharedString::from(i18n.t("plants-suffix")));
 
     // Cultures page
     window.set_cultures_title_text(SharedString::from(i18n.t("title-cultures")));
@@ -944,30 +917,33 @@ fn to_slint_row(row: AppPlantingRow) -> SlintPlantingRow {
 
 /// Read the form fields, validate them, build typed IDs, and call the right
 /// service depending on whether the picked variety is annual or perennial.
-fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
+/// Client-side validation surfaces localized messages; service-side errors
+/// pass through unchanged.
+fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
     let variety_idx = i32_to_usize(window.get_variety_index());
     let location_idx = i32_to_usize(window.get_location_index());
     let variety_id_str = state
         .variety_ids
         .get(variety_idx)
-        .ok_or_else(|| AppError::Inconsistent("no variety selected".to_owned()))?;
+        .ok_or_else(|| FormError::Service(AppError::Inconsistent("no variety selected".into())))?;
     let location_id_str = state
         .location_ids
         .get(location_idx)
-        .ok_or_else(|| AppError::Inconsistent("no location selected".to_owned()))?;
+        .ok_or_else(|| FormError::Service(AppError::Inconsistent("no location selected".into())))?;
     let is_annual = state
         .variety_is_annuals_plantings
         .get(variety_idx)
         .copied()
         .unwrap_or(true);
 
-    let variety_id: VarietyId = parse_id(variety_id_str)?;
-    let location_id: LocationId = parse_id(location_id_str)?;
-    let area_m2 = parse_decimal(&window.get_area_text(), "area")?;
-    let plants_count = parse_count(&window.get_count_text())?;
+    let variety_id: VarietyId = parse_id(variety_id_str).map_err(FormError::Service)?;
+    let location_id: LocationId = parse_id(location_id_str).map_err(FormError::Service)?;
+    let area_m2 = validate_positive_decimal(&window.get_area_text(), i18n)?;
+    let plants_count = validate_positive_count(&window.get_count_text(), i18n)?;
 
     if is_annual {
-        let sown_on = parse_iso_date(&window.get_sown_on_text())?;
+        let sown_on = validate_iso_date(&window.get_sown_on_text(), i18n)?;
         state.runtime.block_on(async {
             services::create_annual_planting_from_sowing(
                 state.app.repo(),
@@ -981,14 +957,14 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), A
             )
             .await
             .map(|_| ())
-        })
+        })?;
     } else {
-        let established_on = parse_iso_date(&window.get_established_on_text())?;
+        let established_on = validate_iso_date(&window.get_established_on_text(), i18n)?;
         let removal_text = window.get_removal_on_text();
         let expected_removal_on = if removal_text.trim().is_empty() {
             None
         } else {
-            Some(parse_iso_date(&removal_text)?)
+            Some(validate_iso_date(&removal_text, i18n)?)
         };
         state.runtime.block_on(async {
             services::create_perennial_planting(
@@ -1004,19 +980,9 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), A
             )
             .await
             .map(|_| ())
-        })
+        })?;
     }
-}
-
-fn parse_decimal(s: &str, field: &'static str) -> Result<Decimal, AppError> {
-    Decimal::from_str(s.trim())
-        .map_err(|e| AppError::Inconsistent(format!("invalid {field} '{s}': {e}")))
-}
-
-fn parse_count(s: &str) -> Result<u32, AppError> {
-    s.trim()
-        .parse::<u32>()
-        .map_err(|e| AppError::Inconsistent(format!("invalid plant count '{s}': {e}")))
+    Ok(())
 }
 
 fn parse_u16(s: &str, field: &'static str) -> Result<u16, AppError> {
@@ -1166,73 +1132,87 @@ fn pruning_from_index(idx: i32) -> Result<PruningSeason, AppError> {
     }
 }
 
-fn try_create_crop(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
+fn try_create_crop(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
     let family_idx = i32_to_usize(window.get_family_index());
     let strata_idx = i32_to_usize(window.get_strata_index());
     let family_id_str = state
         .family_ids
         .get(family_idx)
-        .ok_or_else(|| AppError::Inconsistent("no family selected".to_owned()))?
+        .ok_or_else(|| FormError::Service(AppError::Inconsistent("no family selected".into())))?
         .clone();
     let strata_id_str = state
         .strata_ids
         .get(strata_idx)
-        .ok_or_else(|| AppError::Inconsistent("no strata selected".to_owned()))?
+        .ok_or_else(|| FormError::Service(AppError::Inconsistent("no strata selected".into())))?
         .clone();
-    let name = window.get_new_crop_name().to_string();
+    let name = validate_required_name(&window.get_new_crop_name(), i18n)?;
     let latin_name = optional_text(&window.get_new_crop_latin());
-    let lifespan_kind = lifespan_kind_from_index(window.get_new_crop_lifespan_index())?;
-    let pruning_season = pruning_from_index(window.get_new_crop_pruning_index())?;
+    let lifespan_kind = lifespan_kind_from_index(window.get_new_crop_lifespan_index())
+        .map_err(FormError::Service)?;
+    let pruning_season =
+        pruning_from_index(window.get_new_crop_pruning_index()).map_err(FormError::Service)?;
     // Only parse the pluriannual fields when they're actually needed — leaves
     // pristine defaults for the Annual case and gives clearer errors for the
     // other two.
     let (lifespan_years, years_to_first_yield) = match lifespan_kind {
         LifespanKind::Annual => (0, 0),
         LifespanKind::PluriannualSingleCycle => (
-            parse_u8(&window.get_new_crop_lifespan_years(), "lifespan years")?,
+            parse_u8(&window.get_new_crop_lifespan_years(), "lifespan years")
+                .map_err(FormError::Service)?,
             0,
         ),
         LifespanKind::PluriannualRecurring => (
-            parse_u8(&window.get_new_crop_lifespan_years(), "lifespan years")?,
+            parse_u8(&window.get_new_crop_lifespan_years(), "lifespan years")
+                .map_err(FormError::Service)?,
             parse_u8(
                 &window.get_new_crop_years_to_first_yield(),
                 "years to first yield",
-            )?,
+            )
+            .map_err(FormError::Service)?,
         ),
     };
 
-    state.runtime.block_on(async {
-        create_crop(
-            state.app.repo(),
-            CropInput {
-                family_id_str,
-                strata_id_str,
-                name,
-                latin_name,
-                lifespan_kind,
-                lifespan_years,
-                years_to_first_yield,
-                pruning_season,
-            },
-        )
-        .await
-        .map(|_| ())
-    })
+    state
+        .runtime
+        .block_on(async {
+            create_crop(
+                state.app.repo(),
+                CropInput {
+                    family_id_str,
+                    strata_id_str,
+                    name,
+                    latin_name,
+                    lifespan_kind,
+                    lifespan_years,
+                    years_to_first_yield,
+                    pruning_season,
+                },
+            )
+            .await
+            .map(|_| ())
+        })
+        .map_err(FormError::Service)
 }
 
-fn try_create_variety(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
+fn try_create_variety(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
     let idx = window.get_selected_crop_index();
     if idx < 0 {
-        return Err(AppError::Inconsistent(
+        return Err(FormError::Service(AppError::Inconsistent(
             "no crop selected for variety create".into(),
-        ));
+        )));
     }
     let crop_id_str = state
         .crop_ids
         .get(i32_to_usize(idx))
-        .ok_or_else(|| AppError::Inconsistent("selected crop index out of range".into()))?
+        .ok_or_else(|| {
+            FormError::Service(AppError::Inconsistent(
+                "selected crop index out of range".into(),
+            ))
+        })?
         .clone();
-    let name = window.get_new_variety_name().to_string();
+    let name = validate_required_name(&window.get_new_variety_name(), i18n)?;
     let description = optional_text(&window.get_new_variety_description());
     let is_annual = window.get_selected_crop_is_annual();
     let profile_kind = if is_annual {
@@ -1258,27 +1238,36 @@ fn try_create_variety(window: &MainWindow, state: &mut UiState) -> Result<(), Ap
         expected_yield_kg_per_plant: None,
     };
     if is_annual {
-        input.days_to_transplant = parse_optional_u16(&window.get_new_variety_dtt(), "DTT")?;
-        input.days_to_maturity = parse_u16(&window.get_new_variety_dtm(), "DTM")?;
-        input.harvest_window_days = parse_u16(&window.get_new_variety_window(), "harvest window")?;
+        input.days_to_transplant =
+            parse_optional_u16(&window.get_new_variety_dtt(), "DTT").map_err(FormError::Service)?;
+        input.days_to_maturity =
+            parse_u16(&window.get_new_variety_dtm(), "DTM").map_err(FormError::Service)?;
+        input.harvest_window_days = parse_u16(&window.get_new_variety_window(), "harvest window")
+            .map_err(FormError::Service)?;
     } else {
         input.bud_break_doy =
-            parse_optional_u16(&window.get_new_variety_bud_break_doy(), "bud break DOY")?;
+            parse_optional_u16(&window.get_new_variety_bud_break_doy(), "bud break DOY")
+                .map_err(FormError::Service)?;
         input.flowering_doy =
-            parse_optional_u16(&window.get_new_variety_flowering_doy(), "flowering DOY")?;
+            parse_optional_u16(&window.get_new_variety_flowering_doy(), "flowering DOY")
+                .map_err(FormError::Service)?;
         input.harvest_start_doy = parse_u16(
             &window.get_new_variety_harvest_start_doy(),
             "harvest start DOY",
-        )?;
+        )
+        .map_err(FormError::Service)?;
         input.harvest_end_doy =
-            parse_u16(&window.get_new_variety_harvest_end_doy(), "harvest end DOY")?;
+            parse_u16(&window.get_new_variety_harvest_end_doy(), "harvest end DOY")
+                .map_err(FormError::Service)?;
         input.expected_yield_kg_per_plant =
-            parse_optional_decimal(&window.get_new_variety_yield_kg(), "yield")?;
+            parse_optional_decimal(&window.get_new_variety_yield_kg(), "yield")
+                .map_err(FormError::Service)?;
     }
 
     state
         .runtime
         .block_on(async { create_variety(state.app.repo(), input).await.map(|_| ()) })
+        .map_err(FormError::Service)
 }
 
 fn parse_u8(s: &str, field: &'static str) -> Result<u8, AppError> {
@@ -1363,43 +1352,152 @@ fn location_to_slint(item: LocationListItem) -> SlintLocationItem {
     }
 }
 
-fn try_create_location(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
+fn try_create_location(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
     let kind_idx = i32_to_usize(window.get_loc_kind_index());
     let parent_idx = i32_to_usize(window.get_loc_parent_index());
     let kind_id_str = state
         .location_kind_ids
         .get(kind_idx)
-        .ok_or_else(|| AppError::Inconsistent("no location kind selected".to_owned()))?
+        .ok_or_else(|| {
+            FormError::Service(AppError::Inconsistent("no location kind selected".into()))
+        })?
         .clone();
     let parent_id_str = state
         .parent_location_ids
         .get(parent_idx)
         .cloned()
         .unwrap_or_default();
-    let name = window.get_new_loc_name().to_string();
-    let length_m = parse_decimal(&window.get_new_loc_length(), "length")?;
-    let width_m = parse_decimal(&window.get_new_loc_width(), "width")?;
+    let name = validate_required_name(&window.get_new_loc_name(), i18n)?;
+    let length_m = validate_positive_decimal(&window.get_new_loc_length(), i18n)?;
+    let width_m = validate_positive_decimal(&window.get_new_loc_width(), i18n)?;
     let notes = optional_text(&window.get_new_loc_notes());
 
-    state.runtime.block_on(async {
-        create_location(
-            state.app.repo(),
-            LocationInput {
-                kind_id_str,
-                name,
-                length_m,
-                width_m,
-                parent_id_str,
-                notes,
-            },
-        )
-        .await
-        .map(|_| ())
-    })
+    state
+        .runtime
+        .block_on(async {
+            create_location(
+                state.app.repo(),
+                LocationInput {
+                    kind_id_str,
+                    name,
+                    length_m,
+                    width_m,
+                    parent_id_str,
+                    notes,
+                },
+            )
+            .await
+            .map(|_| ())
+        })
+        .map_err(FormError::Service)
 }
 
 fn today_iso() -> String {
     Local::now().date_naive().format("%Y-%m-%d").to_string()
+}
+
+/// Either a localized client-validation message or a service error that
+/// still needs translation. Lets create handlers branch on prefix
+/// ("Validation:" vs "Creation failed:") instead of mixing the two.
+enum FormError {
+    /// Already-localized text from a pre-submit validator.
+    Validation(String),
+    /// Service-level error; rendered via the existing `status-…-failed`
+    /// template that prefixes "Échec :" / "Failed:".
+    Service(AppError),
+}
+
+impl From<AppError> for FormError {
+    fn from(e: AppError) -> Self {
+        Self::Service(e)
+    }
+}
+
+/// Trim and require a non-empty string. Returns the trimmed copy on success
+/// or a localized "name required" message on failure.
+fn validate_required_name(value: &str, i18n: &pomone_app::I18n) -> Result<String, FormError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        Err(FormError::Validation(i18n.t("error-name-required")))
+    } else {
+        Ok(trimmed.to_owned())
+    }
+}
+
+/// Parse a `YYYY-MM-DD` date. Returns a localized "invalid date" message on
+/// any parse failure (empty string included).
+fn validate_iso_date(value: &str, i18n: &pomone_app::I18n) -> Result<NaiveDate, FormError> {
+    NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d")
+        .map_err(|_| FormError::Validation(i18n.t("error-date-invalid")))
+}
+
+/// Parse a strictly-positive decimal. Empty or zero/negative input yields a
+/// localized "positive required" message.
+fn validate_positive_decimal(value: &str, i18n: &pomone_app::I18n) -> Result<Decimal, FormError> {
+    let parsed = Decimal::from_str(value.trim())
+        .map_err(|_| FormError::Validation(i18n.t("error-number-invalid")))?;
+    if parsed <= Decimal::ZERO {
+        return Err(FormError::Validation(i18n.t("error-positive-required")));
+    }
+    Ok(parsed)
+}
+
+/// Parse a strictly-positive `u32` count.
+fn validate_positive_count(value: &str, i18n: &pomone_app::I18n) -> Result<u32, FormError> {
+    let parsed = value
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| FormError::Validation(i18n.t("error-number-invalid")))?;
+    if parsed == 0 {
+        return Err(FormError::Validation(i18n.t("error-positive-required")));
+    }
+    Ok(parsed)
+}
+
+/// Parse a calendar year (required). Anything that doesn't fit `i32` or is
+/// blank gets the localized "year required" message.
+fn validate_year(value: &str, i18n: &pomone_app::I18n) -> Result<i32, FormError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(FormError::Validation(i18n.t("error-year-required")));
+    }
+    trimmed
+        .parse::<i32>()
+        .map_err(|_| FormError::Validation(i18n.t("error-year-required")))
+}
+
+/// Parse an optional decimal (empty → `None`). Errors are localized.
+fn validate_optional_decimal(
+    value: &str,
+    i18n: &pomone_app::I18n,
+) -> Result<Option<Decimal>, FormError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    Decimal::from_str(trimmed)
+        .map(Some)
+        .map_err(|_| FormError::Validation(i18n.t("error-number-invalid")))
+}
+
+/// Push a `FormError` onto a status banner with the appropriate Fluent
+/// template (validation errors get the no-prefix template; service errors
+/// keep the legacy "Échec :" prefix).
+fn render_form_error(i18n: &pomone_app::I18n, err: FormError) -> (SharedString, bool) {
+    let msg = match err {
+        FormError::Validation(text) => {
+            let mut args = FluentArgs::new();
+            args.set("message", text);
+            i18n.t_args("status-validation-failed", &args)
+        }
+        FormError::Service(app_err) => {
+            let mut args = FluentArgs::new();
+            args.set("message", app_err.to_string());
+            i18n.t_args("status-planting-failed", &args)
+        }
+    };
+    (SharedString::from(msg), true)
 }
 
 fn refresh_strata(window: &MainWindow, state: &mut UiState) -> Result<()> {
@@ -1422,27 +1520,40 @@ fn refresh_strata(window: &MainWindow, state: &mut UiState) -> Result<()> {
     Ok(())
 }
 
-fn try_create_strata(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
-    let name = window.get_new_strata_name().to_string();
+fn try_create_strata(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
+    let name = validate_required_name(&window.get_new_strata_name(), i18n)?;
     let description = optional_text(&window.get_new_strata_description());
-    let min_height = parse_optional_decimal(&window.get_new_strata_min_height(), "min height")?;
-    let max_height = parse_optional_decimal(&window.get_new_strata_max_height(), "max height")?;
-    let sort_order = parse_i32(&window.get_new_strata_sort_order(), "sort order")?;
+    let min_height = validate_optional_decimal(&window.get_new_strata_min_height(), i18n)?;
+    let max_height = validate_optional_decimal(&window.get_new_strata_max_height(), i18n)?;
+    let sort_order =
+        parse_i32(&window.get_new_strata_sort_order(), "sort order").map_err(FormError::Service)?;
 
-    state.runtime.block_on(async {
-        create_strata(
-            state.app.repo(),
-            StrataInput {
-                name,
-                description,
-                min_height_m: min_height,
-                max_height_m: max_height,
-                sort_order,
-            },
-        )
-        .await
-        .map(|_| ())
-    })
+    // Surface a friendly range message client-side; the domain would also
+    // reject this but its error string is technical.
+    if let (Some(min), Some(max)) = (min_height, max_height) {
+        if min > max {
+            return Err(FormError::Validation(i18n.t("error-height-range")));
+        }
+    }
+
+    state
+        .runtime
+        .block_on(async {
+            create_strata(
+                state.app.repo(),
+                StrataInput {
+                    name,
+                    description,
+                    min_height_m: min_height,
+                    max_height_m: max_height,
+                    sort_order,
+                },
+            )
+            .await
+            .map(|_| ())
+        })
+        .map_err(FormError::Service)
 }
 
 /// Load one planting's detail, push it to the UI and switch to the detail
@@ -1475,30 +1586,35 @@ fn open_planting_detail(
 /// `record_yearly_harvest` service. The form expects a year (required) and
 /// optional expected/actual kg + notes; either yield being set is enough
 /// to make the entry useful.
-fn try_record_harvest(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
+fn try_record_harvest(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
     if state.detail_planting_id.is_empty() {
-        return Err(AppError::Inconsistent(
+        return Err(FormError::Service(AppError::Inconsistent(
             "no planting selected for harvest record".into(),
-        ));
+        )));
     }
-    let planting_id: PlantingId = parse_id(&state.detail_planting_id)?;
-    let year = parse_i32(&window.get_new_harvest_year(), "year")?;
-    let expected = parse_optional_decimal(&window.get_new_harvest_expected(), "expected yield")?;
-    let actual = parse_optional_decimal(&window.get_new_harvest_actual(), "actual yield")?;
+    let planting_id: PlantingId =
+        parse_id(&state.detail_planting_id).map_err(FormError::Service)?;
+    let year = validate_year(&window.get_new_harvest_year(), i18n)?;
+    let expected = validate_optional_decimal(&window.get_new_harvest_expected(), i18n)?;
+    let actual = validate_optional_decimal(&window.get_new_harvest_actual(), i18n)?;
     let notes = optional_text(&window.get_new_harvest_notes());
 
-    state.runtime.block_on(async {
-        services::record_yearly_harvest(
-            state.app.repo(),
-            planting_id,
-            year,
-            expected,
-            actual,
-            notes,
-        )
-        .await
-        .map(|_| ())
-    })
+    state
+        .runtime
+        .block_on(async {
+            services::record_yearly_harvest(
+                state.app.repo(),
+                planting_id,
+                year,
+                expected,
+                actual,
+                notes,
+            )
+            .await
+            .map(|_| ())
+        })
+        .map_err(FormError::Service)
 }
 
 fn parse_i32(s: &str, field: &'static str) -> Result<i32, AppError> {

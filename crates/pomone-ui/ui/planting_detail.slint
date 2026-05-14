@@ -6,6 +6,7 @@
 // card with location, area, plants count, optional name and notes.
 
 import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
 
 export struct DetailLine {
     label: string,
@@ -75,7 +76,11 @@ export component PlantingDetailPage inherits Rectangle {
     callback go-back();
     callback record-harvest();
 
-    VerticalLayout {
+    // The detail page has up to three stacked Cards (schedule, summary,
+    // yearly-harvest) and can overflow on smaller windows — wrap the body
+    // in a ScrollView so the content stays reachable.
+    ScrollView {
+        VerticalLayout {
         padding: Theme.space-2xl;
         spacing: Theme.space-xl;
 
@@ -412,6 +417,7 @@ export component PlantingDetailPage inherits Rectangle {
                     }
                 }
             }
+        }
         }
     }
 }
