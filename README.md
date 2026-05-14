@@ -7,6 +7,9 @@ avec un modèle de données refondu pour prendre en charge dès le départ les
 cultures **annuelles** et **pluriannuelles** : maraîchage, petits fruits, vergers,
 agroforesterie.
 
+- **Site du projet** : <https://guycorbaz.github.io/pomone>
+- **Documentation technique (PDF)** : [pomone.pdf](https://github.com/guycorbaz/pomone/releases/download/docs-latest/pomone.pdf) — rolling release, recompilée à chaque push sur `main`.
+
 ## État du projet
 
 **Phase 6 — UI en cours.** Le socle est en place : modèle métier (`pomone-domain`),
@@ -14,7 +17,7 @@ persistence SQLite et MariaDB derrière un trait `Repository` (`pomone-db`), ser
 applicatifs (`pomone-app`), i18n fr/en. L'UI Slint expose déjà les écrans Plantings,
 Cultures + Variétés et Locations ; l'écran Calendrier reste à faire.
 
-Voir [docs/architecture.md](docs/architecture.md) pour la feuille de route détaillée.
+Voir la [feuille de route détaillée](https://guycorbaz.github.io/pomone/roadmap) sur le site.
 
 ## Tech
 
@@ -37,7 +40,8 @@ pomone/
 ├── migrations/
 │   ├── sqlite/
 │   └── mariadb/
-└── docs/
+├── doc-latex/           # sources LaTeX → PDF (release docs-latest)
+└── docs/                # site GitHub Pages (Jekyll + Just the Docs)
 ```
 
 ## Build

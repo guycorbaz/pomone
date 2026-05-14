@@ -1,0 +1,37 @@
+\section{Architecture}
+
+\subsection{Principes directeurs}
+
+\begin{enumerate}
+  \item \textbf{Logique métier pure dans \texttt{pomone-domain}} : zéro I/O, 100\,\% testable. Les types qui modélisent une plantation, un cycle, une récolte ne dépendent ni d'un SGBD ni de Slint.
+  \item \textbf{Abstraction du SGBD via un trait \texttt{Repository}} dans \texttt{pomone-db} : SQLite et MariaDB partagent la même interface Rust. Les particularités SQL vivent dans les migrations et dans les implémentations concrètes, jamais dans la logique métier.
+  \item \textbf{Pas de logique métier dans les triggers SQL} : tout calcul de dates, de rendements, de cycles est fait en Rust et testé. Les triggers Qrop ont été abandonnés volontairement pour éviter la duplication SQLite/MariaDB.
+  \item \textbf{L'UI \texttt{pomone-ui} (Slint) ne contient pas de règles métier} : elle appelle uniquement des services exposés par \texttt{pomone-app}.
+\end{enumerate}
+
+\subsection{Crates}
+
+\begin{description}
+  \item[\texttt{pomone-domain}] Types métier purs (\texttt{Crop}, \texttt{Variety}, \texttt{Planting}, \texttt{Location}, \texttt{Strata}, \texttt{YearlyHarvest}\dots), validations, calculs de dates. Pas d'I/O, pas de dépendances I/O.
+  \item[\texttt{pomone-db}] Trait \texttt{Repository} + implémentations concrètes (\texttt{sqlite/}, \texttt{mariadb/}), schémas et migrations (\texttt{migrations/sqlite/}, \texttt{migrations/mariadb/}), codec entre types domaine et types SQL.
+  \item[\texttt{pomone-app}] Services applicatifs (\texttt{services.rs}), vues pour l'UI (\texttt{plantings\_view.rs}, \texttt{cultures\_view.rs}, \texttt{locations\_view.rs}), configuration, gestion d'état, i18n.
+  \item[\texttt{pomone-ui}] Binaire desktop Slint (\texttt{pomone}). Écrans : Plantings, Cultures, Locations, Calendrier (en cours).
+  \item[\texttt{pomone-cli}] Binaire admin / debug (\texttt{pomone-cli}). Utilitaires hors UI.
+\end{description}
+
+\subsection{Flux applicatif}
+
+\begin{lstlisting}
+   pomone-ui  (Slint)
+       |
+       v   appelle des services (use cases)
+   pomone-app (services, etat applicatif, i18n)
+       |
+       v   Repository trait
+   pomone-db  (sqlx — SQLite / MariaDB)
+       |
+       v   types
+   pomone-domain (types purs, regles metier)
+\end{lstlisting}
+
+Le flux est strictement descendant : un écran Slint ne touche jamais à \texttt{sqlx} ni au schéma SQL ; un service \texttt{pomone-app} ne dépend que du trait \texttt{Repository} (pas de l'implémentation choisie au démarrage).

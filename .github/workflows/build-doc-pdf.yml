@@ -1,0 +1,52 @@
+name: Build documentation PDF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'doc-latex/**'
+      - '.github/workflows/build-doc-pdf.yml'
+  pull_request:
+    paths:
+      - 'doc-latex/**'
+      - '.github/workflows/build-doc-pdf.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Compile LaTeX
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile pomone.tex
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: doc-latex
+          root_file: pomone.tex
+          latexmk_use_xelatex: false
+          latexmk_shell_escape: false
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pomone-doc-pdf
+          path: doc-latex/pomone.pdf
+          if-no-files-found: error
+
+      - name: Publish rolling docs-latest release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: docs-latest
+          name: Documentation (rolling)
+          body: |
+            Documentation technique de Pomone, mise à jour automatiquement à chaque push sur `main` touchant `doc-latex/`.
+
+            Build : commit `${{ github.sha }}`.
+          files: doc-latex/pomone.pdf
+          prerelease: true
+          make_latest: false

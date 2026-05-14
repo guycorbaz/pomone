@@ -1,0 +1,38 @@
+\section{Persistance}
+
+\subsection{Le trait \texttt{Repository}}
+
+\texttt{pomone-db} expose un trait \texttt{Repository} qui couvre toutes les opérations dont les services \texttt{pomone-app} ont besoin : CRUD sur les \texttt{Crop}, \texttt{Variety}, \texttt{Planting}, \texttt{Location}, \texttt{Strata}, \texttt{Family}, \texttt{YearlyHarvest}, plus quelques requêtes agrégées.
+
+Deux implémentations concrètes :
+
+\begin{description}
+  \item[SQLite] Cible mono-utilisateur, fichier local, idéal pour le maraîchage en exploitation individuelle. Migrations dans \texttt{migrations/sqlite/}.
+  \item[MariaDB] Cible multi-utilisateurs / serveur, pour les fermes collectives ou les déploiements partagés. Migrations dans \texttt{migrations/mariadb/}.
+\end{description}
+
+\subsection{Pourquoi deux backends}
+
+Une partie du public visé n'a aucun serveur à disposition (SQLite suffit, base = fichier). Une autre partie veut partager les données entre plusieurs postes (MariaDB). Plutôt que d'imposer une seule contrainte, le trait \texttt{Repository} permet de servir les deux profils sans dupliquer la logique métier.
+
+\subsection{Pas de logique dans les triggers}
+
+Tentation classique en SQL : déclencher des calculs de dates ou de cycles dans des triggers. Pomone refuse cette approche pour trois raisons :
+
+\begin{enumerate}
+  \item Les triggers SQLite et MariaDB ont des comportements et des syntaxes différents : maintenir deux versions diverge vite.
+  \item La logique métier en triggers est difficile à tester unitairement.
+  \item La logique métier en Rust est typée, testable, et profite des newtypes du domaine.
+\end{enumerate}
+
+\subsection{Tests cross-backend}
+
+Le fichier \texttt{cross\_backend\_tests.rs} paramètre les mêmes scénarios fonctionnels sur les deux implémentations. C'est ce qui garantit la parité de comportement.
+
+\subsection{Migrations}
+
+Les migrations sont versionnées (\texttt{0001\_initial.sql}, etc.) et appliquées au démarrage. Toute évolution de schéma passe par une nouvelle migration numérotée, jamais par une modification rétroactive d'une migration existante.
+
+\subsection{Données de seed}
+
+Les seeds (familles botaniques par défaut, strates agroforestières standards, jeu de données de démo) vivent dans \texttt{pomone-db/seed.rs}. Le seed de \emph{démo} a été retiré du runtime : il reste comme \emph{helper de test} pour reproduire un état réaliste dans les tests d'intégration.
