@@ -13,6 +13,7 @@ import { LocationsPage, LocationItem } from "locations.slint";
 import { CalendarPage, CalendarDay, CalendarEvent } from "calendar.slint";
 import { PlantingDetailPage, DetailLine, YearlyHarvestRow } from "planting_detail.slint";
 import { StrataPage, StrataItem } from "strata.slint";
+import { SettingsPage } from "settings.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
 export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, DetailLine, YearlyHarvestRow, StrataItem }
@@ -80,6 +81,7 @@ export component MainWindow inherits Window {
     in property <string> nav-locations-text;
     in property <string> nav-calendar-text;
     in property <string> nav-strata-text;
+    in property <string> nav-settings-text;
 
     callback toggle-language();
     callback navigate-home();
@@ -88,6 +90,7 @@ export component MainWindow inherits Window {
     callback navigate-locations();
     callback navigate-calendar();
     callback navigate-strata();
+    callback navigate-settings();
 
     // ------- Plantings page state forwarded to PlantingsPage -------
     in property <string> plantings-title-text;
@@ -318,6 +321,43 @@ export component MainWindow inherits Window {
     callback create-strata();
     callback delete-strata(string);
 
+    // ------- Settings page state forwarded to SettingsPage -------
+    in property <string> settings-title-text;
+    in property <string> settings-current-section;
+    in property <string> settings-current-label;
+    in property <string> settings-current-value;
+    in property <string> settings-edit-section;
+    in property <string> settings-backend-kind-label;
+    in property <[string]> settings-backend-kind-labels;
+    in-out property <int> settings-backend-kind-index: 0;
+    in property <string> settings-sqlite-path-label;
+    in property <string> settings-sqlite-path-placeholder;
+    in-out property <string> settings-sqlite-path;
+    in property <string> settings-mariadb-host-label;
+    in property <string> settings-mariadb-host-placeholder;
+    in-out property <string> settings-mariadb-host;
+    in property <string> settings-mariadb-port-label;
+    in property <string> settings-mariadb-port-placeholder;
+    in-out property <string> settings-mariadb-port: "3306";
+    in property <string> settings-mariadb-user-label;
+    in property <string> settings-mariadb-user-placeholder;
+    in-out property <string> settings-mariadb-user;
+    in property <string> settings-mariadb-password-label;
+    in property <string> settings-mariadb-password-placeholder;
+    in-out property <string> settings-mariadb-password;
+    in property <string> settings-mariadb-database-label;
+    in property <string> settings-mariadb-database-placeholder;
+    in-out property <string> settings-mariadb-database;
+    in property <string> settings-test-button;
+    in property <string> settings-save-button;
+    in property <string> settings-save-migrate-button;
+    in property <string> settings-migrate-warning;
+    in-out property <string> settings-status-text;
+    in property <bool> settings-status-is-error: false;
+    callback settings-test-backend();
+    callback settings-save-backend();
+    callback settings-save-and-migrate();
+
     init => {
         // Claim focus for the global shortcut scope at startup so Ctrl+1..6
         // and calendar arrow keys are picked up before any LineEdit grabs
@@ -361,6 +401,11 @@ export component MainWindow inherits Window {
                     root.navigate-strata();
                     return accept;
                 }
+                if (event.text == "7") {
+                    root.current-page = "settings";
+                    root.navigate-settings();
+                    return accept;
+                }
             }
             // Calendar arrows: Left/Right step prev/next month when on the
             // calendar page (avoids hijacking the keys elsewhere).
@@ -395,6 +440,11 @@ export component MainWindow inherits Window {
         interval: 4s;
         running: root.strata-status-text != "";
         triggered => { root.strata-status-text = ""; }
+    }
+    Timer {
+        interval: 6s;     // give the user a beat longer to read migration reports
+        running: root.settings-status-text != "";
+        triggered => { root.settings-status-text = ""; }
     }
 
     HorizontalLayout {
@@ -466,6 +516,11 @@ export component MainWindow inherits Window {
                     text: nav-strata-text;
                     selected: current-page == "strata";
                     clicked => { current-page = "strata"; navigate-strata(); }
+                }
+                NavButton {
+                    text: nav-settings-text;
+                    selected: current-page == "settings";
+                    clicked => { current-page = "settings"; navigate-settings(); }
                 }
 
                 // Push the language footer to the bottom.
@@ -684,6 +739,45 @@ export component MainWindow inherits Window {
                 create-crop => { create-crop(); }
                 create-variety => { create-variety(); }
                 select-crop(idx) => { select-crop(idx); }
+            }
+
+            // ------- Settings -------
+            if current-page == "settings": SettingsPage {
+                title-text: settings-title-text;
+                current-backend-section: settings-current-section;
+                current-backend-label: settings-current-label;
+                current-backend-value: settings-current-value;
+                edit-section: settings-edit-section;
+                backend-kind-label: settings-backend-kind-label;
+                backend-kind-labels: settings-backend-kind-labels;
+                backend-kind-index <=> settings-backend-kind-index;
+                sqlite-path-label: settings-sqlite-path-label;
+                sqlite-path-placeholder: settings-sqlite-path-placeholder;
+                sqlite-path <=> settings-sqlite-path;
+                mariadb-host-label: settings-mariadb-host-label;
+                mariadb-host-placeholder: settings-mariadb-host-placeholder;
+                mariadb-host <=> settings-mariadb-host;
+                mariadb-port-label: settings-mariadb-port-label;
+                mariadb-port-placeholder: settings-mariadb-port-placeholder;
+                mariadb-port <=> settings-mariadb-port;
+                mariadb-user-label: settings-mariadb-user-label;
+                mariadb-user-placeholder: settings-mariadb-user-placeholder;
+                mariadb-user <=> settings-mariadb-user;
+                mariadb-password-label: settings-mariadb-password-label;
+                mariadb-password-placeholder: settings-mariadb-password-placeholder;
+                mariadb-password <=> settings-mariadb-password;
+                mariadb-database-label: settings-mariadb-database-label;
+                mariadb-database-placeholder: settings-mariadb-database-placeholder;
+                mariadb-database <=> settings-mariadb-database;
+                test-button-text: settings-test-button;
+                save-button-text: settings-save-button;
+                save-migrate-button-text: settings-save-migrate-button;
+                migrate-warning-text: settings-migrate-warning;
+                status-text <=> settings-status-text;
+                status-is-error: settings-status-is-error;
+                test-backend => { settings-test-backend(); }
+                save-backend => { settings-save-backend(); }
+                save-and-migrate => { settings-save-and-migrate(); }
             }
 
             // ------- Strata -------

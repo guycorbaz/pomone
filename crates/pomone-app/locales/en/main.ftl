@@ -163,6 +163,36 @@ event-bud-break-label = Bud break
 event-flowering-glyph = F
 event-flowering-label = Flowering
 
+## Settings screen
+nav-settings = Settings
+title-settings = Settings
+settings-current-section = Active database
+settings-current-label = Backend
+settings-edit-section = Change database
+settings-backend-kind-label = Backend kind
+settings-backend-sqlite = SQLite (local file)
+settings-backend-mariadb = MariaDB / MySQL (remote)
+settings-sqlite-path-label = File path
+settings-sqlite-path-placeholder = /path/to/pomone.sqlite
+settings-mariadb-host-label = Host
+settings-mariadb-host-placeholder = mariadb.example.com
+settings-mariadb-port-label = Port
+settings-mariadb-port-placeholder = 3306
+settings-mariadb-user-label = User
+settings-mariadb-user-placeholder = pomone
+settings-mariadb-password-label = Password
+settings-mariadb-password-placeholder = ••••••••
+settings-mariadb-database-label = Database
+settings-mariadb-database-placeholder = pomone
+settings-button-test = Test connection
+settings-button-save = Save (empty database)
+settings-button-save-migrate = Save + migrate data
+settings-migrate-warning = "Save + migrate" copies every record into the new database before switching. "Save" opens the new database with default seed data only.
+settings-test-ok = Connection successful.
+settings-save-ok = Switched database to: { $backend }
+settings-migrate-ok = Migration done into: { $backend } — { $report }
+settings-report = { $families } families · { $strata } strata · { $kinds } location kinds · { $locations } locations · { $crops } crops · { $varieties } varieties · { $plantings } plantings · { $harvests } harvests
+
 ## Strata screen
 nav-strata = Strata
 title-strata = Strata

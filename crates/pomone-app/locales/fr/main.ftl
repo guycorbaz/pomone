@@ -165,6 +165,36 @@ event-bud-break-label = Débourrement
 event-flowering-glyph = F
 event-flowering-label = Floraison
 
+## Settings screen
+nav-settings = Paramètres
+title-settings = Paramètres
+settings-current-section = Base de données active
+settings-current-label = Backend
+settings-edit-section = Modifier la base de données
+settings-backend-kind-label = Type de base
+settings-backend-sqlite = SQLite (fichier local)
+settings-backend-mariadb = MariaDB / MySQL (distant)
+settings-sqlite-path-label = Chemin du fichier
+settings-sqlite-path-placeholder = /chemin/vers/pomone.sqlite
+settings-mariadb-host-label = Hôte
+settings-mariadb-host-placeholder = mariadb.example.com
+settings-mariadb-port-label = Port
+settings-mariadb-port-placeholder = 3306
+settings-mariadb-user-label = Utilisateur
+settings-mariadb-user-placeholder = pomone
+settings-mariadb-password-label = Mot de passe
+settings-mariadb-password-placeholder = ••••••••
+settings-mariadb-database-label = Base
+settings-mariadb-database-placeholder = pomone
+settings-button-test = Tester la connexion
+settings-button-save = Enregistrer (base vide)
+settings-button-save-migrate = Enregistrer + migrer les données
+settings-migrate-warning = "Enregistrer + migrer" copie toutes les données vers la nouvelle base avant de basculer. "Enregistrer" ouvre la nouvelle base avec uniquement les valeurs par défaut.
+settings-test-ok = Connexion réussie.
+settings-save-ok = Base de données basculée vers : { $backend }
+settings-migrate-ok = Migration terminée vers : { $backend } — { $report }
+settings-report = { $families } familles · { $strata } strates · { $kinds } types de lieux · { $locations } lieux · { $crops } cultures · { $varieties } variétés · { $plantings } plantations · { $harvests } récoltes
+
 ## Strata screen
 nav-strata = Strates
 title-strata = Strates
