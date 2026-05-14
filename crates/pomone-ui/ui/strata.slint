@@ -1,0 +1,240 @@
+// Pomone — Strates (vegetation strata) screen.
+//
+// Left card lists every stratum sorted by `sort_order` (an editable display
+// rank), each row carries a Delete button that's disabled when the stratum
+// is referenced by at least one Crop. Right card is the create form.
+
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit } from "theme.slint";
+import { ListView } from "std-widgets.slint";
+
+export struct StrataItem {
+    id: string,
+    name: string,
+    description: string,
+    height-label: string,
+    sort-order: int,
+    in-use: bool,
+}
+
+component StrataRowView inherits Card {
+    in property <StrataItem> entry;
+    in property <string> delete-text;
+    in property <string> in-use-text;
+    callback delete(string);
+    height: 96px;
+
+    HorizontalLayout {
+        padding: Theme.space-md;
+        spacing: Theme.space-md;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 2px;
+            HorizontalLayout {
+                spacing: Theme.space-md;
+                Text {
+                    text: entry.name;
+                    color: Palette.text-primary;
+                    font-size: Theme.font-size-body;
+                    font-weight: Theme.font-weight-semibold;
+                    horizontal-stretch: 1;
+                }
+                Text {
+                    text: entry.height-label;
+                    color: Palette.text-secondary;
+                    font-size: Theme.font-size-label;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                text: entry.description != "" ? entry.description
+                      : entry.in-use ? in-use-text : "";
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+                wrap: word-wrap;
+            }
+        }
+
+        SecondaryButton {
+            text: delete-text;
+            enabled: !entry.in-use;
+            clicked => { delete(entry.id); }
+        }
+    }
+}
+
+export component StrataPage inherits Rectangle {
+    background: Palette.background;
+
+    in property <string> title-text;
+    in property <string> list-title;
+    in property <string> empty-text;
+    in property <[StrataItem]> strata;
+    in property <string> delete-text;
+    in property <string> in-use-text;
+
+    in property <string> form-section-title;
+    in property <string> label-name;
+    in property <string> placeholder-name;
+    in property <string> label-description;
+    in property <string> placeholder-description;
+    in property <string> label-height-min;
+    in property <string> placeholder-height-min;
+    in property <string> label-height-max;
+    in property <string> placeholder-height-max;
+    in property <string> label-sort-order;
+    in property <string> placeholder-sort-order;
+    in property <string> create-button-text;
+    in property <string> status-text;
+    in property <bool> status-is-error: false;
+
+    in-out property <string> new-strata-name;
+    in-out property <string> new-strata-description;
+    in-out property <string> new-strata-min-height;
+    in-out property <string> new-strata-max-height;
+    in-out property <string> new-strata-sort-order: "50";
+
+    callback create-strata();
+    callback delete-strata(string);
+
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-xl;
+
+        Text {
+            text: title-text;
+            color: Palette.primary;
+            font-size: Theme.font-size-h1;
+            font-weight: Theme.font-weight-bold;
+        }
+
+        HorizontalLayout {
+            spacing: Theme.space-xl;
+            vertical-stretch: 1;
+
+            // -------- List --------
+            Card {
+                horizontal-stretch: 2;
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: list-title; }
+
+                    if strata.length == 0: Text {
+                        text: empty-text;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-body;
+                        horizontal-alignment: center;
+                    }
+                    if strata.length > 0: list-area := Rectangle {
+                        min-height: 200px;
+                        preferred-height: 360px;
+                        vertical-stretch: 1;
+                        ListView {
+                            for item in strata: StrataRowView {
+                                entry: item;
+                                delete-text: delete-text;
+                                in-use-text: in-use-text;
+                                width: list-area.width;
+                                delete(id) => { delete-strata(id); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -------- Form --------
+            Card {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: form-section-title; }
+
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-name;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-strata-name;
+                            placeholder-text: placeholder-name;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-description;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-strata-description;
+                            placeholder-text: placeholder-description;
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-height-min;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedLineEdit {
+                                text <=> new-strata-min-height;
+                                placeholder-text: placeholder-height-min;
+                                input-type: decimal;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: label-height-max;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedLineEdit {
+                                text <=> new-strata-max-height;
+                                placeholder-text: placeholder-height-max;
+                                input-type: decimal;
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: label-sort-order;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-strata-sort-order;
+                            placeholder-text: placeholder-sort-order;
+                            input-type: number;
+                        }
+                    }
+
+                    PrimaryButton {
+                        text: create-button-text;
+                        clicked => { create-strata(); }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: status-text;
+            color: status-is-error ? Palette.danger : Palette.success;
+            font-size: Theme.font-size-label;
+            wrap: word-wrap;
+        }
+    }
+}

@@ -164,6 +164,28 @@ event-bud-break-label = Débourrement
 event-flowering-glyph = F
 event-flowering-label = Floraison
 
+## Strata screen
+nav-strata = Strates
+title-strata = Strates
+strata-list-title = Strates de végétation
+empty-strata = Aucune strate enregistrée.
+button-delete = Supprimer
+button-create-strata = Créer la strate
+section-new-strata = Nouvelle strate
+strata-in-use = Strate utilisée par une culture — suppression impossible.
+label-strata-name = Nom
+placeholder-strata-name = Canopée
+label-strata-description = Description (optionnel)
+placeholder-strata-description = arbres adultes au-dessus de 6 m
+label-strata-height-min = Hauteur min (m)
+placeholder-strata-height-min = 6
+label-strata-height-max = Hauteur max (m)
+placeholder-strata-height-max = 40
+label-strata-sort-order = Ordre d'affichage
+placeholder-strata-sort-order = 10
+status-strata-created = Strate créée
+status-strata-deleted = Strate supprimée
+
 ## Locations screen
 title-locations = Lieux
 locations-list-title = Hiérarchie des lieux

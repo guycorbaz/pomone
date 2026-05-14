@@ -162,6 +162,28 @@ event-bud-break-label = Bud break
 event-flowering-glyph = F
 event-flowering-label = Flowering
 
+## Strata screen
+nav-strata = Strata
+title-strata = Strata
+strata-list-title = Vegetation strata
+empty-strata = No strata recorded.
+button-delete = Delete
+button-create-strata = Create stratum
+section-new-strata = New stratum
+strata-in-use = Stratum is referenced by a crop — cannot delete.
+label-strata-name = Name
+placeholder-strata-name = Canopy
+label-strata-description = Description (optional)
+placeholder-strata-description = mature trees above 6 m
+label-strata-height-min = Min height (m)
+placeholder-strata-height-min = 6
+label-strata-height-max = Max height (m)
+placeholder-strata-height-max = 40
+label-strata-sort-order = Display order
+placeholder-strata-sort-order = 10
+status-strata-created = Stratum created
+status-strata-deleted = Stratum deleted
+
 ## Locations screen
 title-locations = Locations
 locations-list-title = Location hierarchy

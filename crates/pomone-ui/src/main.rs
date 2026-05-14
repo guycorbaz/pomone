@@ -13,15 +13,16 @@ use anyhow::{Context, Result};
 use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use fluent::FluentArgs;
 use pomone_app::{
-    create_crop, create_location, create_variety, get_planting_detail, list_crops,
-    list_events_in_range, list_family_options, list_location_kind_options, list_location_options,
-    list_locations_tree, list_parent_options, list_plantings, list_strata_options,
-    list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting, parse_id,
-    parse_iso_date, services, App, AppConfig, AppError, BackendConfig,
-    CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput, CropRow as AppCropRow,
-    FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption, LocationListItem,
-    LocationOption, ParentLocationOption, PlantingDetail as AppPlantingDetail,
-    PlantingRow as AppPlantingRow, StrataOption, VarietyInput, VarietyOption, VarietyProfileKind,
+    create_crop, create_location, create_strata, create_variety, delete_strata,
+    get_planting_detail, list_crops, list_events_in_range, list_family_options,
+    list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
+    list_plantings, list_strata_options, list_strata_rows, list_varieties_for_crop,
+    list_variety_options, list_yearly_harvests_for_planting, parse_id, parse_iso_date, services,
+    App, AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind,
+    CropInput, CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput,
+    LocationKindOption, LocationListItem, LocationOption, ParentLocationOption,
+    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow, StrataInput, StrataOption,
+    StrataRow as AppStrataRow, VarietyInput, VarietyOption, VarietyProfileKind,
     VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{LocationId, PlantingId, PruningSeason, VarietyId};
@@ -42,7 +43,7 @@ mod generated {
 use generated::{
     CalendarDay as SlintCalendarDay, CalendarEvent as SlintCalendarEvent, CropRow as SlintCropRow,
     DetailLine as SlintDetailLine, LocationItem as SlintLocationItem, MainWindow,
-    PlantingRow as SlintPlantingRow, VarietyRow as SlintVarietyRow,
+    PlantingRow as SlintPlantingRow, StrataItem as SlintStrataItem, VarietyRow as SlintVarietyRow,
     YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
@@ -139,6 +140,7 @@ fn main() -> Result<()> {
     refresh_cultures(&window, &mut state.borrow_mut())?;
     refresh_locations(&window, &mut state.borrow_mut())?;
     refresh_calendar(&window, &mut state.borrow_mut())?;
+    refresh_strata(&window, &mut state.borrow_mut())?;
 
     // --- Home navigation (sidebar) — refresh counts on entry ---
     {
@@ -335,6 +337,95 @@ fn main() -> Result<()> {
                         i18n.t_args("status-planting-failed", &args),
                     ));
                     window.set_status_is_error(true);
+                }
+            }
+        });
+    }
+
+    // --- Strata navigation + create + delete ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_navigate_strata(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            if let Err(e) = refresh_strata(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh strata");
+            }
+            window.set_current_page(SharedString::from("strata"));
+            window.set_strata_status_text(SharedString::from(""));
+            window.set_strata_status_is_error(false);
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_create_strata(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            match try_create_strata(&window, &mut s) {
+                Ok(()) => {
+                    let i18n = s.app.i18n();
+                    window.set_strata_status_text(SharedString::from(
+                        i18n.t("status-strata-created"),
+                    ));
+                    window.set_strata_status_is_error(false);
+                    window.set_new_strata_name(SharedString::from(""));
+                    window.set_new_strata_description(SharedString::from(""));
+                    window.set_new_strata_min_height(SharedString::from(""));
+                    window.set_new_strata_max_height(SharedString::from(""));
+                    if let Err(e) = refresh_strata(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh strata after create");
+                    }
+                    // Counts on the home page include strata; refresh too.
+                    refresh_counts(&window, &s.app, &s.runtime);
+                }
+                Err(e) => {
+                    let i18n = s.app.i18n();
+                    let mut args = FluentArgs::new();
+                    args.set("message", e.to_string());
+                    window.set_strata_status_text(SharedString::from(
+                        i18n.t_args("status-planting-failed", &args),
+                    ));
+                    window.set_strata_status_is_error(true);
+                }
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_delete_strata(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let result: Result<(), AppError> = s
+                .runtime
+                .block_on(async { delete_strata(s.app.repo(), &id).await });
+            match result {
+                Ok(()) => {
+                    let i18n = s.app.i18n();
+                    window.set_strata_status_text(SharedString::from(
+                        i18n.t("status-strata-deleted"),
+                    ));
+                    window.set_strata_status_is_error(false);
+                    if let Err(e) = refresh_strata(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh strata after delete");
+                    }
+                    refresh_counts(&window, &s.app, &s.runtime);
+                }
+                Err(e) => {
+                    let i18n = s.app.i18n();
+                    let mut args = FluentArgs::new();
+                    args.set("message", e.to_string());
+                    window.set_strata_status_text(SharedString::from(
+                        i18n.t_args("status-planting-failed", &args),
+                    ));
+                    window.set_strata_status_is_error(true);
                 }
             }
         });
@@ -566,6 +657,34 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_nav_cultures_text(SharedString::from(i18n.t("nav-cultures")));
     window.set_nav_locations_text(SharedString::from(i18n.t("nav-locations")));
     window.set_nav_calendar_text(SharedString::from(i18n.t("nav-calendar")));
+    window.set_nav_strata_text(SharedString::from(i18n.t("nav-strata")));
+
+    // Strata page — static labels; the list and status come from refresh_strata.
+    window.set_strata_title_text(SharedString::from(i18n.t("title-strata")));
+    window.set_strata_list_title(SharedString::from(i18n.t("strata-list-title")));
+    window.set_strata_empty_text(SharedString::from(i18n.t("empty-strata")));
+    window.set_strata_delete_text(SharedString::from(i18n.t("button-delete")));
+    window.set_strata_in_use_text(SharedString::from(i18n.t("strata-in-use")));
+    window.set_strata_form_section(SharedString::from(i18n.t("section-new-strata")));
+    window.set_strata_label_name(SharedString::from(i18n.t("label-strata-name")));
+    window.set_strata_placeholder_name(SharedString::from(i18n.t("placeholder-strata-name")));
+    window.set_strata_label_description(SharedString::from(i18n.t("label-strata-description")));
+    window.set_strata_placeholder_description(SharedString::from(
+        i18n.t("placeholder-strata-description"),
+    ));
+    window.set_strata_label_height_min(SharedString::from(i18n.t("label-strata-height-min")));
+    window.set_strata_placeholder_height_min(SharedString::from(
+        i18n.t("placeholder-strata-height-min"),
+    ));
+    window.set_strata_label_height_max(SharedString::from(i18n.t("label-strata-height-max")));
+    window.set_strata_placeholder_height_max(SharedString::from(
+        i18n.t("placeholder-strata-height-max"),
+    ));
+    window.set_strata_label_sort_order(SharedString::from(i18n.t("label-strata-sort-order")));
+    window.set_strata_placeholder_sort_order(SharedString::from(
+        i18n.t("placeholder-strata-sort-order"),
+    ));
+    window.set_strata_create_button_text(SharedString::from(i18n.t("button-create-strata")));
 
     // Calendar — labels + legend; the day grid is rebuilt on every refresh
     window.set_calendar_title_text(SharedString::from(i18n.t("title-calendar")));
@@ -1281,6 +1400,49 @@ fn try_create_location(window: &MainWindow, state: &mut UiState) -> Result<(), A
 
 fn today_iso() -> String {
     Local::now().date_naive().format("%Y-%m-%d").to_string()
+}
+
+fn refresh_strata(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let rows: Result<Vec<AppStrataRow>, AppError> = state
+        .runtime
+        .block_on(async { list_strata_rows(state.app.repo()).await });
+    let rows = rows.context("failed to load strata")?;
+    let items: Vec<SlintStrataItem> = rows
+        .into_iter()
+        .map(|r| SlintStrataItem {
+            id: SharedString::from(r.id),
+            name: SharedString::from(r.name),
+            description: SharedString::from(r.description),
+            height_label: SharedString::from(r.height_label),
+            sort_order: r.sort_order,
+            in_use: r.in_use,
+        })
+        .collect();
+    window.set_strata_items(ModelRc::new(VecModel::from(items)));
+    Ok(())
+}
+
+fn try_create_strata(window: &MainWindow, state: &mut UiState) -> Result<(), AppError> {
+    let name = window.get_new_strata_name().to_string();
+    let description = optional_text(&window.get_new_strata_description());
+    let min_height = parse_optional_decimal(&window.get_new_strata_min_height(), "min height")?;
+    let max_height = parse_optional_decimal(&window.get_new_strata_max_height(), "max height")?;
+    let sort_order = parse_i32(&window.get_new_strata_sort_order(), "sort order")?;
+
+    state.runtime.block_on(async {
+        create_strata(
+            state.app.repo(),
+            StrataInput {
+                name,
+                description,
+                min_height_m: min_height,
+                max_height_m: max_height,
+                sort_order,
+            },
+        )
+        .await
+        .map(|_| ())
+    })
 }
 
 /// Load one planting's detail, push it to the UI and switch to the detail
