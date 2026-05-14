@@ -13,14 +13,15 @@ use anyhow::{Context, Result};
 use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use fluent::FluentArgs;
 use pomone_app::{
-    create_crop, create_location, create_variety, list_crops, list_events_in_range,
-    list_family_options, list_location_kind_options, list_location_options, list_locations_tree,
-    list_parent_options, list_plantings, list_strata_options, list_varieties_for_crop,
-    list_variety_options, parse_id, parse_iso_date, services, App, AppConfig, AppError,
-    BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput,
-    CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption,
-    LocationListItem, LocationOption, ParentLocationOption, PlantingRow as AppPlantingRow,
-    StrataOption, VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
+    create_crop, create_location, create_variety, get_planting_detail, list_crops,
+    list_events_in_range, list_family_options, list_location_kind_options, list_location_options,
+    list_locations_tree, list_parent_options, list_plantings, list_strata_options,
+    list_varieties_for_crop, list_variety_options, parse_id, parse_iso_date, services, App,
+    AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind,
+    CropInput, CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput,
+    LocationKindOption, LocationListItem, LocationOption, ParentLocationOption,
+    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow, StrataOption, VarietyInput,
+    VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
 };
 use pomone_domain::{LocationId, PruningSeason, VarietyId};
 use rust_decimal::Decimal;
@@ -39,8 +40,8 @@ mod generated {
 }
 use generated::{
     CalendarDay as SlintCalendarDay, CalendarEvent as SlintCalendarEvent, CropRow as SlintCropRow,
-    LocationItem as SlintLocationItem, MainWindow, PlantingRow as SlintPlantingRow,
-    VarietyRow as SlintVarietyRow,
+    DetailLine as SlintDetailLine, LocationItem as SlintLocationItem, MainWindow,
+    PlantingRow as SlintPlantingRow, VarietyRow as SlintVarietyRow,
 };
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -76,6 +77,10 @@ struct UiState {
     calendar_year: i32,
     /// Month (1..=12) currently displayed by the Calendar screen.
     calendar_month: u32,
+    /// Page to return to when the Back button is pressed on the detail
+    /// screen. Stored at the moment the user opens a planting so the
+    /// detail view can route back to either the list or the calendar.
+    detail_previous_page: String,
 }
 
 // Setting up four panes' worth of callbacks in one place keeps the flow easy
@@ -113,6 +118,7 @@ fn main() -> Result<()> {
         parent_location_ids: Vec::new(),
         calendar_year: today_local.year(),
         calendar_month: today_local.month(),
+        detail_previous_page: "plantings".to_owned(),
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
@@ -327,12 +333,19 @@ fn main() -> Result<()> {
         });
     }
 
-    // --- Calendar event click: jump to the Plantings list ---
-    //
-    // We don't yet have a per-planting detail screen, so clicking an event
-    // routes to the Plantings list as the closest available destination.
-    // The `planting_id` is logged for now — the next step (a detail view)
-    // can pick it up from there.
+    // --- Planting row click → open detail ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_planting_row_clicked(move |pid| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            open_planting_detail(&window, &mut state.borrow_mut(), &pid, "plantings");
+        });
+    }
+
+    // --- Calendar event click → open detail (back goes to calendar) ---
     {
         let state = Rc::clone(&state);
         let weak = window.as_weak();
@@ -340,11 +353,36 @@ fn main() -> Result<()> {
             let Some(window) = weak.upgrade() else {
                 return;
             };
-            tracing::info!(planting_id = %pid, "calendar event clicked");
-            if let Err(e) = refresh_plantings(&window, &mut state.borrow_mut()) {
-                tracing::error!(error = %e, "failed to refresh plantings");
+            open_planting_detail(&window, &mut state.borrow_mut(), &pid, "calendar");
+        });
+    }
+
+    // --- Detail "Back" button ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_detail_go_back(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let target = s.detail_previous_page.clone();
+            // Refresh the destination so it picks up any changes made while
+            // the user was browsing the detail. Default to "plantings" if
+            // the stored previous-page value is unknown.
+            match target.as_str() {
+                "calendar" => {
+                    if let Err(e) = refresh_calendar(&window, &mut s) {
+                        tracing::error!(error = %e, "refresh calendar on back");
+                    }
+                }
+                _ => {
+                    if let Err(e) = refresh_plantings(&window, &mut s) {
+                        tracing::error!(error = %e, "refresh plantings on back");
+                    }
+                }
             }
-            window.set_current_page(SharedString::from("plantings"));
+            window.set_current_page(SharedString::from(target));
             window.set_status_text(SharedString::from(""));
             window.set_status_is_error(false);
         });
@@ -604,6 +642,16 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_placeholder_window(SharedString::from(i18n.t("placeholder-window")));
     window.set_create_crop_button_text(SharedString::from(i18n.t("button-create-crop")));
     window.set_create_variety_button_text(SharedString::from(i18n.t("button-create-variety")));
+
+    // Planting detail page — static labels only; per-planting data is
+    // refreshed by `refresh_planting_detail` whenever a row/event is clicked.
+    window.set_detail_title_text(SharedString::from(i18n.t("title-planting-detail")));
+    window.set_detail_back_button_text(SharedString::from(i18n.t("button-back")));
+    window.set_detail_section_schedule_text(SharedString::from(i18n.t("section-schedule")));
+    window.set_detail_section_summary_text(SharedString::from(i18n.t("section-summary")));
+    window.set_detail_name_label(SharedString::from(i18n.t("label-planting-name")));
+    window.set_detail_notes_label(SharedString::from(i18n.t("label-planting-notes")));
+    window.set_detail_empty_state_text(SharedString::from(i18n.t("empty-planting-detail")));
 
     // Locations page
     window.set_locations_title_text(SharedString::from(i18n.t("title-locations")));
@@ -1170,6 +1218,63 @@ fn try_create_location(window: &MainWindow, state: &mut UiState) -> Result<(), A
 
 fn today_iso() -> String {
     Local::now().date_naive().format("%Y-%m-%d").to_string()
+}
+
+/// Load one planting's detail, push it to the UI and switch to the detail
+/// page. `previous_page` is stored on the state so the Back button knows
+/// where to return.
+fn open_planting_detail(
+    window: &MainWindow,
+    state: &mut UiState,
+    planting_id: &str,
+    previous_page: &str,
+) {
+    previous_page.clone_into(&mut state.detail_previous_page);
+    match refresh_planting_detail(window, state, planting_id) {
+        Ok(()) => {
+            window.set_current_page(SharedString::from("planting-detail"));
+            window.set_status_text(SharedString::from(""));
+            window.set_status_is_error(false);
+        }
+        Err(e) => {
+            tracing::error!(error = %e, planting_id, "failed to load planting detail");
+            // Push the empty-state shape so the page renders something
+            // useful instead of stale data from a previous open.
+            window.set_detail_has_detail(false);
+            window.set_current_page(SharedString::from("planting-detail"));
+        }
+    }
+}
+
+fn refresh_planting_detail(
+    window: &MainWindow,
+    state: &mut UiState,
+    planting_id: &str,
+) -> Result<()> {
+    let detail: Result<AppPlantingDetail, AppError> = state
+        .runtime
+        .block_on(async { get_planting_detail(state.app.repo(), planting_id).await });
+    let detail = detail.context("failed to load planting detail")?;
+
+    let i18n = state.app.i18n();
+    let lines: Vec<SlintDetailLine> = detail
+        .schedule_lines
+        .into_iter()
+        .map(|l| SlintDetailLine {
+            label: SharedString::from(i18n.t(l.label_key)),
+            value: SharedString::from(l.value),
+        })
+        .collect();
+
+    window.set_detail_variety_label(SharedString::from(detail.variety_label));
+    window.set_detail_location_label(SharedString::from(detail.location_label));
+    window.set_detail_area_label(SharedString::from(detail.area_label));
+    window.set_detail_plants_count(usize_to_i32(detail.plants_count as usize));
+    window.set_detail_name_value(SharedString::from(detail.name.unwrap_or_default()));
+    window.set_detail_notes_value(SharedString::from(detail.notes.unwrap_or_default()));
+    window.set_detail_schedule_lines(ModelRc::new(VecModel::from(lines)));
+    window.set_detail_has_detail(true);
+    Ok(())
 }
 
 /// Step `(year, month)` back one calendar month, wrapping at January.

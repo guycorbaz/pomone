@@ -88,6 +88,18 @@ status-crop-created = Crop created
 status-variety-created = Variety created
 status-pick-crop-first = Pick a crop before creating a variety.
 
+## Planting detail screen
+title-planting-detail = Planting detail
+button-back = ‹ Back
+section-schedule = Schedule
+section-summary = Summary
+label-planting-name = Name
+label-planting-notes = Notes
+label-transplanted-on = Transplant date
+label-first-harvest = First harvest
+label-last-harvest = Last harvest
+empty-planting-detail = Planting not found.
+
 ## Calendar screen
 nav-calendar = Calendar
 title-calendar = Calendar

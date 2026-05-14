@@ -12,6 +12,7 @@ pub mod cultures_view;
 pub mod error;
 pub mod i18n;
 pub mod locations_view;
+pub mod planting_detail_view;
 pub mod plantings_view;
 pub mod services;
 
@@ -32,6 +33,7 @@ pub use locations_view::{
     create_location, list_location_kind_options, list_locations_tree, list_parent_options,
     LocationInput, LocationKindOption, LocationListItem, ParentLocationOption,
 };
+pub use planting_detail_view::{get_planting_detail, DetailLine, PlantingDetail};
 pub use plantings_view::{
     list_location_options, list_plantings, list_variety_options, parse_id, parse_iso_date,
     LocationOption, PlantingRow, VarietyOption,

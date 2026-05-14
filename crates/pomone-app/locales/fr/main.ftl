@@ -90,6 +90,18 @@ status-crop-created = Culture créée
 status-variety-created = Variété créée
 status-pick-crop-first = Sélectionnez une culture avant de créer une variété.
 
+## Planting detail screen
+title-planting-detail = Détail de la plantation
+button-back = ‹ Retour
+section-schedule = Calendrier de culture
+section-summary = Résumé
+label-planting-name = Nom
+label-planting-notes = Notes
+label-transplanted-on = Date de repiquage
+label-first-harvest = Première récolte
+label-last-harvest = Dernière récolte
+empty-planting-detail = Plantation introuvable.
+
 ## Calendar screen
 nav-calendar = Calendrier
 title-calendar = Calendrier

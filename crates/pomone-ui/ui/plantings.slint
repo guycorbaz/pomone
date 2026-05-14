@@ -18,52 +18,62 @@ export struct PlantingRow {
     plants-count: int,
 }
 
-// One row in the list. Plain Card with structured content.
+// One row in the list. Clickable: emits `clicked` with the planting id so
+// the host can open the detail screen. Hover lifts the surface tone to
+// signal interactivity.
 component PlantingRowView inherits Card {
     in property <PlantingRow> entry;
+    callback clicked(string);
     height: 124px;
+    background: touch.has-hover ? Palette.surface-alt : Palette.surface;
+    animate background { duration: Theme.transition-fast; }
 
-    VerticalLayout {
-        padding: Theme.space-lg;
-        spacing: Theme.space-xs;
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(entry.id); }
 
-        HorizontalLayout {
-            spacing: Theme.space-md;
-            Text {
-                text: entry.variety-label;
-                color: Palette.text-primary;
-                font-size: Theme.font-size-h3;
-                font-weight: Theme.font-weight-semibold;
-                horizontal-stretch: 1;
+        VerticalLayout {
+            padding: Theme.space-lg;
+            spacing: Theme.space-xs;
+
+            HorizontalLayout {
+                spacing: Theme.space-md;
+                Text {
+                    text: entry.variety-label;
+                    color: Palette.text-primary;
+                    font-size: Theme.font-size-h3;
+                    font-weight: Theme.font-weight-semibold;
+                    horizontal-stretch: 1;
+                }
+                Text {
+                    text: entry.location-label;
+                    color: Palette.text-secondary;
+                    font-size: Theme.font-size-body;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                }
             }
+
             Text {
-                text: entry.location-label;
+                text: entry.schedule-summary;
                 color: Palette.text-secondary;
                 font-size: Theme.font-size-body;
-                horizontal-alignment: right;
-                vertical-alignment: center;
             }
-        }
 
-        Text {
-            text: entry.schedule-summary;
-            color: Palette.text-secondary;
-            font-size: Theme.font-size-body;
-        }
-
-        HorizontalLayout {
-            spacing: Theme.space-md;
-            Text {
-                text: entry.area-label;
-                color: Palette.text-muted;
-                font-size: Theme.font-size-label;
-                horizontal-stretch: 1;
-            }
-            Text {
-                text: entry.plants-count + " " + "plants";
-                color: Palette.text-muted;
-                font-size: Theme.font-size-label;
-                horizontal-alignment: right;
+            HorizontalLayout {
+                spacing: Theme.space-md;
+                Text {
+                    text: entry.area-label;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-label;
+                    horizontal-stretch: 1;
+                }
+                Text {
+                    text: entry.plants-count + " " + "plants";
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-label;
+                    horizontal-alignment: right;
+                }
             }
         }
     }
@@ -121,6 +131,9 @@ export component PlantingsPage inherits Rectangle {
     in property <bool> status-is-error: false;
 
     callback create-planting();
+    // Emitted when the user clicks a row in the list — `id` is the
+    // stringified PlantingId from the underlying row.
+    callback row-clicked(string);
 
     VerticalLayout {
         padding: Theme.space-2xl;
@@ -154,6 +167,7 @@ export component PlantingsPage inherits Rectangle {
                 for item in plantings: PlantingRowView {
                     entry: item;
                     width: list-area.width;
+                    clicked(pid) => { row-clicked(pid); }
                 }
             }
         }
