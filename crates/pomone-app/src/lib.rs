@@ -6,6 +6,7 @@
 //! at runtime.
 
 pub mod app;
+pub mod calendar_view;
 pub mod config;
 pub mod cultures_view;
 pub mod error;
@@ -18,6 +19,7 @@ pub mod services;
 mod test_helpers;
 
 pub use app::App;
+pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
 pub use config::{default_config_path, AppConfig, BackendConfig};
 pub use cultures_view::{
     create_crop, create_variety, list_crops, list_family_options, list_strata_options,

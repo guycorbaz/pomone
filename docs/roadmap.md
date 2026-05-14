@@ -23,11 +23,11 @@ description: "Plan d'avancement de Pomone par phases, du bootstrap au polish."
   - [x] écran Plantings (liste + formulaire annuel/pluriannuel)
   - [x] écran Cultures + Variétés (master-detail)
   - [x] écran Locations (hiérarchie ferme → parcelle → planche)
-  - [ ] écran Calendrier
+  - [x] écran Calendrier
 - [ ] **Phase 7** — fonctionnalités pérennes spécifiques (vergers, agroforesterie)
 - [ ] **Phase 8** — packaging Linux/macOS/Windows
 - [ ] **Phase 9** — polish, perf, fix des bugs hérités de Qrop
 
 ## Statut actuel
 
-Phase 6 en cours : l'application est utilisable pour saisir et naviguer dans les plantations, cultures et lieux. Le calendrier reste à câbler, puis viendront les fonctionnalités pérennes (suivi `YearlyHarvest`, gestion des strates agroforestières).
+Phase 6 terminée : l'application est utilisable pour saisir et naviguer dans les plantations, cultures et lieux, et le calendrier mensuel affiche les événements dérivés des plantings. Viennent ensuite les fonctionnalités pérennes (suivi `YearlyHarvest`, gestion des strates agroforestières).
