@@ -9,8 +9,12 @@ agroforesterie.
 
 ## État du projet
 
-**Phase 0 — bootstrap.** Le code n'est pas encore utilisable. Voir [docs/architecture.md](docs/architecture.md)
-pour la feuille de route.
+**Phase 6 — UI en cours.** Le socle est en place : modèle métier (`pomone-domain`),
+persistence SQLite et MariaDB derrière un trait `Repository` (`pomone-db`), services
+applicatifs (`pomone-app`), i18n fr/en. L'UI Slint expose déjà les écrans Plantings,
+Cultures + Variétés et Locations ; l'écran Calendrier reste à faire.
+
+Voir [docs/architecture.md](docs/architecture.md) pour la feuille de route détaillée.
 
 ## Tech
 
