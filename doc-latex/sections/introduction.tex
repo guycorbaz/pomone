@@ -1,0 +1,26 @@
+\section{Introduction}
+
+Pomone est un logiciel libre de gestion de cultures, du maraîchage à l'agroforesterie. C'est une réécriture en \textbf{Rust} de \href{https://qrop.readthedocs.io/}{Qrop} (C++/Qt), créé par André Hoarau et \href{https://www.latelierpaysan.org/}{L'Atelier paysan}.
+
+\subsection{Pourquoi une réécriture}
+
+Qrop est un outil mature, mais son modèle de données suppose des cultures \emph{annuelles}. Pour traiter naturellement les vergers, les petits fruits, les haies et plus généralement l'agroforesterie, il fallait reprendre le modèle à la base. Pomone introduit dès le départ une distinction de premier ordre :
+
+\begin{itemize}
+  \item \textbf{Cultures annuelles ou bisannuelles} : un cycle = une plantation, suivi via un \texttt{PlantingSchedule::Cycle}.
+  \item \textbf{Cultures pluriannuelles productives} : pommiers, framboisiers, asperges\dots\ une plantation produit pendant N années, suivie via un \texttt{PlantingSchedule::Perennial} et des \texttt{YearlyHarvest}.
+\end{itemize}
+
+\subsection{Choix techniques}
+
+\begin{itemize}
+  \item \textbf{Langage} : Rust (édition 2021, MSRV 1.80) pour la sûreté mémoire, les performances et le typage strict du domaine.
+  \item \textbf{UI} : \href{https://slint.dev/}{Slint}, native desktop, sans WebView.
+  \item \textbf{Données} : \href{https://github.com/launchbadge/sqlx}{sqlx}, avec SQLite et MariaDB derrière une même abstraction.
+  \item \textbf{i18n} : \href{https://projectfluent.org/}{Project Fluent} (français et anglais en v1).
+  \item \textbf{Plateformes v1} : Linux, macOS, Windows.
+\end{itemize}
+
+\subsection{Licence}
+
+GPL v3 ou ultérieure. Le code et la documentation sont libres et le resteront. Pomone reprend l'ambition libriste de Qrop, qui reste la référence pour le projet d'origine.

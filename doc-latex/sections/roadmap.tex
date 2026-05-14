@@ -1,0 +1,32 @@
+\section{Feuille de route}
+
+\subsection{Phases livrées}
+
+\begin{itemize}
+  \item[$\boxtimes$] \textbf{Phase 0} — bootstrap (workspace, CI, tooling).
+  \item[$\boxtimes$] \textbf{Phase 1} — \texttt{pomone-domain} : modèle métier complet, tests proptest.
+  \item[$\boxtimes$] \textbf{Phase 2} — \texttt{pomone-db} : trait \texttt{Repository}, schéma + migrations SQLite, impl SQLite.
+  \item[$\boxtimes$] \textbf{Phase 3} — backend MariaDB + tests d'intégration paramétrés sur les deux backends.
+  \item[$\boxtimes$] \textbf{Phase 4} — \texttt{pomone-app} : services, use cases, gestion d'état.
+  \item[$\boxtimes$] \textbf{Phase 5} — i18n (fr + en) avec Fluent.
+\end{itemize}
+
+\subsection{Phase en cours}
+
+\textbf{Phase 6} — \texttt{pomone-ui} Slint, écrans principaux :
+
+\begin{itemize}
+  \item[$\boxtimes$] Sidebar de navigation persistante.
+  \item[$\boxtimes$] Écran Plantings (liste + formulaire annuel/pluriannuel).
+  \item[$\boxtimes$] Écran Cultures + Variétés (master-detail).
+  \item[$\boxtimes$] Écran Locations (hiérarchie ferme $\to$ parcelle $\to$ planche).
+  \item[$\square$] Écran Calendrier.
+\end{itemize}
+
+\subsection{Phases à venir}
+
+\begin{itemize}
+  \item[$\square$] \textbf{Phase 7} — fonctionnalités pérennes spécifiques (vergers, agroforesterie).
+  \item[$\square$] \textbf{Phase 8} — packaging Linux/macOS/Windows.
+  \item[$\square$] \textbf{Phase 9} — polish, perf, fix des bugs hérités de Qrop.
+\end{itemize}

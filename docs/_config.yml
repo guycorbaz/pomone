@@ -1,0 +1,36 @@
+title: Pomone
+description: Gestion libre de cultures, du maraîchage à l'agroforesterie
+remote_theme: just-the-docs/just-the-docs
+
+url: https://guycorbaz.github.io
+baseurl: /pomone
+
+lang: fr-FR
+
+color_scheme: light
+search_enabled: true
+heading_anchors: true
+
+aux_links:
+  "GitHub":
+    - https://github.com/guycorbaz/pomone
+  "Documentation PDF":
+    - https://github.com/guycorbaz/pomone/releases/download/docs-latest/pomone.pdf
+aux_links_new_tab: true
+
+nav_external_links:
+  - title: Code source sur GitHub
+    url: https://github.com/guycorbaz/pomone
+    hide_icon: false
+
+footer_content: 'Pomone — GPL v3 ou ultérieure. Hébergé sur <a href="https://github.com/guycorbaz/pomone">GitHub</a>.'
+
+plugins:
+  - jekyll-remote-theme
+  - jekyll-seo-tag
+
+exclude:
+  - README.md
+  - vendor/
+  - Gemfile
+  - Gemfile.lock

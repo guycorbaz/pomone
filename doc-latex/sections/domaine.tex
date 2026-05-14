@@ -1,0 +1,27 @@
+\section{Modèle de domaine}
+
+\subsection{Concepts}
+
+\begin{description}
+  \item[\texttt{Crop}] Type de culture (Tomate, Pommier, Framboisier\dots) avec un \texttt{Lifespan}.
+  \item[\texttt{Lifespan}] Soit \texttt{Annual} (cycle court, une saison), soit \texttt{Pluriannual \{ ProductivePattern, lifespan\_years \}} (montée en charge, plateau, déclin).
+  \item[\texttt{Variety}] Variété d'un \texttt{Crop} (Marmande, Reine des Reinettes\dots). Une variété est rattachée à un \texttt{Crop} unique.
+  \item[\texttt{Planting}] Plantation concrète, avec un \texttt{PlantingSchedule}.
+  \item[\texttt{PlantingSchedule}] Soit \texttt{Cycle} (annuelles, bisannuelles : un cycle = une plantation), soit \texttt{Perennial} (vraies pérennes productives chaque année).
+  \item[\texttt{YearlyHarvest}] Récolte annuelle d'une plantation pérenne, pour suivre l'évolution du rendement.
+  \item[\texttt{Location}] Lieu hiérarchique : ferme $\to$ parcelle $\to$ planche / verger / haie. Chaque \texttt{Location} a un \texttt{LocationKind} et des dimensions (\texttt{length\_m} $\times$ \texttt{width\_m}).
+  \item[\texttt{Strata}] Strate agroforestière (canopée, sous-étage, arbustive\dots), table \emph{user-managed} avec seed initial.
+  \item[\texttt{Family}] Famille botanique, utile pour les rotations.
+\end{description}
+
+\subsection{Annuelles vs pluriannuelles}
+
+C'est la décision structurante du modèle. Une \texttt{Planting} annuelle a une date de semis, une date de plantation, une date de fin et c'est tout. Une \texttt{Planting} pluriannuelle a une date de plantation, un nombre d'années de vie attendu, un motif productif (par défaut \texttt{None}, à enrichir si l'utilisateur veut suivre montée en charge / plateau / déclin) et une collection de \texttt{YearlyHarvest}.
+
+\subsection{Identifiants}
+
+Les types ID (\texttt{CropId}, \texttt{VarietyId}, \texttt{PlantingId}, \texttt{LocationId}\dots) sont des newtypes définis dans \texttt{pomone-domain/ids.rs}. Ils encapsulent un \texttt{i64} et empêchent au compilateur de mélanger un \texttt{CropId} avec un \texttt{VarietyId}.
+
+\subsection{Validation}
+
+La validation côté domaine vit dans \texttt{pomone-domain/validation.rs}. Elle est appelée par les services \texttt{pomone-app} \emph{avant} tout passage au repository : on ne s'appuie pas sur les contraintes SQL pour signaler les erreurs métier.
