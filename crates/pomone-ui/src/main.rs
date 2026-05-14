@@ -10,13 +10,14 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use anyhow::{Context, Result};
-use chrono::Local;
+use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use fluent::FluentArgs;
 use pomone_app::{
-    create_crop, create_location, create_variety, list_crops, list_family_options,
-    list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
-    list_plantings, list_strata_options, list_varieties_for_crop, list_variety_options, parse_id,
-    parse_iso_date, services, App, AppConfig, AppError, BackendConfig, CropInput,
+    create_crop, create_location, create_variety, list_crops, list_events_in_range,
+    list_family_options, list_location_kind_options, list_location_options, list_locations_tree,
+    list_parent_options, list_plantings, list_strata_options, list_varieties_for_crop,
+    list_variety_options, parse_id, parse_iso_date, services, App, AppConfig, AppError,
+    BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput,
     CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption,
     LocationListItem, LocationOption, ParentLocationOption, PlantingRow as AppPlantingRow,
     StrataOption, VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
@@ -37,8 +38,9 @@ mod generated {
     slint::include_modules!();
 }
 use generated::{
-    CropRow as SlintCropRow, LocationItem as SlintLocationItem, MainWindow,
-    PlantingRow as SlintPlantingRow, VarietyRow as SlintVarietyRow,
+    CalendarDay as SlintCalendarDay, CalendarEvent as SlintCalendarEvent, CropRow as SlintCropRow,
+    LocationItem as SlintLocationItem, MainWindow, PlantingRow as SlintPlantingRow,
+    VarietyRow as SlintVarietyRow,
 };
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -70,6 +72,10 @@ struct UiState {
     /// `loc-parent-labels` model. The first entry is an empty string for the
     /// synthetic "(no parent)" option.
     parent_location_ids: Vec<String>,
+    /// Year currently displayed by the Calendar screen.
+    calendar_year: i32,
+    /// Month (1..=12) currently displayed by the Calendar screen.
+    calendar_month: u32,
 }
 
 // Setting up four panes' worth of callbacks in one place keeps the flow easy
@@ -92,6 +98,7 @@ fn main() -> Result<()> {
         .block_on(App::new(config))
         .context("failed to initialise App (DB connection / migrations / seed)")?;
 
+    let today_local = Local::now().date_naive();
     let state = Rc::new(RefCell::new(UiState {
         app,
         runtime,
@@ -104,6 +111,8 @@ fn main() -> Result<()> {
         crop_is_annuals: Vec::new(),
         location_kind_ids: Vec::new(),
         parent_location_ids: Vec::new(),
+        calendar_year: today_local.year(),
+        calendar_month: today_local.month(),
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
@@ -116,6 +125,7 @@ fn main() -> Result<()> {
     refresh_plantings(&window, &mut state.borrow_mut())?;
     refresh_cultures(&window, &mut state.borrow_mut())?;
     refresh_locations(&window, &mut state.borrow_mut())?;
+    refresh_calendar(&window, &mut state.borrow_mut())?;
 
     // --- Home navigation (sidebar) — refresh counts on entry ---
     {
@@ -317,6 +327,77 @@ fn main() -> Result<()> {
         });
     }
 
+    // --- Calendar navigation + month nav ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_navigate_calendar(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            if let Err(e) = refresh_calendar(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh calendar");
+            }
+            window.set_current_page(SharedString::from("calendar"));
+            window.set_status_text(SharedString::from(""));
+            window.set_status_is_error(false);
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_prev_month(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            {
+                let mut s = state.borrow_mut();
+                let (y, m) = prev_month(s.calendar_year, s.calendar_month);
+                s.calendar_year = y;
+                s.calendar_month = m;
+            }
+            if let Err(e) = refresh_calendar(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh calendar");
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_next_month(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            {
+                let mut s = state.borrow_mut();
+                let (y, m) = next_month(s.calendar_year, s.calendar_month);
+                s.calendar_year = y;
+                s.calendar_month = m;
+            }
+            if let Err(e) = refresh_calendar(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh calendar");
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_go_today(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            {
+                let mut s = state.borrow_mut();
+                let now = Local::now().date_naive();
+                s.calendar_year = now.year();
+                s.calendar_month = now.month();
+            }
+            if let Err(e) = refresh_calendar(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh calendar");
+            }
+        });
+    }
+
     // --- Create variety ---
     {
         let state = Rc::clone(&state);
@@ -378,6 +459,41 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_nav_plantings_text(SharedString::from(i18n.t("nav-plantings")));
     window.set_nav_cultures_text(SharedString::from(i18n.t("nav-cultures")));
     window.set_nav_locations_text(SharedString::from(i18n.t("nav-locations")));
+    window.set_nav_calendar_text(SharedString::from(i18n.t("nav-calendar")));
+
+    // Calendar — labels + legend; the day grid is rebuilt on every refresh
+    window.set_calendar_title_text(SharedString::from(i18n.t("title-calendar")));
+    window.set_calendar_prev_button_text(SharedString::from(i18n.t("calendar-prev")));
+    window.set_calendar_next_button_text(SharedString::from(i18n.t("calendar-next")));
+    window.set_calendar_today_button_text(SharedString::from(i18n.t("calendar-today")));
+    window.set_calendar_empty_state_text(SharedString::from(i18n.t("calendar-empty")));
+    let weekday_labels: Vec<SharedString> = [
+        i18n.t("weekday-mon-short"),
+        i18n.t("weekday-tue-short"),
+        i18n.t("weekday-wed-short"),
+        i18n.t("weekday-thu-short"),
+        i18n.t("weekday-fri-short"),
+        i18n.t("weekday-sat-short"),
+        i18n.t("weekday-sun-short"),
+    ]
+    .into_iter()
+    .map(SharedString::from)
+    .collect();
+    window.set_calendar_weekday_labels(ModelRc::new(VecModel::from(weekday_labels)));
+    let kind_labels: Vec<SharedString> = [
+        i18n.t("event-sowing-label"),
+        i18n.t("event-transplanting-label"),
+        i18n.t("event-harvest-start-label"),
+        i18n.t("event-harvest-end-label"),
+        i18n.t("event-establishment-label"),
+        i18n.t("event-removal-label"),
+        i18n.t("event-bud-break-label"),
+        i18n.t("event-flowering-label"),
+    ]
+    .into_iter()
+    .map(SharedString::from)
+    .collect();
+    window.set_calendar_kind_labels(ModelRc::new(VecModel::from(kind_labels)));
 
     // Plantings page
     window.set_plantings_title_text(SharedString::from(i18n.t("title-plantings")));
@@ -1031,6 +1147,149 @@ fn try_create_location(window: &MainWindow, state: &mut UiState) -> Result<(), A
 
 fn today_iso() -> String {
     Local::now().date_naive().format("%Y-%m-%d").to_string()
+}
+
+/// Step `(year, month)` back one calendar month, wrapping at January.
+fn prev_month(year: i32, month: u32) -> (i32, u32) {
+    if month == 1 {
+        (year - 1, 12)
+    } else {
+        (year, month - 1)
+    }
+}
+
+/// Step `(year, month)` forward one calendar month, wrapping at December.
+fn next_month(year: i32, month: u32) -> (i32, u32) {
+    if month == 12 {
+        (year + 1, 1)
+    } else {
+        (year, month + 1)
+    }
+}
+
+/// First day of `(year, month)` as a `NaiveDate`. Panics only if the inputs
+/// are out of `chrono`'s range, which the UI cannot produce.
+fn first_of_month(year: i32, month: u32) -> NaiveDate {
+    NaiveDate::from_ymd_opt(year, month, 1).expect("valid year/month from calendar state")
+}
+
+/// Map a `Weekday` to its 0-based offset with Monday as the first day of the
+/// week (Mon=0, Sun=6). The calendar grid is rendered Monday-first.
+fn weekday_offset_mon(d: NaiveDate) -> u32 {
+    match d.weekday() {
+        Weekday::Mon => 0,
+        Weekday::Tue => 1,
+        Weekday::Wed => 2,
+        Weekday::Thu => 3,
+        Weekday::Fri => 4,
+        Weekday::Sat => 5,
+        Weekday::Sun => 6,
+    }
+}
+
+/// Convert `CalendarEventKind` to the numeric `kind` carried by the Slint
+/// `CalendarEvent` struct.
+fn kind_to_int(k: CalendarEventKind) -> i32 {
+    match k {
+        CalendarEventKind::Sowing => 0,
+        CalendarEventKind::Transplanting => 1,
+        CalendarEventKind::HarvestStart => 2,
+        CalendarEventKind::HarvestEnd => 3,
+        CalendarEventKind::Establishment => 4,
+        CalendarEventKind::Removal => 5,
+        CalendarEventKind::BudBreak => 6,
+        CalendarEventKind::Flowering => 7,
+    }
+}
+
+/// Fluent key for the single-glyph badge of an event kind.
+fn kind_glyph_key(k: CalendarEventKind) -> &'static str {
+    match k {
+        CalendarEventKind::Sowing => "event-sowing-glyph",
+        CalendarEventKind::Transplanting => "event-transplanting-glyph",
+        CalendarEventKind::HarvestStart => "event-harvest-start-glyph",
+        CalendarEventKind::HarvestEnd => "event-harvest-end-glyph",
+        CalendarEventKind::Establishment => "event-establishment-glyph",
+        CalendarEventKind::Removal => "event-removal-glyph",
+        CalendarEventKind::BudBreak => "event-bud-break-glyph",
+        CalendarEventKind::Flowering => "event-flowering-glyph",
+    }
+}
+
+/// Rebuild the 42-cell day model + month label for the currently selected
+/// `(calendar_year, calendar_month)` and push it to the window.
+fn refresh_calendar(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let year = state.calendar_year;
+    let month = state.calendar_month;
+
+    // Window of 42 days starting on the Monday on/before the 1st of the
+    // selected month. Events are queried over the same window so off-month
+    // cells can still surface a pill (e.g. a sowing on Apr 28 when looking
+    // at May).
+    let first = first_of_month(year, month);
+    let lead = weekday_offset_mon(first);
+    let grid_start = first
+        .checked_sub_days(Days::new(u64::from(lead)))
+        .context("calendar grid underflow")?;
+    let grid_end = grid_start
+        .checked_add_days(Days::new(41))
+        .context("calendar grid overflow")?;
+
+    let events: Vec<AppCalendarEvent> = state
+        .runtime
+        .block_on(async { list_events_in_range(state.app.repo(), grid_start, grid_end).await })
+        .context("failed to load calendar events")?;
+
+    // Bucket events by date for O(1) lookup per cell.
+    let mut by_date: std::collections::HashMap<NaiveDate, Vec<&AppCalendarEvent>> =
+        std::collections::HashMap::new();
+    for e in &events {
+        by_date.entry(e.date).or_default().push(e);
+    }
+
+    let i18n = state.app.i18n();
+    let today = Local::now().date_naive();
+
+    let mut days: Vec<SlintCalendarDay> = Vec::with_capacity(42);
+    for offset in 0..42 {
+        let date = grid_start
+            .checked_add_days(Days::new(offset))
+            .context("calendar cell overflow")?;
+        let in_current_month = date.year() == year && date.month() == month;
+        // Day numbers from leading/trailing months are suppressed so the
+        // cell renders blank — the dimmer background already signals the
+        // off-month state.
+        let day_number = if in_current_month {
+            i32::try_from(date.day()).unwrap_or(0)
+        } else {
+            0
+        };
+        let cell_events: Vec<SlintCalendarEvent> = by_date
+            .get(&date)
+            .map(|v| {
+                v.iter()
+                    .map(|e| SlintCalendarEvent {
+                        kind: kind_to_int(e.kind),
+                        glyph: SharedString::from(i18n.t(kind_glyph_key(e.kind))),
+                        label: SharedString::from(e.label.clone()),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        days.push(SlintCalendarDay {
+            day_number,
+            in_current_month,
+            is_today: date == today,
+            events: ModelRc::new(VecModel::from(cell_events)),
+        });
+    }
+    window.set_calendar_days(ModelRc::new(VecModel::from(days)));
+
+    let month_key = format!("month-{month}");
+    let month_name = i18n.t(&month_key);
+    window.set_calendar_month_label(SharedString::from(format!("{month_name} {year}")));
+
+    Ok(())
 }
 
 fn usize_to_i32(n: usize) -> i32 {

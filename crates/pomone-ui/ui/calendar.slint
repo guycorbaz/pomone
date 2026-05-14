@@ -1,0 +1,313 @@
+// Pomone — Calendar (Calendrier) screen.
+//
+// Monthly view: a 7×6 grid of day cells. Each cell shows its day number plus
+// pills for the events that fall on that date. Header has prev/next month
+// buttons and the current month label.
+//
+// The Rust side builds a fixed-length 42-cell model so that the grid is
+// always rendered the same way regardless of how the month starts. Cells
+// outside the current month have `in-current-month = false` and render
+// dimmed but still show their day number for context.
+//
+// Event-kind colour mapping is local to this file: the Rust DTO carries a
+// numeric `kind` (0..=7) and we resolve it against the theme palette here.
+
+import { Palette, Theme, Card, SecondaryButton, SectionHeader } from "theme.slint";
+
+export struct CalendarEvent {
+    // Numeric kind, mirrors `pomone_app::CalendarEventKind`:
+    //   0 = Sowing, 1 = Transplanting, 2 = HarvestStart, 3 = HarvestEnd,
+    //   4 = Establishment, 5 = Removal, 6 = BudBreak, 7 = Flowering.
+    kind: int,
+    // Single-glyph badge ("S", "R", "▶", "■", "P", "✕", "B", "F") chosen on
+    // the Rust side from translated strings so this file doesn't need to
+    // know about i18n.
+    glyph: string,
+    // Long label for tooltips / overflow text — typically "<Crop> · <Variety>".
+    label: string,
+}
+
+export struct CalendarDay {
+    // 1..=31, or 0 for an empty leading/trailing cell.
+    day-number: int,
+    in-current-month: bool,
+    is-today: bool,
+    events: [CalendarEvent],
+}
+
+// Small pill that visualises one event. Background colour is derived from
+// `kind` via a ternary chain so the screen stays self-contained.
+component EventPill inherits Rectangle {
+    in property <CalendarEvent> event;
+
+    height: 18px;
+    border-radius: Theme.radius-sm;
+    background: event.kind == 0 ? Palette.primary           // Sowing
+              : event.kind == 1 ? Palette.primary-hover     // Transplanting
+              : event.kind == 2 ? Palette.accent            // HarvestStart
+              : event.kind == 3 ? Palette.accent-pressed    // HarvestEnd
+              : event.kind == 4 ? Palette.primary-pressed   // Establishment
+              : event.kind == 5 ? Palette.danger            // Removal
+              : event.kind == 6 ? Palette.warning           // BudBreak
+              :                   Palette.accent-hover;     // Flowering
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 6px;
+        spacing: 4px;
+        Text {
+            text: event.glyph;
+            color: Palette.text-on-primary;
+            font-size: Theme.font-size-label;
+            font-weight: Theme.font-weight-semibold;
+            vertical-alignment: center;
+        }
+        Text {
+            text: event.label;
+            color: Palette.text-on-primary;
+            font-size: Theme.font-size-label;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+    }
+}
+
+component DayCell inherits Rectangle {
+    in property <CalendarDay> day;
+
+    border-width: Theme.border-width;
+    border-color: Palette.border;
+    border-radius: Theme.radius-sm;
+    background: day.is-today ? Palette.surface-alt
+              : day.in-current-month ? Palette.surface
+              :                        Palette.background;
+
+    VerticalLayout {
+        padding: Theme.space-xs;
+        spacing: 2px;
+
+        Text {
+            text: day.day-number > 0 ? day.day-number : "";
+            color: day.in-current-month ? Palette.text-primary : Palette.text-muted;
+            font-size: Theme.font-size-label;
+            font-weight: day.is-today ? Theme.font-weight-bold : Theme.font-weight-medium;
+            horizontal-alignment: right;
+        }
+
+        // Up to three pills visible; the rest collapses into a "+N" line so
+        // the cell height stays predictable.
+        for ev[i] in day.events: Rectangle {
+            visible: i < 3;
+            height: i < 3 ? 18px : 0;
+            EventPill { event: ev; width: parent.width; height: 18px; }
+        }
+        if day.events.length > 3: Text {
+            text: "+" + (day.events.length - 3);
+            color: Palette.text-muted;
+            font-size: Theme.font-size-label;
+        }
+
+        Rectangle { vertical-stretch: 1; }
+    }
+}
+
+export component CalendarPage inherits Rectangle {
+    background: Palette.background;
+
+    in property <string> title-text;
+    in property <string> month-label;           // e.g. "Mai 2026"
+    in property <string> prev-button-text;      // localized "‹" / "Précédent"
+    in property <string> next-button-text;
+    in property <string> today-button-text;
+    in property <string> empty-state-text;      // shown if no events anywhere this month
+
+    // Seven localized weekday names, starting on Monday.
+    in property <[string]> weekday-labels;
+
+    // 42 entries (6 rows × 7 columns), always.
+    in property <[CalendarDay]> days;
+
+    // Legend strings, one per `kind` (translated Rust-side). Same ordering
+    // as the `kind` field on `CalendarEvent`.
+    in property <[string]> kind-labels;
+
+    callback prev-month();
+    callback next-month();
+    callback go-today();
+
+    // True if the events array on any day is non-empty.
+    property <bool> any-events:
+        days[0].events.length + days[1].events.length + days[2].events.length
+        + days[3].events.length + days[4].events.length + days[5].events.length
+        + days[6].events.length + days[7].events.length + days[8].events.length
+        + days[9].events.length + days[10].events.length + days[11].events.length
+        + days[12].events.length + days[13].events.length + days[14].events.length
+        + days[15].events.length + days[16].events.length + days[17].events.length
+        + days[18].events.length + days[19].events.length + days[20].events.length
+        + days[21].events.length + days[22].events.length + days[23].events.length
+        + days[24].events.length + days[25].events.length + days[26].events.length
+        + days[27].events.length + days[28].events.length + days[29].events.length
+        + days[30].events.length + days[31].events.length + days[32].events.length
+        + days[33].events.length + days[34].events.length + days[35].events.length
+        + days[36].events.length + days[37].events.length + days[38].events.length
+        + days[39].events.length + days[40].events.length + days[41].events.length
+        > 0;
+
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-xl;
+
+        // ---------- Header ----------
+        HorizontalLayout {
+            spacing: Theme.space-md;
+            Text {
+                text: title-text;
+                color: Palette.primary;
+                font-size: Theme.font-size-h1;
+                font-weight: Theme.font-weight-bold;
+                horizontal-stretch: 1;
+            }
+            SecondaryButton {
+                text: prev-button-text;
+                clicked => { prev-month(); }
+            }
+            SecondaryButton {
+                text: today-button-text;
+                clicked => { go-today(); }
+            }
+            SecondaryButton {
+                text: next-button-text;
+                clicked => { next-month(); }
+            }
+        }
+
+        Card {
+            VerticalLayout {
+                padding: Theme.space-lg;
+                spacing: Theme.space-md;
+
+                HorizontalLayout {
+                    Text {
+                        text: month-label;
+                        color: Palette.text-primary;
+                        font-size: Theme.font-size-h2;
+                        font-weight: Theme.font-weight-semibold;
+                        horizontal-stretch: 1;
+                    }
+                }
+
+                // Weekday header row, 7 columns to match the grid below.
+                GridLayout {
+                    spacing: Theme.space-xs;
+                    Row {
+                        for wd in weekday-labels: Text {
+                            text: wd;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            horizontal-alignment: center;
+                        }
+                    }
+                }
+
+                // 6 rows × 7 columns. The model is always 42 long so we can
+                // index it directly.
+                GridLayout {
+                    spacing: Theme.space-xs;
+
+                    Row {
+                        DayCell { day: days[0]; min-height: 110px; }
+                        DayCell { day: days[1]; min-height: 110px; }
+                        DayCell { day: days[2]; min-height: 110px; }
+                        DayCell { day: days[3]; min-height: 110px; }
+                        DayCell { day: days[4]; min-height: 110px; }
+                        DayCell { day: days[5]; min-height: 110px; }
+                        DayCell { day: days[6]; min-height: 110px; }
+                    }
+                    Row {
+                        DayCell { day: days[7]; min-height: 110px; }
+                        DayCell { day: days[8]; min-height: 110px; }
+                        DayCell { day: days[9]; min-height: 110px; }
+                        DayCell { day: days[10]; min-height: 110px; }
+                        DayCell { day: days[11]; min-height: 110px; }
+                        DayCell { day: days[12]; min-height: 110px; }
+                        DayCell { day: days[13]; min-height: 110px; }
+                    }
+                    Row {
+                        DayCell { day: days[14]; min-height: 110px; }
+                        DayCell { day: days[15]; min-height: 110px; }
+                        DayCell { day: days[16]; min-height: 110px; }
+                        DayCell { day: days[17]; min-height: 110px; }
+                        DayCell { day: days[18]; min-height: 110px; }
+                        DayCell { day: days[19]; min-height: 110px; }
+                        DayCell { day: days[20]; min-height: 110px; }
+                    }
+                    Row {
+                        DayCell { day: days[21]; min-height: 110px; }
+                        DayCell { day: days[22]; min-height: 110px; }
+                        DayCell { day: days[23]; min-height: 110px; }
+                        DayCell { day: days[24]; min-height: 110px; }
+                        DayCell { day: days[25]; min-height: 110px; }
+                        DayCell { day: days[26]; min-height: 110px; }
+                        DayCell { day: days[27]; min-height: 110px; }
+                    }
+                    Row {
+                        DayCell { day: days[28]; min-height: 110px; }
+                        DayCell { day: days[29]; min-height: 110px; }
+                        DayCell { day: days[30]; min-height: 110px; }
+                        DayCell { day: days[31]; min-height: 110px; }
+                        DayCell { day: days[32]; min-height: 110px; }
+                        DayCell { day: days[33]; min-height: 110px; }
+                        DayCell { day: days[34]; min-height: 110px; }
+                    }
+                    Row {
+                        DayCell { day: days[35]; min-height: 110px; }
+                        DayCell { day: days[36]; min-height: 110px; }
+                        DayCell { day: days[37]; min-height: 110px; }
+                        DayCell { day: days[38]; min-height: 110px; }
+                        DayCell { day: days[39]; min-height: 110px; }
+                        DayCell { day: days[40]; min-height: 110px; }
+                        DayCell { day: days[41]; min-height: 110px; }
+                    }
+                }
+            }
+        }
+
+        // ---------- Legend ----------
+        Card {
+            VerticalLayout {
+                padding: Theme.space-md;
+                spacing: Theme.space-sm;
+                SectionHeader { text: empty-state-text; visible: !any-events; }
+
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    for label[idx] in kind-labels: HorizontalLayout {
+                        spacing: Theme.space-xs;
+                        Rectangle {
+                            width: 14px;
+                            height: 14px;
+                            border-radius: Theme.radius-sm;
+                            background: idx == 0 ? Palette.primary
+                                      : idx == 1 ? Palette.primary-hover
+                                      : idx == 2 ? Palette.accent
+                                      : idx == 3 ? Palette.accent-pressed
+                                      : idx == 4 ? Palette.primary-pressed
+                                      : idx == 5 ? Palette.danger
+                                      : idx == 6 ? Palette.warning
+                                      :            Palette.accent-hover;
+                            y: 4px;
+                        }
+                        Text {
+                            text: label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
