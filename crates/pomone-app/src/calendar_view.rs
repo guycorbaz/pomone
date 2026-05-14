@@ -145,7 +145,10 @@ pub async fn list_events_in_range(
                     // Non-recurring pluriannuals never reach a yielding year
                     // here — productive_years would return empty. Skip cleanly.
                     let Some(Lifespan::Pluriannual {
-                        pattern: ProductivePattern::Recurring { years_to_first_yield },
+                        pattern:
+                            ProductivePattern::Recurring {
+                                years_to_first_yield,
+                            },
                         lifespan_years,
                     }) = crop.map(|c| c.lifespan)
                     else {

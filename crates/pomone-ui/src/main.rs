@@ -1308,6 +1308,7 @@ fn refresh_calendar(window: &MainWindow, state: &mut UiState) -> Result<()> {
         });
     }
     window.set_calendar_days(ModelRc::new(VecModel::from(days)));
+    window.set_calendar_any_events(!events.is_empty());
 
     let month_key = format!("month-{month}");
     let month_name = i18n.t(&month_key);

@@ -165,23 +165,11 @@ export component CalendarPage inherits Rectangle {
     callback go-today();
     callback event-clicked(string);
 
-    // True if the events array on any day is non-empty.
-    property <bool> any-events:
-        days[0].events.length + days[1].events.length + days[2].events.length
-        + days[3].events.length + days[4].events.length + days[5].events.length
-        + days[6].events.length + days[7].events.length + days[8].events.length
-        + days[9].events.length + days[10].events.length + days[11].events.length
-        + days[12].events.length + days[13].events.length + days[14].events.length
-        + days[15].events.length + days[16].events.length + days[17].events.length
-        + days[18].events.length + days[19].events.length + days[20].events.length
-        + days[21].events.length + days[22].events.length + days[23].events.length
-        + days[24].events.length + days[25].events.length + days[26].events.length
-        + days[27].events.length + days[28].events.length + days[29].events.length
-        + days[30].events.length + days[31].events.length + days[32].events.length
-        + days[33].events.length + days[34].events.length + days[35].events.length
-        + days[36].events.length + days[37].events.length + days[38].events.length
-        + days[39].events.length + days[40].events.length + days[41].events.length
-        > 0;
+    // True iff at least one day in the grid carries any event. Computed
+    // Rust-side and pushed in via `refresh_calendar` — a Slint-side fold
+    // over all 42 cells used to live here but expanded into a tree large
+    // enough to overflow the Slint compiler's stack on Windows runners.
+    in property <bool> any-events;
 
     VerticalLayout {
         padding: Theme.space-2xl;

@@ -229,6 +229,7 @@ export component MainWindow inherits Window {
     in property <[string]> calendar-weekday-labels;
     in property <[CalendarDay]> calendar-days;
     in property <[string]> calendar-kind-labels;
+    in property <bool> calendar-any-events;
     callback prev-month();
     callback next-month();
     callback go-today();
@@ -479,6 +480,7 @@ export component MainWindow inherits Window {
                 weekday-labels: calendar-weekday-labels;
                 days: calendar-days;
                 kind-labels: calendar-kind-labels;
+                any-events: calendar-any-events;
                 prev-month => { prev-month(); }
                 next-month => { next-month(); }
                 go-today => { go-today(); }
