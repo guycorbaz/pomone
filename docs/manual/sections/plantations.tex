@@ -30,6 +30,20 @@ Une \emph{plantation} (\emph{planting}) représente la mise en culture d'une var
 
 \section{Vue Gantt des plantations}
 
+L'écran Plantations affiche en haut une \textbf{frise chronologique} (Gantt) de la saison en cours. Chaque plantation annuelle apparaît comme une barre horizontale colorée en trois segments :
+
+\begin{itemize}
+  \item Phase \textbf{serre} (du semis au repiquage) — beige clair.
+  \item Phase \textbf{champ} (du repiquage au début de récolte) — vert Pomone.
+  \item Phase \textbf{récolte} (du début à la fin de la fenêtre) — vert sombre.
+\end{itemize}
+
+Une ligne verticale terracotta marque le jour courant. Cliquer sur une barre ouvre le détail de la plantation correspondante.
+
+\begin{notebox}
+Les plantations \emph{pluriannuelles} (vergers, petits fruits, vivaces) ne sont pas affichées dans la Gantt : leur cycle dépasse l'axe annuel et leurs données vivent sur la vue détail. Les plantations dont la première récolte tombe dans une autre année que l'année courante sont également masquées pour garder la ligne du jour cohérente.
+\end{notebox}
+
 \begin{todobox}
-\textbf{À venir.} Vue chronologique de toutes les plantations de la saison sous forme de barres horizontales (semis $\to$ champ $\to$ récolte), avec ligne du jour, drag-and-drop, et superposition des tâches.
+À venir : drag-and-drop pour réorganiser les plantations sur l'axe, superposition des tâches (semis, repiquage, désherbage), filtre par lieu / famille botanique.
 \end{todobox}

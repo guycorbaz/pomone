@@ -1,12 +1,16 @@
 // Pomone — Home (overview) page.
 //
-// Welcome blurb + an "overview" card with three stat rows (strata count,
-// crop families count, location-kinds count). Counts are pushed from Rust
-// at startup and after every persistence event.
+// Welcome blurb, a stats card (strata / families / location-kinds counts),
+// and a compact Gantt timeline of the season's annual plantings. Perennial
+// plantings are intentionally omitted from the Gantt — their multi-year
+// span doesn't fit the single-season axis (their data lives on the detail
+// page's Yearly Harvests section). Counts are pushed from Rust at startup
+// and after every persistence event.
 
 import { Palette, Theme, Card, SectionHeader } from "theme.slint";
+import { Timeline, GanttBar } from "components/timeline.slint";
 
-// One row of the overview card: text label on the left, integer count on the right.
+// One row of the stats card: text label on the left, integer count on the right.
 component StatRow inherits Rectangle {
     in property <string> label;
     in property <int> value;
@@ -46,6 +50,17 @@ export component HomePage inherits VerticalLayout {
     in property <int> count-families;
     in property <int> count-location-kinds;
 
+    // Gantt timeline (annual plantings of the season). Driven from Rust;
+    // empty list when there are no annual plantings yet — Timeline renders
+    // an empty grid in that case, which is fine as a visual placeholder.
+    in property <string> section-season-text;
+    in property <string> empty-season-text;
+    in property <[GanttBar]> gantt-bars;
+    in property <[string]> gantt-month-labels;
+    in property <int> gantt-today-day;
+
+    callback row-clicked(string);
+
     padding: Theme.space-2xl;
     spacing: Theme.space-xl;
 
@@ -69,6 +84,40 @@ export component HomePage inherits VerticalLayout {
             StatRow { label: root.label-families; value: root.count-families; }
             Divider { }
             StatRow { label: root.label-location-kinds; value: root.count-location-kinds; }
+        }
+    }
+
+    // ----- Season Gantt card -----
+    Card {
+        VerticalLayout {
+            padding: Theme.space-xl;
+            spacing: Theme.space-sm;
+
+            SectionHeader { text: root.section-season-text; }
+            Rectangle { height: Theme.space-xs; }
+
+            if root.gantt-bars.length == 0: Text {
+                text: root.empty-season-text;
+                color: Palette.text-muted;
+                font-size: Theme.font-size-body;
+                wrap: word-wrap;
+            }
+
+            // Horizontal scroll for the 12-month axis (960px) on narrow screens.
+            if root.gantt-bars.length > 0: Flickable {
+                height: min(root.gantt-bars.length * 36px + 32px, 320px);
+                viewport-width: 960px;
+                viewport-height: root.gantt-bars.length * 36px + 32px;
+
+                Timeline {
+                    width: 960px;
+                    height: parent.viewport-height;
+                    rows: root.gantt-bars;
+                    month-labels: root.gantt-month-labels;
+                    today-day: root.gantt-today-day;
+                    row-clicked(id) => { root.row-clicked(id); }
+                }
+            }
         }
     }
 

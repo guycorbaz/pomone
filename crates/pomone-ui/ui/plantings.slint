@@ -6,6 +6,7 @@
 
 import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
 import { ListView, ScrollView } from "std-widgets.slint";
+import { Timeline, GanttBar } from "components/timeline.slint";
 
 // Row of the plantings list. Mirrors `pomone_app::PlantingRow` field-for-field;
 // the Rust binding converts at the boundary.
@@ -132,9 +133,16 @@ export component PlantingsPage inherits Rectangle {
     in property <string> status-text;
     in property <bool> status-is-error: false;
 
+    // Gantt timeline. Driven from Rust; perennials are skipped on the Rust
+    // side because their multi-year span doesn't fit a single-season axis.
+    in property <string> section-gantt-text;
+    in property <[GanttBar]> gantt-bars;
+    in property <[string]> gantt-month-labels;
+    in property <int> gantt-today-day;
+
     callback create-planting();
-    // Emitted when the user clicks a row in the list — `id` is the
-    // stringified PlantingId from the underlying row.
+    // Emitted when the user clicks a row in the list OR a Gantt bar — `id`
+    // is the stringified PlantingId from the underlying row.
     callback row-clicked(string);
 
     VerticalLayout {
@@ -147,6 +155,33 @@ export component PlantingsPage inherits Rectangle {
             color: Palette.primary;
             font-size: Theme.font-size-h1;
             font-weight: Theme.font-weight-bold;
+        }
+
+        // Season Gantt. Sits above the list so it's the first thing users
+        // see — Qrop-style planning view. Bar clicks reuse `row-clicked`.
+        if gantt-bars.length > 0: Card {
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-sm;
+
+                SectionHeader { text: section-gantt-text; }
+                Rectangle { height: Theme.space-xs; }
+
+                Flickable {
+                    height: min(gantt-bars.length * 36px + 32px, 360px);
+                    viewport-width: 960px;
+                    viewport-height: gantt-bars.length * 36px + 32px;
+
+                    Timeline {
+                        width: 960px;
+                        height: parent.viewport-height;
+                        rows: gantt-bars;
+                        month-labels: gantt-month-labels;
+                        today-day: gantt-today-day;
+                        row-clicked(id) => { row-clicked(id); }
+                    }
+                }
+            }
         }
 
         // List section

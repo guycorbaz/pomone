@@ -18,7 +18,7 @@ import { StrataPage, StrataItem } from "strata.slint";
 import { SettingsPage } from "settings.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, DetailLine, YearlyHarvestRow, StrataItem }
+export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, DetailLine, YearlyHarvestRow, StrataItem, GanttBar }
 
 export component MainWindow inherits Window {
     title: "Pomone";
@@ -44,6 +44,17 @@ export component MainWindow inherits Window {
     in property <int> count-location-kinds;
     in property <string> language-button-text;
     in property <string> current-language-tag;
+
+    // ------- Gantt timeline data (shared by Home and Plantings pages) -------
+    // Rust pushes the planting → GanttBar conversion + locale-aware month
+    // labels + today's day-of-year. Empty bars = empty grid (acceptable
+    // placeholder).
+    in property <[GanttBar]> gantt-bars;
+    in property <[string]> gantt-month-labels;
+    in property <int> gantt-today-day: -1;
+    in property <string> section-season-text;       // Home Gantt card header
+    in property <string> empty-season-text;          // Home Gantt empty state
+    in property <string> section-gantt-text;        // Plantings Gantt card header
 
     // ------- Sidebar nav labels -------
     in property <string> nav-home-text;
@@ -554,17 +565,12 @@ export component MainWindow inherits Window {
                 count-strata: count-strata;
                 count-families: count-families;
                 count-location-kinds: count-location-kinds;
-            }
-
-            // ----- Compile-time validation hook for the Timeline component.
-            //       Always-false branch so the Slint compiler type-checks
-            //       Timeline + GanttBar against this usage even though
-            //       nothing is rendered. PR C will replace this with a real
-            //       wire-up on the Plantings / Home pages.
-            if false: Timeline {
-                rows: [];
-                month-labels: [];
-                today-day: -1;
+                section-season-text: section-season-text;
+                empty-season-text: empty-season-text;
+                gantt-bars: gantt-bars;
+                gantt-month-labels: gantt-month-labels;
+                gantt-today-day: gantt-today-day;
+                row-clicked(pid) => { planting-row-clicked(pid); }
             }
 
             // ------- Plantings -------
@@ -598,6 +604,10 @@ export component MainWindow inherits Window {
                 count-text <=> count-text;
                 status-text: status-text;
                 status-is-error: status-is-error;
+                section-gantt-text: section-gantt-text;
+                gantt-bars: gantt-bars;
+                gantt-month-labels: gantt-month-labels;
+                gantt-today-day: gantt-today-day;
                 create-planting => { create-planting(); }
                 row-clicked(pid) => { planting-row-clicked(pid); }
             }
