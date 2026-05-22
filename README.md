@@ -62,6 +62,20 @@ cargo install cargo-llvm-cov
 cargo llvm-cov --workspace --html
 ```
 
+## Packages
+
+```sh
+# Linux : .deb + AppImage (x86_64)
+cargo install cargo-packager --locked
+cargo packager --release -p pomone-ui --formats deb,appimage
+# → target/release/pomone_0.1.0_amd64.deb
+# → target/release/pomone_0.1.0_x86_64.AppImage
+```
+
+Le `.deb` installe le binaire dans `/usr/bin/pomone` avec icônes hicolor et entrée
+`.desktop`. L'AppImage est autonome (lance directement, pas d'installation requise).
+Packaging Windows (`.msi`) et macOS (`.dmg`) à venir.
+
 ## Licence
 
 GPL v3 ou ultérieure. Voir [LICENSE](LICENSE).
