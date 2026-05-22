@@ -19,7 +19,7 @@ use pomone_app::{
     list_plantings, list_strata_options, list_strata_rows, list_varieties_for_crop,
     list_variety_options, list_yearly_harvests_for_planting, parse_id, services, test_backend, App,
     AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind,
-    CropInput, CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput,
+    CropInput, CropRow as AppCropRow, CycleDates, FamilyOption, Lang, LifespanKind, LocationInput,
     LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
     PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow, StrataInput, StrataOption,
     StrataRow as AppStrataRow, VarietyInput, VarietyOption, VarietyProfileKind,
@@ -43,9 +43,9 @@ mod generated {
 }
 use generated::{
     CalendarDay as SlintCalendarDay, CalendarEvent as SlintCalendarEvent, CropRow as SlintCropRow,
-    DetailLine as SlintDetailLine, LocationItem as SlintLocationItem, MainWindow,
-    PlantingRow as SlintPlantingRow, StrataItem as SlintStrataItem, VarietyRow as SlintVarietyRow,
-    YearlyHarvestRow as SlintYearlyHarvestRow,
+    DetailLine as SlintDetailLine, GanttBar as SlintGanttBar, LocationItem as SlintLocationItem,
+    MainWindow, PlantingRow as SlintPlantingRow, StrataItem as SlintStrataItem,
+    VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -788,8 +788,26 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_label_families(SharedString::from(i18n.t("label-families-count")));
     window.set_label_location_kinds(SharedString::from(i18n.t("label-location-kinds-count")));
     window.set_section_overview_text(SharedString::from(i18n.t("section-overview")));
+    window.set_section_season_text(SharedString::from(i18n.t("section-season")));
+    window.set_empty_season_text(SharedString::from(i18n.t("empty-season")));
+    window.set_section_gantt_text(SharedString::from(i18n.t("section-gantt")));
     window.set_language_button_text(SharedString::from(i18n.t("button-switch-language")));
     window.set_current_language_tag(SharedString::from(i18n.lang().tag()));
+
+    // Localized 12 month abbreviations for the Gantt header. Index 0 = January.
+    // Uses `gantt-month-N` (short form, e.g. "Janv.") rather than the full
+    // `month-N` so the 80px-wide column doesn't overflow on long names.
+    let month_labels: Vec<SharedString> = (1..=12)
+        .map(|m| SharedString::from(i18n.t(format!("gantt-month-{m}").as_str())))
+        .collect();
+    window.set_gantt_month_labels(ModelRc::new(VecModel::from(month_labels)));
+
+    // Today's day-of-year for the Gantt's vertical "today" line. Refreshed
+    // here so a language toggle (rare but possible mid-session) also
+    // re-snaps it; an app left open across midnight would still need a
+    // separate timer, but that's a v1.x problem.
+    let today_doy = usize_to_i32(Local::now().date_naive().ordinal() as usize);
+    window.set_gantt_today_day(today_doy);
 
     // Sidebar nav
     window.set_nav_home_text(SharedString::from(i18n.t("nav-home")));
@@ -1112,6 +1130,18 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
         .collect();
     window.set_location_labels(ModelRc::new(VecModel::from(location_labels)));
 
+    // Build the Gantt model alongside the list. Only annuals (Cycle schedule)
+    // and only those whose first-harvest year matches today's year — winter-sow
+    // plantings from another season are intentionally hidden so the today-line
+    // stays meaningful and the axis doesn't need to span multiple years.
+    let today_year = Local::now().date_naive().year();
+    let gantt_bars: Vec<SlintGanttBar> = snapshot
+        .plantings
+        .iter()
+        .filter_map(|row| to_gantt_bar(row, today_year))
+        .collect();
+    window.set_gantt_bars(ModelRc::new(VecModel::from(gantt_bars)));
+
     let rows: Vec<SlintPlantingRow> = snapshot.plantings.into_iter().map(to_slint_row).collect();
     window.set_plantings(ModelRc::new(VecModel::from(rows)));
 
@@ -1137,6 +1167,49 @@ fn to_slint_row(row: AppPlantingRow) -> SlintPlantingRow {
         area_label: SharedString::from(row.area_label),
         plants_count: usize_to_i32(row.plants_count as usize),
     }
+}
+
+/// Convert one planting row into a Gantt bar.
+///
+/// Returns `None` if the row is perennial (no cycle dates) or if the
+/// planting's first-harvest year doesn't match `today_year` — keeping the
+/// timeline single-year keeps the today-line meaningful and avoids the
+/// multi-axis complexity that comes with cross-year cycles.
+///
+/// Dates that fall in a different year than the harvest year (e.g. a
+/// winter sow that crosses Jan 1) are clamped to day 1 so the greenhouse
+/// segment still appears at the very start of the axis rather than
+/// disappearing.
+fn to_gantt_bar(row: &AppPlantingRow, today_year: i32) -> Option<SlintGanttBar> {
+    let CycleDates {
+        sown_on,
+        transplanted_on,
+        first_harvest_on,
+        last_harvest_on,
+    } = row.cycle_dates?;
+    if first_harvest_on.year() != today_year {
+        return None;
+    }
+    let doy_in_year = |d: chrono::NaiveDate| -> i32 {
+        // Harvest-end can technically spill into next year (winter crops);
+        // clamp to 365 so the bar reaches the right edge of the axis.
+        // Winter-sow plantings start in the previous year — clamp to day 1
+        // so the greenhouse segment is visible at the axis start.
+        use std::cmp::Ordering;
+        match d.year().cmp(&today_year) {
+            Ordering::Less => 1,
+            Ordering::Greater => 365,
+            Ordering::Equal => usize_to_i32(d.ordinal() as usize),
+        }
+    };
+    Some(SlintGanttBar {
+        id: SharedString::from(row.id.clone()),
+        name: SharedString::from(row.variety_label.clone()),
+        sow_day: sown_on.map_or(0, doy_in_year),
+        transplant_day: transplanted_on.map_or(0, doy_in_year),
+        harvest_start_day: doy_in_year(first_harvest_on),
+        harvest_end_day: doy_in_year(last_harvest_on),
+    })
 }
 
 /// Read the form fields, validate them, build typed IDs, and call the right

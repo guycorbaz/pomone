@@ -32,6 +32,12 @@ pub struct LocationOption {
 }
 
 /// A planting row suitable for the list view.
+///
+/// `cycle_dates` is `Some(...)` only for annual `PlantingSchedule::Cycle`
+/// plantings; perennials carry it as `None` because their multi-year span
+/// doesn't fit the single-season Gantt axis (the Yearly Harvests view is
+/// the right place for them). The four dates inside `CycleDates` mirror
+/// the domain enum field-for-field.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PlantingRow {
     pub id: String,
@@ -40,6 +46,18 @@ pub struct PlantingRow {
     pub schedule_summary: String,
     pub area_label: String,
     pub plants_count: u32,
+    pub cycle_dates: Option<CycleDates>,
+}
+
+/// Raw dates from `PlantingSchedule::Cycle`, surfaced so the UI's Gantt
+/// timeline can position each planting's segments without re-parsing the
+/// formatted `schedule_summary`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CycleDates {
+    pub sown_on: Option<chrono::NaiveDate>,
+    pub transplanted_on: Option<chrono::NaiveDate>,
+    pub first_harvest_on: chrono::NaiveDate,
+    pub last_harvest_on: chrono::NaiveDate,
 }
 
 /// Format a `Decimal` area as a French-style number with `m²` suffix.
@@ -166,6 +184,20 @@ pub async fn list_plantings(repo: &dyn Repository) -> AppResult<Vec<PlantingRow>
                     None => l.name.clone(),
                 },
             );
+            let cycle_dates = match p.schedule {
+                pomone_domain::PlantingSchedule::Cycle {
+                    sown_on,
+                    transplanted_on,
+                    first_harvest_on,
+                    last_harvest_on,
+                } => Some(CycleDates {
+                    sown_on,
+                    transplanted_on,
+                    first_harvest_on,
+                    last_harvest_on,
+                }),
+                pomone_domain::PlantingSchedule::Perennial { .. } => None,
+            };
             PlantingRow {
                 id: p.id.to_string(),
                 variety_label,
@@ -173,6 +205,7 @@ pub async fn list_plantings(repo: &dyn Repository) -> AppResult<Vec<PlantingRow>
                 schedule_summary: schedule_summary(p),
                 area_label: format_area(p.area_m2),
                 plants_count: p.plants_count,
+                cycle_dates,
             }
         })
         .collect();

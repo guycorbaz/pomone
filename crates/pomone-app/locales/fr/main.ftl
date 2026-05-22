@@ -264,3 +264,20 @@ nav-help = Aide
 status-manual-opened = Manuel ouvert dans le visualiseur système.
 status-manual-not-found = Manuel introuvable. Réinstallez Pomone ou consultez le PDF en ligne.
 status-manual-open-failed = Impossible d'ouvrir le manuel : { $message }
+
+## Gantt timeline
+section-season = Saison
+empty-season = Aucune plantation annuelle pour cette saison. Créez-en depuis l'écran Plantations.
+section-gantt = Vue Gantt de la saison
+gantt-month-1 = Janv.
+gantt-month-2 = Févr.
+gantt-month-3 = Mars
+gantt-month-4 = Avril
+gantt-month-5 = Mai
+gantt-month-6 = Juin
+gantt-month-7 = Juil.
+gantt-month-8 = Août
+gantt-month-9 = Sept.
+gantt-month-10 = Oct.
+gantt-month-11 = Nov.
+gantt-month-12 = Déc.
