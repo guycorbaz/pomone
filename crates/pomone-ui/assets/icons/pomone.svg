@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Pomone placeholder icon: cream P on forest-green disc, terracotta leaf accent.
+       Colors match crates/pomone-ui/ui/theme.slint light palette. -->
+  <circle cx="256" cy="256" r="240" fill="#3C6E47"/>
+  <circle cx="256" cy="256" r="240" fill="none" stroke="#244529" stroke-width="6" opacity="0.5"/>
+  <!-- stylized leaf accent (top-right) -->
+  <path d="M 360 130 Q 410 150 400 210 Q 360 200 350 160 Z" fill="#B85C38" opacity="0.9"/>
+  <path d="M 360 130 Q 380 170 400 210" stroke="#7E3A22" stroke-width="4" fill="none" opacity="0.7"/>
+  <!-- Letter P -->
+  <text x="256" y="380"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="360"
+        font-weight="bold"
+        text-anchor="middle"
+        fill="#FBF7F0">P</text>
+</svg>
