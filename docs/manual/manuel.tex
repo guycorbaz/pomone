@@ -1,0 +1,242 @@
+% Pomone — Manuel utilisateur.
+%
+% Compile with xelatex (or latexmk -xelatex). Requires:
+%   - fontspec (xelatex/lualatex)
+%   - TeX Gyre Heros (OTF, part of the standard `tex-gyre` package — present
+%     in every TeX Live install, no system font dependency)
+%   - DejaVu Sans Mono (Debian: fonts-dejavu-core, present on every Linux)
+%
+% Design: modern editorial layout — sans-serif body, generous whitespace,
+% colored chapter heroes, sidebar callouts. Brand colors match the app's
+% light-theme palette (crates/pomone-ui/ui/theme.slint).
+
+\documentclass[a4paper,11pt,openany]{book}
+
+\usepackage{babel}
+\babelprovide[import,main]{french}
+\usepackage{fontspec}
+% TeX Gyre Heros ships as lowercase OTFs (texgyreheros-{regular,italic,bold,bolditalic}.otf)
+% — load explicitly by filename so xelatex/fontspec finds them on any TeX Live.
+\setmainfont{texgyreheros-regular.otf}[
+  ItalicFont     = texgyreheros-italic.otf,
+  BoldFont       = texgyreheros-bold.otf,
+  BoldItalicFont = texgyreheros-bolditalic.otf,
+]
+\setsansfont{texgyreheros-regular.otf}[
+  ItalicFont     = texgyreheros-italic.otf,
+  BoldFont       = texgyreheros-bold.otf,
+  BoldItalicFont = texgyreheros-bolditalic.otf,
+]
+\setmonofont{DejaVu Sans Mono}[Scale=0.86]
+
+\usepackage{microtype}
+\usepackage{geometry}
+\geometry{
+  a4paper,
+  top=2.8cm,
+  bottom=2.6cm,
+  inner=2.8cm,
+  outer=2.8cm,
+  marginparwidth=2.2cm,
+  marginparsep=0.6cm,
+  headheight=14pt,
+}
+
+\usepackage{graphicx}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\setlist{itemsep=4pt,parsep=0pt,topsep=4pt,leftmargin=*}
+
+% ------- Brand palette (light theme) -------
+\definecolor{pomonegreen}{HTML}{3C6E47}
+\definecolor{pomonegreendark}{HTML}{244529}
+\definecolor{pomoneaccent}{HTML}{B85C38}
+\definecolor{pomonecream}{HTML}{FBF7F0}
+\definecolor{pomoneink}{HTML}{1F1810}
+\definecolor{pomoneink2}{HTML}{3F3528}
+\definecolor{pomonemuted}{HTML}{6B5D4D}
+\definecolor{pomoneborder}{HTML}{E2D7C2}
+\definecolor{pomonesurface}{HTML}{F3EDE0}
+
+% Page body color
+\color{pomoneink}
+
+% ------- Hyperref (no boxes, colored links) -------
+\usepackage[
+  colorlinks=true,
+  linkcolor=pomonegreen,
+  urlcolor=pomonegreen,
+  citecolor=pomonegreen,
+  pdftitle={Pomone — Manuel utilisateur},
+  pdfauthor={Projet Pomone},
+  pdfsubject={Manuel utilisateur},
+  pdfkeywords={pomone, maraîchage, agroforesterie, planification, manuel},
+  bookmarksnumbered=true,
+  bookmarksopen=true,
+]{hyperref}
+
+% ------- Headings -------
+\usepackage{titlesec}
+
+% Chapter: big colored number on the left of a thin vertical rule,
+% then the title in green to the right. Inspired by editorial design.
+\titleformat{\chapter}[display]
+  {\sffamily\bfseries\color{pomonegreen}}
+  {\fontsize{14pt}{16pt}\selectfont\color{pomonemuted}CHAPITRE \thechapter}
+  {6pt}
+  {\fontsize{32pt}{36pt}\selectfont\color{pomonegreendark}}
+\titlespacing*{\chapter}{0pt}{20pt}{30pt}
+
+\titleformat{\section}
+  {\sffamily\large\bfseries\color{pomonegreen}}
+  {\thesection}{0.8em}{}
+\titleformat{\subsection}
+  {\sffamily\normalsize\bfseries\color{pomonegreendark}}
+  {\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{18pt}{6pt}
+\titlespacing*{\subsection}{0pt}{12pt}{4pt}
+
+% ------- Headers / footers -------
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[LE]{\sffamily\small\color{pomonemuted}\thepage\quad\textbar\quad\nouppercase{\leftmark}}
+\fancyhead[RO]{\sffamily\small\color{pomonemuted}\nouppercase{\rightmark}\quad\textbar\quad\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{pomoneborder}\leaders\hrule height \headrulewidth\hfill}}
+% Plain pagestyle (chapter openings): no rule, page number bottom-center.
+\fancypagestyle{plain}{%
+  \fancyhf{}%
+  \fancyfoot[C]{\sffamily\small\color{pomonemuted}\thepage}%
+  \renewcommand{\headrulewidth}{0pt}%
+}
+
+\renewcommand{\chaptermark}[1]{\markboth{Chapitre \thechapter\quad\textbar\quad #1}{}}
+\renewcommand{\sectionmark}[1]{\markright{\thesection\quad #1}}
+
+% ------- Callout boxes -------
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable}
+
+\newtcolorbox{notebox}{
+  enhanced,
+  breakable,
+  colback=pomonesurface,
+  colframe=pomonegreen,
+  arc=0pt,
+  outer arc=0pt,
+  boxrule=0pt,
+  borderline west={3pt}{0pt}{pomonegreen},
+  left=14pt, right=12pt, top=8pt, bottom=8pt,
+  fontupper=\sffamily\small,
+  before skip=10pt, after skip=10pt,
+}
+\newtcolorbox{warnbox}{
+  enhanced,
+  breakable,
+  colback=pomonecream,
+  colframe=pomoneaccent,
+  arc=0pt,
+  outer arc=0pt,
+  boxrule=0pt,
+  borderline west={3pt}{0pt}{pomoneaccent},
+  left=14pt, right=12pt, top=8pt, bottom=8pt,
+  fontupper=\sffamily\small,
+  before skip=10pt, after skip=10pt,
+}
+\newtcolorbox{todobox}{
+  enhanced,
+  breakable,
+  colback=pomonesurface!50!white,
+  colframe=pomonemuted,
+  arc=0pt,
+  outer arc=0pt,
+  boxrule=0pt,
+  borderline west={3pt}{0pt}{pomonemuted},
+  left=14pt, right=12pt, top=8pt, bottom=8pt,
+  fontupper=\sffamily\small\itshape\color{pomoneink2},
+  before skip=10pt, after skip=10pt,
+}
+
+% ------- Code blocks (monospace, soft background) -------
+\usepackage{listings}
+\lstset{
+  backgroundcolor=\color{pomonesurface!40!white},
+  basicstyle=\ttfamily\small\color{pomoneink},
+  breaklines=true,
+  frame=none,
+  framesep=4pt,
+  showstringspaces=false,
+  xleftmargin=14pt,
+  xrightmargin=0pt,
+  aboveskip=10pt,
+  belowskip=10pt,
+  literate=%
+    {→}{{$\to$}}1 {←}{{$\leftarrow$}}1
+}
+
+% ------- Table of contents -------
+\usepackage{titletoc}
+\renewcommand{\contentsname}{\sffamily\Huge\bfseries\color{pomonegreendark}Sommaire}
+
+\dottedcontents{chapter}[1.5em]{\sffamily\bfseries\color{pomonegreen}\addvspace{6pt}}{1.5em}{0pt}
+\dottedcontents{section}[3.8em]{\sffamily\color{pomoneink}}{2.3em}{4pt}
+\dottedcontents{subsection}[6.2em]{\sffamily\small\color{pomoneink2}}{2.8em}{4pt}
+
+% ------- TOC formatting tweaks -------
+\setcounter{tocdepth}{2}
+\setcounter{secnumdepth}{2}
+
+% ------- Paragraph spacing -------
+\setlength{\parskip}{6pt}
+\setlength{\parindent}{0pt}
+
+% ------- Custom title page -------
+\newcommand{\makepomonecover}{%
+  \begin{titlepage}
+    \pagecolor{pomonegreen}
+    \color{pomonecream}
+    \begin{center}
+      \vspace*{4cm}
+      {\sffamily\fontsize{16pt}{18pt}\selectfont\textls[150]{LOGICIEL LIBRE DE PLANIFICATION}}\\[0.4cm]
+      {\sffamily\fontsize{14pt}{16pt}\selectfont\textls[100]{maraîchage \textbullet{} agroforesterie}}\\[3cm]
+      {\sffamily\fontsize{96pt}{100pt}\selectfont\textbf{Pomone}}\\[1cm]
+      {\sffamily\fontsize{22pt}{24pt}\selectfont Manuel utilisateur}\\
+      \vspace*{4.5cm}
+      {\sffamily\normalsize Projet Pomone \textbullet{} \today}\\[0.4cm]
+      {\sffamily\normalsize \url{https://github.com/guycorbaz/pomone}}
+    \end{center}
+  \end{titlepage}
+  \nopagecolor
+  \color{pomoneink}
+}
+
+% ------- Begin document -------
+\begin{document}
+
+\frontmatter
+\makepomonecover
+
+\begin{notebox}
+Ce manuel est destiné aux utilisateurs et utilisatrices de Pomone : maraîchères et maraîchers, jardinières et jardiniers, agroforestières et agroforestiers. Il est compilé automatiquement à chaque push sur \texttt{main} et publié en release \texttt{docs-latest}. Pour la documentation technique destinée aux développeurs, voir \texttt{pomone.pdf}.
+\end{notebox}
+
+\tableofcontents
+\cleardoublepage
+
+\mainmatter
+
+\input{sections/introduction}
+\input{sections/installation}
+\input{sections/premiers_pas}
+\input{sections/plantations}
+\input{sections/cultures}
+\input{sections/lieux}
+\input{sections/calendrier}
+\input{sections/recoltes}
+\input{sections/parametres}
+\input{sections/annexes}
+
+\end{document}

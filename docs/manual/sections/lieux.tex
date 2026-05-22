@@ -1,0 +1,45 @@
+\chapter{Lieux et strates}
+\label{chap:lieux}
+
+\section{Les lieux (\emph{locations})}
+
+Un \emph{lieu} est tout endroit physique où vous cultivez : une parcelle entière, une planche dans une parcelle, une serre, un verger, un rang dans un verger. Les lieux sont organisés en \textbf{hiérarchie} : une planche peut être contenue dans une parcelle, elle-même contenue dans une exploitation.
+
+Chaque lieu possède :
+
+\begin{itemize}
+  \item Un \textbf{nom} (libre).
+  \item Une \textbf{catégorie} (parcelle, planche, serre, verger, rang d'agroforesterie…).
+  \item Des \textbf{dimensions} : longueur et largeur en mètres (la surface est calculée automatiquement).
+  \item Un éventuel \textbf{parent} pour former la hiérarchie.
+  \item Des \textbf{notes} libres.
+\end{itemize}
+
+\section{Créer un lieu}
+
+\begin{todobox}
+À détailler : formulaire de création, choix du parent, affichage hiérarchique de la liste.
+\end{todobox}
+
+\section{Les strates}
+\label{sec:strates}
+
+Une \emph{strate} décrit une couche de végétation par sa hauteur. Pomone fournit un jeu de strates par défaut (couvre-sol, herbacée basse, herbacée haute, arbustive, arborée haute) que vous pouvez personnaliser.
+
+Chaque strate possède :
+
+\begin{itemize}
+  \item Un \textbf{nom} et une \textbf{description}.
+  \item Une plage de \textbf{hauteurs min/max} en mètres.
+  \item Un \textbf{ordre de tri} pour l'affichage.
+\end{itemize}
+
+\begin{todobox}
+À détailler : écran Strates, création/édition, suppression (avec garde-fou si la strate est référencée par une culture).
+\end{todobox}
+
+\section{Vue Crop Map (occupation des planches)}
+
+\begin{todobox}
+\textbf{À venir.} Vue chronologique par planche : pour chaque emplacement, frise temporelle des plantations qui l'occupent dans la saison, avec drag-and-drop entre planches.
+\end{todobox}

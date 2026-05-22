@@ -1,0 +1,44 @@
+\chapter{Introduction}
+
+\section{Qu'est-ce que Pomone ?}
+
+Pomone est un logiciel libre de gestion de cultures, conçu pour les exploitations en \textbf{maraîchage diversifié} et en \textbf{agroforesterie}. Il vous aide à planifier vos semis, vos plantations et vos récoltes sur l'ensemble d'une saison, à gérer vos lieux de culture (parcelles, planches, serres, vergers) et à suivre vos rendements année après année.
+
+Pomone est la suite spirituelle de \href{https://qrop.readthedocs.io/}{Qrop} (André Hoarau, L'Atelier Paysan). Réécrit intégralement en Rust avec une interface \href{https://slint.dev/}{Slint}, il reprend les acquis ergonomiques de Qrop et y ajoute la prise en charge native des \textbf{cultures pluriannuelles} : petits fruits, vergers, agroforesterie.
+
+\section{Pour qui ?}
+
+\begin{itemize}
+  \item \textbf{Maraîchers et maraîchères diversifié·es} qui planifient plusieurs dizaines à plusieurs centaines de plantations annuelles par saison.
+  \item \textbf{Arboriculteurs et arboricultrices, agroforestières et agroforestiers} qui suivent des cultures pluriannuelles sur plusieurs années (vergers, petits fruits, alignements).
+  \item \textbf{Jardiniers et jardinières amateur·rices} qui souhaitent structurer la planification de leur jardin potager.
+  \item \textbf{Formateur·rices, écoles agricoles, fermes-écoles} qui veulent un outil pédagogique libre pour enseigner la planification maraîchère.
+\end{itemize}
+
+\section{Ce que vous trouverez dans ce manuel}
+
+\begin{itemize}
+  \item Comment \textbf{installer} Pomone sur Linux, Windows ou macOS (chapitre \ref{chap:installation}).
+  \item Vos \textbf{premiers pas} : créer une base, configurer les premiers lieux et cultures, planifier une première plantation (chapitre \ref{chap:premiers-pas}).
+  \item La gestion des \textbf{plantations} annuelles et pluriannuelles (chapitre \ref{chap:plantations}).
+  \item La gestion des \textbf{cultures et variétés} (chapitre \ref{chap:cultures}).
+  \item La gestion des \textbf{lieux et strates} (chapitre \ref{chap:lieux}).
+  \item Le \textbf{calendrier} mensuel et les \textbf{récoltes} (chapitres \ref{chap:calendrier} et \ref{chap:recoltes}).
+  \item Les \textbf{paramètres} et la configuration de la base de données (chapitre \ref{chap:parametres}).
+  \item Les \textbf{annexes} : raccourcis clavier, glossaire (chapitre \ref{chap:annexes}).
+\end{itemize}
+
+\section{Philosophie}
+
+Pomone est un \textbf{logiciel libre} publié sous licence GPL v3 ou ultérieure. Le code source est disponible sur \href{https://github.com/guycorbaz/pomone}{GitHub}. Le projet privilégie :
+
+\begin{itemize}
+  \item \textbf{La simplicité} : une interface dépouillée, des concepts limités, une courbe d'apprentissage courte.
+  \item \textbf{La portabilité} : Linux, Windows et macOS sont des cibles de premier rang.
+  \item \textbf{L'autonomie} : Pomone fonctionne hors ligne, vos données restent chez vous (base SQLite locale par défaut).
+  \item \textbf{La pérennité} : code Rust typé, tests systématiques, format de données ouvert.
+\end{itemize}
+
+\begin{notebox}
+Pomone est en cours de développement actif. La version 1.0.0 vise la \textbf{parité fonctionnelle} avec Qrop dans sa version actuelle. Certaines fonctionnalités décrites dans ce manuel sont encore à venir et sont signalées par un encadré « À venir ».
+\end{notebox}

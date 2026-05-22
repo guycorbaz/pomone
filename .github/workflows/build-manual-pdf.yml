@@ -1,0 +1,53 @@
+name: Build user manual PDF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/manual/**'
+      - '.github/workflows/build-manual-pdf.yml'
+  pull_request:
+    paths:
+      - 'docs/manual/**'
+      - '.github/workflows/build-manual-pdf.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Compile LaTeX
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile manuel.tex
+        uses: xu-cheng/latex-action@v3
+        with:
+          working_directory: docs/manual
+          root_file: manuel.tex
+          # xelatex needed for fontspec (Lato + Inconsolata system fonts).
+          latexmk_use_xelatex: true
+          latexmk_shell_escape: false
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pomone-manuel-pdf
+          path: docs/manual/manuel.pdf
+          if-no-files-found: error
+
+      - name: Publish to docs-latest rolling release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: docs-latest
+          name: Documentation (rolling)
+          body: |
+            Documentation de Pomone, mise à jour automatiquement à chaque push sur `main` touchant `doc-latex/` ou `docs/manual/`.
+
+            Build : commit `${{ github.sha }}`.
+          files: docs/manual/manuel.pdf
+          prerelease: true
+          make_latest: false
