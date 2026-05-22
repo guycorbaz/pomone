@@ -7,6 +7,7 @@
 use crate::config::{AppConfig, BackendConfig};
 use crate::error::AppResult;
 use crate::i18n::{I18n, Lang};
+use crate::migration::{copy_all, MigrationReport};
 use pomone_db::{seed_defaults, MariaDbRepository, Repository, SqliteRepository};
 
 /// Application runtime context.
@@ -31,8 +32,7 @@ impl App {
     /// described by `config`, running migrations, seeding default lookup
     /// data, and initialising i18n bundles for the configured language.
     pub async fn new(config: AppConfig) -> AppResult<Self> {
-        let repo: Box<dyn Repository> = build_repo(&config.backend).await?;
-        seed_defaults(&*repo).await?;
+        let repo = build_repo(&config.backend).await?;
         let lang = Lang::parse(&config.language)?;
         let i18n = I18n::new(lang)?;
         Ok(Self { config, repo, i18n })
@@ -68,10 +68,49 @@ impl App {
         self.i18n.set_lang(lang);
         lang.tag().clone_into(&mut self.config.language);
     }
+
+    /// Swap the active backend in place.
+    ///
+    /// When `migrate_data` is true, every record from the current
+    /// repository is copied into the freshly-opened target before the
+    /// swap (the target gets schema migrations but no seed defaults so the
+    /// copy doesn't collide with seeded primary keys). When false, the
+    /// new backend is seeded with defaults and starts empty otherwise.
+    ///
+    /// The config field is updated to the new backend and persisted to
+    /// the OS-specific config file. The returned `MigrationReport`
+    /// records counts per entity (zero entries when `migrate_data` is
+    /// false).
+    pub async fn swap_backend(
+        &mut self,
+        new_backend: BackendConfig,
+        migrate_data: bool,
+    ) -> AppResult<MigrationReport> {
+        let new_repo = build_repo_inner(&new_backend, !migrate_data).await?;
+        let report = if migrate_data {
+            copy_all(&*self.repo, &*new_repo).await?
+        } else {
+            MigrationReport::default()
+        };
+        self.repo = new_repo;
+        self.config.backend = new_backend;
+        self.config.save_default()?;
+        Ok(report)
+    }
 }
 
 async fn build_repo(backend: &BackendConfig) -> AppResult<Box<dyn Repository>> {
-    match backend {
+    build_repo_inner(backend, true).await
+}
+
+/// Backend builder shared by [`App::new`] and [`App::swap_backend`].
+///
+/// When `seed` is true the lookup tables get the seeded defaults
+/// (`seed_defaults`); when false the schema is set up but no seed rows
+/// are inserted — that's the path used by data migration, where the
+/// caller is about to copy the source's lookup rows verbatim.
+async fn build_repo_inner(backend: &BackendConfig, seed: bool) -> AppResult<Box<dyn Repository>> {
+    let repo: Box<dyn Repository> = match backend {
         BackendConfig::Sqlite { path } => {
             // SQLite's `create_if_missing` only creates the FILE — its parent
             // directories must already exist. Make sure they do, since the
@@ -82,14 +121,23 @@ async fn build_repo(backend: &BackendConfig) -> AppResult<Box<dyn Repository>> {
                 }
             }
             let url = format!("sqlite:{}?mode=rwc", path.display());
-            let repo = SqliteRepository::connect(&url).await?;
-            Ok(Box::new(repo))
+            Box::new(SqliteRepository::connect(&url).await?)
         }
-        BackendConfig::Mariadb { url } => {
-            let repo = MariaDbRepository::connect(url).await?;
-            Ok(Box::new(repo))
-        }
+        BackendConfig::Mariadb { url } => Box::new(MariaDbRepository::connect(url).await?),
+    };
+    if seed {
+        seed_defaults(&*repo).await?;
     }
+    Ok(repo)
+}
+
+/// Lightweight probe used by the settings screen to validate credentials
+/// before saving them. Opens the backend, hits one cheap read, and lets
+/// the connection drop.
+pub async fn test_backend(backend: &BackendConfig) -> AppResult<()> {
+    let repo = build_repo_inner(backend, false).await?;
+    let _ = repo.family_list().await?;
+    Ok(())
 }
 
 #[cfg(test)]

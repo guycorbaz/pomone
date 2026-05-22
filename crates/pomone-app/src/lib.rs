@@ -13,6 +13,7 @@ pub mod error;
 pub mod harvest_view;
 pub mod i18n;
 pub mod locations_view;
+pub mod migration;
 pub mod planting_detail_view;
 pub mod plantings_view;
 pub mod services;
@@ -21,7 +22,7 @@ pub mod strata_view;
 #[cfg(test)]
 mod test_helpers;
 
-pub use app::App;
+pub use app::{test_backend, App};
 pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
 pub use config::{default_config_path, AppConfig, BackendConfig};
 pub use cultures_view::{
@@ -36,6 +37,7 @@ pub use locations_view::{
     create_location, list_location_kind_options, list_locations_tree, list_parent_options,
     LocationInput, LocationKindOption, LocationListItem, ParentLocationOption,
 };
+pub use migration::{copy_all, MigrationReport};
 pub use planting_detail_view::{get_planting_detail, DetailLine, PlantingDetail};
 pub use plantings_view::{
     list_location_options, list_plantings, list_variety_options, parse_id, parse_iso_date,

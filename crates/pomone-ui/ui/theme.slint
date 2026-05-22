@@ -115,7 +115,9 @@ export component PrimaryButton inherits Rectangle {
     callback clicked();
 
     height: 48px;
-    min-width: 120px;
+    // Hug content + comfortable padding so long labels don't get elided
+    // ("Tester la connexion" was being cut to "Tester la c" before).
+    min-width: max(120px, button-text.preferred-width + 2 * Theme.space-xl);
     horizontal-stretch: 0;
     border-radius: Theme.radius-md;
     background: !enabled ? Palette.border
@@ -147,7 +149,7 @@ export component PrimaryButton inherits Rectangle {
             }
         }
 
-        Text {
+        button-text := Text {
             text: root.text;
             color: Palette.text-on-primary;
             font-size: Theme.font-size-body;
@@ -182,7 +184,8 @@ export component SecondaryButton inherits Rectangle {
     callback clicked();
 
     height: 48px;
-    min-width: 120px;
+    // Hug content + comfortable padding (see PrimaryButton's note).
+    min-width: max(120px, secondary-text.preferred-width + 2 * Theme.space-xl);
     horizontal-stretch: 0;
     border-radius: Theme.radius-md;
     border-width: Theme.border-width;
@@ -216,7 +219,7 @@ export component SecondaryButton inherits Rectangle {
             }
         }
 
-        Text {
+        secondary-text := Text {
             text: root.text;
             color: root.enabled ? Palette.text-primary : Palette.text-muted;
             font-size: Theme.font-size-body;

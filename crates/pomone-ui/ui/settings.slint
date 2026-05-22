@@ -1,0 +1,266 @@
+// Pomone — Settings (Paramètres) screen.
+//
+// Displays the active backend and lets the user switch between SQLite (file
+// path) and MariaDB (host / port / user / password / db) without restarting.
+// The "Save + Migrate" path copies the current data into the new backend
+// before swapping; "Save only" just opens the new backend empty.
+
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export component SettingsPage inherits Rectangle {
+    background: Palette.background;
+
+    in property <string> title-text;
+    in property <string> current-backend-section;
+    in property <string> current-backend-label;
+    in property <string> current-backend-value;
+
+    in property <string> edit-section;
+    in property <string> backend-kind-label;
+    in property <[string]> backend-kind-labels;     // ["SQLite", "MariaDB"]
+    in-out property <int> backend-kind-index: 0;
+
+    in property <string> sqlite-path-label;
+    in property <string> sqlite-path-placeholder;
+    in-out property <string> sqlite-path;
+
+    in property <string> mariadb-host-label;
+    in property <string> mariadb-host-placeholder;
+    in-out property <string> mariadb-host;
+    in property <string> mariadb-port-label;
+    in property <string> mariadb-port-placeholder;
+    in-out property <string> mariadb-port: "3306";
+    in property <string> mariadb-user-label;
+    in property <string> mariadb-user-placeholder;
+    in-out property <string> mariadb-user;
+    in property <string> mariadb-password-label;
+    in property <string> mariadb-password-placeholder;
+    in-out property <string> mariadb-password;
+    in property <string> mariadb-database-label;
+    in property <string> mariadb-database-placeholder;
+    in-out property <string> mariadb-database;
+
+    in property <string> test-button-text;
+    in property <string> save-button-text;
+    in property <string> save-migrate-button-text;
+    in property <string> migrate-warning-text;
+
+    in-out property <string> status-text;
+    in property <bool> status-is-error: false;
+
+    // Callbacks pass the form values as arguments instead of relying on
+    // `<=>` chains to propagate them back to the host — the chain across
+    // the MainWindow ↔ SettingsPage boundary turned out to leave the
+    // outer properties at their initial values, so the Rust handler
+    // would read empty strings even after the user filled the form.
+    // Argument order mirrors the SQLite branch first, then MariaDB.
+    callback test-backend(int /* kind */, string /* sqlite-path */,
+        string /* host */, string /* port */, string /* user */,
+        string /* password */, string /* db */);
+    callback save-backend(int, string, string, string, string, string, string);
+    callback save-and-migrate(int, string, string, string, string, string, string);
+
+    ScrollView {
+        VerticalLayout {
+            padding: Theme.space-2xl;
+            spacing: Theme.space-xl;
+
+            Text {
+                text: title-text;
+                color: Palette.primary;
+                font-size: Theme.font-size-h1;
+                font-weight: Theme.font-weight-bold;
+            }
+
+            // -------- Current backend --------
+            Card {
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: current-backend-section; }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: current-backend-label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: current-backend-value;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+
+            // -------- Edit form --------
+            Card {
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: edit-section; }
+
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: backend-kind-label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedComboBox {
+                            model: backend-kind-labels;
+                            current-index <=> backend-kind-index;
+                        }
+                    }
+
+                    // SQLite fields
+                    if backend-kind-index == 0: VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: sqlite-path-label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> sqlite-path;
+                            placeholder-text: sqlite-path-placeholder;
+                        }
+                    }
+
+                    // MariaDB fields
+                    if backend-kind-index == 1: VerticalLayout {
+                        spacing: Theme.space-md;
+
+                        HorizontalLayout {
+                            spacing: Theme.space-md;
+                            VerticalLayout {
+                                spacing: Theme.space-xs;
+                                horizontal-stretch: 2;
+                                Text {
+                                    text: mariadb-host-label;
+                                    color: Palette.text-secondary;
+                                    font-size: Theme.font-size-label;
+                                }
+                                ThemedLineEdit {
+                                    text <=> mariadb-host;
+                                    placeholder-text: mariadb-host-placeholder;
+                                }
+                            }
+                            VerticalLayout {
+                                spacing: Theme.space-xs;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: mariadb-port-label;
+                                    color: Palette.text-secondary;
+                                    font-size: Theme.font-size-label;
+                                }
+                                ThemedLineEdit {
+                                    text <=> mariadb-port;
+                                    placeholder-text: mariadb-port-placeholder;
+                                    input-type: number;
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: Theme.space-md;
+                            VerticalLayout {
+                                spacing: Theme.space-xs;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: mariadb-user-label;
+                                    color: Palette.text-secondary;
+                                    font-size: Theme.font-size-label;
+                                }
+                                ThemedLineEdit {
+                                    text <=> mariadb-user;
+                                    placeholder-text: mariadb-user-placeholder;
+                                }
+                            }
+                            VerticalLayout {
+                                spacing: Theme.space-xs;
+                                horizontal-stretch: 1;
+                                Text {
+                                    text: mariadb-password-label;
+                                    color: Palette.text-secondary;
+                                    font-size: Theme.font-size-label;
+                                }
+                                ThemedLineEdit {
+                                    text <=> mariadb-password;
+                                    placeholder-text: mariadb-password-placeholder;
+                                    input-type: password;
+                                }
+                            }
+                        }
+
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text {
+                                text: mariadb-database-label;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedLineEdit {
+                                text <=> mariadb-database;
+                                placeholder-text: mariadb-database-placeholder;
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        SecondaryButton {
+                            text: test-button-text;
+                            clicked => {
+                                test-backend(backend-kind-index, sqlite-path,
+                                    mariadb-host, mariadb-port, mariadb-user,
+                                    mariadb-password, mariadb-database);
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        SecondaryButton {
+                            text: save-button-text;
+                            clicked => {
+                                save-backend(backend-kind-index, sqlite-path,
+                                    mariadb-host, mariadb-port, mariadb-user,
+                                    mariadb-password, mariadb-database);
+                            }
+                        }
+                        PrimaryButton {
+                            text: save-migrate-button-text;
+                            clicked => {
+                                save-and-migrate(backend-kind-index, sqlite-path,
+                                    mariadb-host, mariadb-port, mariadb-user,
+                                    mariadb-password, mariadb-database);
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: migrate-warning-text;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-label;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            Text {
+                text: status-text;
+                color: status-is-error ? Palette.danger : Palette.success;
+                font-size: Theme.font-size-label;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
