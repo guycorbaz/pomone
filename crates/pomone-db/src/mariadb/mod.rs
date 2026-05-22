@@ -11,6 +11,7 @@ mod location;
 mod location_kind;
 mod planting;
 mod strata;
+mod task;
 mod variety;
 mod yearly_harvest;
 

@@ -152,3 +152,58 @@ CREATE TABLE yearly_harvest (
     notes              TEXT,
     PRIMARY KEY (planting_id, year)
 ) STRICT;
+
+-- ---------------------------------------------------------------
+-- Tasks (operations) — three taxonomy tables feed the main `task`
+-- table. Types carry a `category` enum so the auto-generator can
+-- recognise sowings / transplants / harvests independently of the
+-- user-chosen name. Methods and implements are flat, user-managed.
+-- A task targets a planting, a location, both, or neither — see
+-- the doc comment on `Task` in pomone-domain.
+-- ---------------------------------------------------------------
+
+CREATE TABLE task_type (
+    id                BLOB    NOT NULL PRIMARY KEY,
+    name              TEXT    NOT NULL UNIQUE,
+    -- Snake-case TaskCategory variant: sow | transplant | harvest |
+    -- weeding | irrigation | treatment | tillage | other.
+    category          TEXT    NOT NULL CHECK (category IN
+        ('sow','transplant','harvest','weeding','irrigation',
+         'treatment','tillage','other')),
+    color             TEXT    NOT NULL CHECK (length(color) IN (4, 7))
+) STRICT;
+
+CREATE INDEX idx_task_type_category ON task_type(category);
+
+CREATE TABLE task_method (
+    id     BLOB NOT NULL PRIMARY KEY,
+    name   TEXT NOT NULL UNIQUE,
+    notes  TEXT
+) STRICT;
+
+CREATE TABLE task_implement (
+    id     BLOB NOT NULL PRIMARY KEY,
+    name   TEXT NOT NULL UNIQUE,
+    notes  TEXT
+) STRICT;
+
+CREATE TABLE task (
+    id                BLOB    NOT NULL PRIMARY KEY,
+    planting_id       BLOB             REFERENCES planting(id)        ON DELETE CASCADE,
+    location_id       BLOB             REFERENCES location(id)        ON DELETE CASCADE,
+    task_type_id      BLOB    NOT NULL REFERENCES task_type(id)       ON DELETE RESTRICT,
+    task_method_id    BLOB             REFERENCES task_method(id)     ON DELETE SET NULL,
+    implement_id      BLOB             REFERENCES task_implement(id)  ON DELETE SET NULL,
+    planned_on        TEXT    NOT NULL,
+    completed_on      TEXT,
+    duration_min      INTEGER,
+    -- Decimal-as-TEXT (same codec as area_m2 etc.).
+    labor_hours       TEXT,
+    notes             TEXT
+) STRICT;
+
+CREATE INDEX idx_task_planting     ON task(planting_id);
+CREATE INDEX idx_task_location     ON task(location_id);
+CREATE INDEX idx_task_type         ON task(task_type_id);
+CREATE INDEX idx_task_planned_on   ON task(planned_on);
+CREATE INDEX idx_task_completed_on ON task(completed_on);

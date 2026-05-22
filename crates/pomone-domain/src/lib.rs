@@ -29,6 +29,8 @@ pub mod location;
 pub mod location_kind;
 pub mod planting;
 pub mod strata;
+pub mod task;
+pub mod task_type;
 pub mod variety;
 
 mod validation;
@@ -38,9 +40,14 @@ pub use crop::{Crop, Lifespan, ProductivePattern, PruningSeason};
 pub use error::{DomainError, DomainResult};
 pub use family::Family;
 pub use harvest::YearlyHarvest;
-pub use ids::{CropId, FamilyId, LocationId, LocationKindId, PlantingId, StrataId, VarietyId};
+pub use ids::{
+    CropId, FamilyId, LocationId, LocationKindId, PlantingId, StrataId, TaskId, TaskImplementId,
+    TaskMethodId, TaskTypeId, VarietyId,
+};
 pub use location::Location;
 pub use location_kind::LocationKind;
 pub use planting::{Planting, PlantingSchedule};
 pub use strata::Strata;
+pub use task::Task;
+pub use task_type::{TaskCategory, TaskImplement, TaskMethod, TaskType};
 pub use variety::{AnnualProfile, PluriannualProfile, Variety, VarietyProfile};

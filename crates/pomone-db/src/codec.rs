@@ -243,6 +243,35 @@ pub(crate) fn encode_planting_schedule(s: PlantingSchedule) -> PlantingScheduleC
     }
 }
 
+/// String form of a `TaskCategory`, mirroring its `#[serde(rename_all = "snake_case")]`
+/// Used to bind the value into the DB and to decode it back.
+pub(crate) fn task_category_to_str(c: pomone_domain::TaskCategory) -> &'static str {
+    match c {
+        pomone_domain::TaskCategory::Sow => "sow",
+        pomone_domain::TaskCategory::Transplant => "transplant",
+        pomone_domain::TaskCategory::Harvest => "harvest",
+        pomone_domain::TaskCategory::Weeding => "weeding",
+        pomone_domain::TaskCategory::Irrigation => "irrigation",
+        pomone_domain::TaskCategory::Treatment => "treatment",
+        pomone_domain::TaskCategory::Tillage => "tillage",
+        pomone_domain::TaskCategory::Other => "other",
+    }
+}
+
+pub(crate) fn task_category_from_str(s: &str) -> DbResult<pomone_domain::TaskCategory> {
+    Ok(match s {
+        "sow" => pomone_domain::TaskCategory::Sow,
+        "transplant" => pomone_domain::TaskCategory::Transplant,
+        "harvest" => pomone_domain::TaskCategory::Harvest,
+        "weeding" => pomone_domain::TaskCategory::Weeding,
+        "irrigation" => pomone_domain::TaskCategory::Irrigation,
+        "treatment" => pomone_domain::TaskCategory::Treatment,
+        "tillage" => pomone_domain::TaskCategory::Tillage,
+        "other" => pomone_domain::TaskCategory::Other,
+        other => return Err(DbError::Malformed(format!("task category={other}"))),
+    })
+}
+
 pub(crate) fn decode_planting_schedule(
     kind: &str,
     sown_on: Option<NaiveDate>,
