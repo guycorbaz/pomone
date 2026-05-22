@@ -1,0 +1,114 @@
+// Pomone — single planting Gantt bar.
+//
+// Renders one row of the Timeline: a horizontal bar made of up to three
+// colored segments corresponding to a planting's phases:
+//   greenhouse  (sow-day → transplant-day)
+//   field       (transplant-day → harvest-start-day)
+//   harvest     (harvest-start-day → harvest-end-day)
+//
+// Days are stored as day-of-year (1..366). A value of 0 means "not set"
+// (e.g. a direct-sow planting has sow-day == 0 because there is no
+// greenhouse phase, only field + harvest). Cross-year plantings (winter
+// sow → spring harvest) are not supported yet — they need to be clipped
+// at the year boundary by the caller.
+//
+// Positioning is computed from `total-days` (axis length in days) and
+// `total-width` (axis length in pixels); a 1-px offset is reserved on
+// each end so adjacent month gridlines remain visible.
+
+export struct GanttBar {
+    // Stable identifier (e.g. PlantingId stringified) — passed back via
+    // the Timeline's `row-clicked` callback.
+    id: string,
+    // Display label drawn over the first segment when `show-name` is on.
+    name: string,
+    // Day-of-year (1..366) for each phase boundary. 0 = "not set".
+    sow-day: int,
+    transplant-day: int,
+    harvest-start-day: int,
+    harvest-end-day: int,
+}
+
+export component Timegraph inherits Rectangle {
+    in property <GanttBar> bar;
+    in property <int> total-days: 365;
+    in property <length> total-width: 960px;
+    in property <color> greenhouse-color: #C8B89A;
+    in property <color> field-color: #3C6E47;
+    in property <color> harvest-color: #244529;
+    in property <color> name-color: #FBF7F0;
+    in property <bool> show-name: true;
+    in property <length> segment-margin: 4px;
+    in property <length> segment-radius: 4px;
+
+    callback clicked();
+
+    height: 36px;
+    background: transparent;
+
+    // Convert a day-of-year to an x coordinate. Uses (day * width) / days
+    // (rather than day/days * width) to avoid integer truncation: days
+    // and total-days are int, total-width is length.
+    pure function x-of(day: int) -> length {
+        (day * root.total-width) / root.total-days
+    }
+
+    // Start of the field (growing) phase = transplant-day if set, else
+    // sow-day if set, else harvest-start-day (degenerate: no growth phase).
+    pure function field-start() -> int {
+        bar.transplant-day > 0
+            ? bar.transplant-day
+            : (bar.sow-day > 0 ? bar.sow-day : bar.harvest-start-day)
+    }
+
+    // ---------- Greenhouse segment (sow → transplant) ----------
+    Rectangle {
+        visible: root.bar.sow-day > 0 && root.bar.transplant-day > root.bar.sow-day;
+        x: root.x-of(root.bar.sow-day);
+        y: root.segment-margin;
+        width: root.x-of(root.bar.transplant-day) - root.x-of(root.bar.sow-day);
+        height: parent.height - 2 * root.segment-margin;
+        background: root.greenhouse-color;
+        border-radius: root.segment-radius;
+    }
+
+    // ---------- Field / growth segment (field-start → harvest-start) ----------
+    Rectangle {
+        visible: root.field-start() < root.bar.harvest-start-day;
+        x: root.x-of(root.field-start());
+        y: root.segment-margin;
+        width: root.x-of(root.bar.harvest-start-day) - root.x-of(root.field-start());
+        height: parent.height - 2 * root.segment-margin;
+        background: root.field-color;
+        border-radius: root.segment-radius;
+    }
+
+    // ---------- Harvest segment (harvest-start → harvest-end) ----------
+    Rectangle {
+        visible: root.bar.harvest-end-day >= root.bar.harvest-start-day && root.bar.harvest-start-day > 0;
+        x: root.x-of(root.bar.harvest-start-day);
+        y: root.segment-margin;
+        width: max(2px, root.x-of(root.bar.harvest-end-day) - root.x-of(root.bar.harvest-start-day));
+        height: parent.height - 2 * root.segment-margin;
+        background: root.harvest-color;
+        border-radius: root.segment-radius;
+    }
+
+    // ---------- Name label (left-anchored on field segment) ----------
+    if root.show-name && root.bar.name != "": Text {
+        x: root.x-of(root.field-start()) + 8px;
+        y: 0;
+        height: parent.height;
+        text: root.bar.name;
+        color: root.name-color;
+        font-size: 11px;
+        font-weight: 600;
+        vertical-alignment: center;
+        overflow: clip;
+    }
+
+    // ---------- Full-width hit target ----------
+    TouchArea {
+        clicked => { root.clicked(); }
+    }
+}

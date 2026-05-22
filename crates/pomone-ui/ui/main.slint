@@ -8,6 +8,7 @@
 
 import { Palette, Theme, NavButton, SecondaryButton } from "theme.slint";
 import { HomePage } from "home.slint";
+import { Timeline, GanttBar } from "components/timeline.slint";
 import { PlantingsPage, PlantingRow } from "plantings.slint";
 import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
 import { LocationsPage, LocationItem } from "locations.slint";
@@ -553,6 +554,17 @@ export component MainWindow inherits Window {
                 count-strata: count-strata;
                 count-families: count-families;
                 count-location-kinds: count-location-kinds;
+            }
+
+            // ----- Compile-time validation hook for the Timeline component.
+            //       Always-false branch so the Slint compiler type-checks
+            //       Timeline + GanttBar against this usage even though
+            //       nothing is rendered. PR C will replace this with a real
+            //       wire-up on the Plantings / Home pages.
+            if false: Timeline {
+                rows: [];
+                month-labels: [];
+                today-day: -1;
             }
 
             // ------- Plantings -------
