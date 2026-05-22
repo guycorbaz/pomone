@@ -52,6 +52,7 @@ export component MainWindow inherits Window {
     in property <string> nav-calendar-text;
     in property <string> nav-strata-text;
     in property <string> nav-settings-text;
+    in property <string> nav-help-text;
 
     callback toggle-language();
     callback navigate-home();
@@ -61,6 +62,9 @@ export component MainWindow inherits Window {
     callback navigate-calendar();
     callback navigate-strata();
     callback navigate-settings();
+    // Opens the bundled user manual PDF with the system default viewer.
+    // Does not change `current-page`.
+    callback open-manual();
 
     // ------- Plantings page state forwarded to PlantingsPage -------
     in property <string> plantings-title-text;
@@ -376,6 +380,17 @@ export component MainWindow inherits Window {
                     root.navigate-settings();
                     return accept;
                 }
+                // Help shortcut: F1 is the conventional "open the manual"
+                // key on every desktop OS. Ctrl+8 mirrors the sidebar order
+                // but is harder to memorize, so F1 is the primary binding.
+                if (event.text == "8") {
+                    root.open-manual();
+                    return accept;
+                }
+            }
+            if (event.text == Key.F1) {
+                root.open-manual();
+                return accept;
             }
             // Calendar arrows: Left/Right step prev/next month when on the
             // calendar page (avoids hijacking the keys elsewhere).
@@ -491,6 +506,14 @@ export component MainWindow inherits Window {
                     text: nav-settings-text;
                     selected: current-page == "settings";
                     clicked => { current-page = "settings"; navigate-settings(); }
+                }
+                // Help is an action, not a page — never appears `selected`.
+                // Clicking it asks Rust to open the bundled manual PDF with
+                // the system's default viewer.
+                NavButton {
+                    text: nav-help-text;
+                    selected: false;
+                    clicked => { open-manual(); }
                 }
 
                 // Push the language footer to the bottom.

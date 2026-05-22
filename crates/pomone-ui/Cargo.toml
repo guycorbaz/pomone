@@ -26,6 +26,9 @@ tracing-subscriber.workspace = true
 chrono.workspace = true
 rust_decimal.workspace = true
 fluent.workspace = true
+# Cross-platform "open this file/URL with the system default" (xdg-open /
+# `open` / `cmd /c start`). Used to launch the bundled user manual PDF.
+open = "5"
 
 [build-dependencies]
 slint-build.workspace = true
@@ -49,6 +52,12 @@ icons = [
     "assets/icons/pomone-512.png",
 ]
 formats = ["deb", "appimage"]
+# Build the user manual PDF (xelatex) before packaging, so it can be bundled.
+# cargo-packager runs hooks from the directory containing this Cargo.toml
+# (`crates/pomone-ui/`), so we use `dir` to switch into the docs/manual
+# folder at the workspace root. latexmk is idempotent: it skips when
+# nothing has changed.
+before-packaging-command = { script = "latexmk -xelatex -interaction=nonstopmode manuel.tex", dir = "../../docs/manual" }
 
 [package.metadata.packager.deb]
 section = "misc"
@@ -62,3 +71,13 @@ depends = [
     "libfreetype6",
     "libxkbcommon0",
 ]
+
+# Bundle the user manual at the standard Debian path. Lets the app's
+# Help → Open manual button find it deterministically.
+[package.metadata.packager.deb.files]
+"../../docs/manual/manuel.pdf" = "usr/share/doc/pomone/manuel.pdf"
+
+# AppImage: install the manual under the AppImage's usr/share/doc tree so
+# the app can resolve $APPDIR/usr/share/doc/pomone/manuel.pdf at runtime.
+[package.metadata.packager.appimage.files]
+"../../docs/manual/manuel.pdf" = "usr/share/doc/pomone/manuel.pdf"

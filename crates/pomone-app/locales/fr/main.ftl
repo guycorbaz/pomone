@@ -258,3 +258,9 @@ error-positive-required = La valeur doit être strictement positive.
 error-year-required = L'année est requise.
 error-height-range = La hauteur minimale doit être inférieure ou égale à la maximale.
 status-validation-failed = { $message }
+
+## Help / manual
+nav-help = Aide
+status-manual-opened = Manuel ouvert dans le visualiseur système.
+status-manual-not-found = Manuel introuvable. Réinstallez Pomone ou consultez le PDF en ligne.
+status-manual-open-failed = Impossible d'ouvrir le manuel : { $message }

@@ -91,6 +91,50 @@ struct UiState {
     detail_planting_id: String,
 }
 
+/// Locate the bundled user manual PDF at runtime. Returns the first
+/// candidate that exists; `None` if none of them do.
+///
+/// Layout per package format:
+/// - Linux `.deb`: `/usr/bin/pomone` + manual at `/usr/share/doc/pomone/manuel.pdf`
+///   → reachable as `<exe_dir>/../share/doc/pomone/manuel.pdf`.
+/// - Linux AppImage: `$APPDIR/usr/share/doc/pomone/manuel.pdf`.
+/// - macOS `.app`: `Contents/MacOS/pomone` + `Contents/Resources/manuel.pdf`
+///   → `<exe_dir>/../Resources/manuel.pdf`.
+/// - Windows: PDF placed next to the binary.
+/// - Dev (`cargo run`): the workspace's `docs/manual/manuel.pdf`, resolved
+///   through `CARGO_MANIFEST_DIR` at compile time.
+fn find_manual_path() -> Option<PathBuf> {
+    if let Ok(appdir) = std::env::var("APPDIR") {
+        let p = PathBuf::from(appdir).join("usr/share/doc/pomone/manuel.pdf");
+        if p.exists() {
+            return Some(p);
+        }
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(exe_dir) = exe.parent() {
+            for rel in [
+                "../share/doc/pomone/manuel.pdf", // Linux .deb / AppImage layout
+                "../Resources/manuel.pdf",        // macOS .app
+                "manuel.pdf",                     // Windows / portable
+            ] {
+                let candidate = exe_dir.join(rel);
+                if candidate.exists() {
+                    return Some(candidate);
+                }
+            }
+        }
+    }
+
+    // Dev fallback (cargo run): workspace_root/docs/manual/manuel.pdf
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/manual/manuel.pdf");
+    if dev.exists() {
+        return Some(dev);
+    }
+
+    None
+}
+
 // Setting up four panes' worth of callbacks in one place keeps the flow easy
 // to follow; clippy's 100-line limit is too tight for a UI entry point.
 #[allow(clippy::too_many_lines)]
@@ -154,6 +198,23 @@ fn main() -> Result<()> {
             };
             let s = state.borrow();
             refresh_counts(&window, &s.app, &s.runtime);
+        });
+    }
+    {
+        // Open the bundled user manual PDF. find_manual_path tries the
+        // standard install locations + a dev-mode fallback; if everything
+        // misses we just log — there's no global status banner yet.
+        window.on_open_manual(move || match find_manual_path() {
+            Some(path) => {
+                if let Err(e) = open::that_detached(&path) {
+                    tracing::warn!(error = %e, path = %path.display(), "failed to open manual");
+                } else {
+                    tracing::info!(path = %path.display(), "opened user manual");
+                }
+            }
+            None => {
+                tracing::warn!("user manual PDF not found in any standard location");
+            }
         });
     }
     {
@@ -737,6 +798,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_nav_locations_text(SharedString::from(i18n.t("nav-locations")));
     window.set_nav_calendar_text(SharedString::from(i18n.t("nav-calendar")));
     window.set_nav_strata_text(SharedString::from(i18n.t("nav-strata")));
+    window.set_nav_help_text(SharedString::from(i18n.t("nav-help")));
 
     // Strata page — static labels; the list and status come from refresh_strata.
     window.set_strata_title_text(SharedString::from(i18n.t("title-strata")));
