@@ -62,6 +62,20 @@ Pomone choisit son backend selon la chaîne de connexion (`DATABASE_URL` ou conf
 
 Les migrations sont versionnées dans `migrations/sqlite/` et `migrations/mariadb/` et appliquées au démarrage.
 
+## Emplacement par défaut de la base SQLite
+
+Lancé sans configuration explicite, Pomone crée son fichier `pomone.sqlite` à l'emplacement standard de la plateforme :
+
+| Système | Chemin |
+|---------|--------|
+| Linux   | `~/.local/share/pomone/pomone.sqlite` |
+| Windows | `%APPDATA%\pomone\pomone.sqlite` |
+| macOS   | `~/Library/Application Support/pomone/pomone.sqlite` |
+
+Le chemin se modifie depuis l'écran **Paramètres** de l'application (champ *Chemin SQLite*). Pour déplacer une base existante vers un autre chemin ou vers MariaDB, utilisez le bouton **Enregistrer et migrer**.
+
+C'est aussi le fichier à sauvegarder régulièrement : il contient toutes vos données.
+
 ## Construire la documentation PDF
 
 Les sources LaTeX vivent dans `doc-latex/`. Pour compiler localement :

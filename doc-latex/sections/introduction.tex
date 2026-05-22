@@ -1,10 +1,10 @@
 \section{Introduction}
 
-Pomone est un logiciel libre de gestion de cultures, du maraîchage à l'agroforesterie. C'est une réécriture en \textbf{Rust} de \href{https://qrop.readthedocs.io/}{Qrop} (C++/Qt), créé par André Hoarau et \href{https://www.latelierpaysan.org/}{L'Atelier paysan}.
+Pomone est un logiciel libre de gestion de cultures : maraîchage, grandes cultures, arboriculture et agroforesterie. C'est une réécriture en \textbf{Rust} de \href{https://qrop.readthedocs.io/}{Qrop} (C++/Qt), créé par André Hoarau et \href{https://www.latelierpaysan.org/}{L'Atelier paysan}.
 
 \subsection{Pourquoi une réécriture}
 
-Qrop est un outil mature, mais son modèle de données suppose des cultures \emph{annuelles}. Pour traiter naturellement les vergers, les petits fruits, les haies et plus généralement l'agroforesterie, il fallait reprendre le modèle à la base. Pomone introduit dès le départ une distinction de premier ordre :
+Qrop est un outil mature, mais son modèle de données suppose des cultures \emph{annuelles}. Pour traiter naturellement les vergers, les petits fruits, les haies et plus généralement l'arboriculture et l'agroforesterie, il fallait reprendre le modèle à la base. Pomone introduit dès le départ une distinction de premier ordre :
 
 \begin{itemize}
   \item \textbf{Cultures annuelles ou bisannuelles} : un cycle = une plantation, suivi via un \texttt{PlantingSchedule::Cycle}.

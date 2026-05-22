@@ -7,7 +7,7 @@
 ## Application
 welcome = Bienvenue dans Pomone
 welcome-user = Bienvenue, { $name } !
-welcome-summary = Pomone gère vos cultures annuelles et pluriannuelles, du maraîchage à l'agroforesterie.
+welcome-summary = Pomone gère vos cultures annuelles et pluriannuelles : maraîchage, grandes cultures, arboriculture et agroforesterie.
 button-switch-language = English
 button-create-planting = Créer la plantation
 nav-home = Accueil

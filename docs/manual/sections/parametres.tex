@@ -10,6 +10,22 @@ Pomone supporte deux moteurs de stockage :
   \item \textbf{MariaDB} : un serveur partagé, utile si plusieurs personnes saisissent depuis différents postes (en réseau local).
 \end{itemize}
 
+\subsection{Emplacement par défaut de la base SQLite}
+
+Au premier lancement, Pomone crée automatiquement un fichier SQLite vide à l'emplacement standard de votre système :
+
+\begin{itemize}
+  \item \textbf{Linux} : \texttt{\~/.local/share/pomone/pomone.sqlite}
+  \item \textbf{Windows} : \texttt{\%APPDATA\%\textbackslash pomone\textbackslash pomone.sqlite}
+  \item \textbf{macOS} : \texttt{\~/Library/Application Support/pomone/pomone.sqlite}
+\end{itemize}
+
+Vous pouvez modifier ce chemin depuis le formulaire \emph{Édition de la configuration} ci-dessous : changez la valeur du champ \textbf{Chemin SQLite}, testez la connexion puis enregistrez. Pour déplacer une base existante vers un nouveau chemin, utilisez \textbf{Enregistrer et migrer} (voir section suivante).
+
+\begin{notebox}
+Pensez à sauvegarder régulièrement ce fichier \texttt{.sqlite} — c'est la totalité de vos données. Une simple copie sur disque externe ou cloud personnel suffit.
+\end{notebox}
+
 \subsection{Tester une connexion}
 
 Le bouton \textbf{Tester la connexion} valide les paramètres sans rien modifier. Utile avant de basculer pour vérifier que MariaDB est accessible.

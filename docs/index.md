@@ -2,14 +2,15 @@
 title: Accueil
 layout: home
 nav_order: 1
-description: "Pomone — logiciel libre de gestion de cultures, du maraîchage à l'agroforesterie. Réécriture en Rust de Qrop avec support natif des cultures pluriannuelles."
+description: "Pomone — logiciel libre de gestion de cultures : maraîchage, grandes cultures, arboriculture et agroforesterie. Réécriture en Rust de Qrop avec support natif des cultures pluriannuelles."
 permalink: /
 ---
 
 # Pomone
 {: .fs-9 }
 
-Logiciel libre de gestion de cultures, du maraîchage à l'agroforesterie.
+Logiciel libre de gestion de cultures : maraîchage, grandes cultures,
+arboriculture et agroforesterie.
 {: .fs-6 .fw-300 }
 
 [Voir le code]({{ '/install' | relative_url }}){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 }
@@ -19,7 +20,7 @@ Logiciel libre de gestion de cultures, du maraîchage à l'agroforesterie.
 
 ## Pourquoi Pomone
 
-Pomone est une **réécriture en Rust** de [Qrop](https://qrop.readthedocs.io/) (C++/Qt), avec un modèle de données refondu pour prendre en charge dès le départ les cultures **annuelles** et **pluriannuelles** : maraîchage, petits fruits, vergers, agroforesterie.
+Pomone est une **réécriture en Rust** de [Qrop](https://qrop.readthedocs.io/) (C++/Qt), avec un modèle de données refondu pour prendre en charge dès le départ les cultures **annuelles** et **pluriannuelles** : maraîchage diversifié, grandes cultures (céréales, pomme de terre, betterave, maïs…), arboriculture fruitière, petits fruits et agroforesterie.
 
 Le projet reprend l'ambition libriste de Qrop, créé par André Hoarau et [L'Atelier paysan](https://www.latelierpaysan.org/), qui reste la référence pour le projet d'origine.
 

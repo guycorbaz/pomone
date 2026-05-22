@@ -83,7 +83,8 @@ fn default_location_kinds() -> Vec<LocationKind> {
     .collect()
 }
 
-/// Common botanical families seen in market gardening + agroforestry.
+/// Common botanical families seen across market gardening, field crops,
+/// orcharding, and agroforestry.
 fn default_families() -> Vec<Family> {
     [
         (

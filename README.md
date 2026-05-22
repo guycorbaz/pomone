@@ -1,11 +1,13 @@
 # Pomone
 
-Logiciel libre de gestion de cultures, du maraîchage à l'agroforesterie.
+Logiciel libre de gestion de cultures : maraîchage, grandes cultures,
+arboriculture et agroforesterie.
 
 Pomone est une réécriture en Rust de [Qrop](https://qrop.readthedocs.io/) (C++/Qt),
 avec un modèle de données refondu pour prendre en charge dès le départ les
-cultures **annuelles** et **pluriannuelles** : maraîchage, petits fruits, vergers,
-agroforesterie.
+cultures **annuelles** et **pluriannuelles** : maraîchage diversifié, grandes
+cultures (céréales, pomme de terre, betterave, maïs…), arboriculture fruitière,
+petits fruits et agroforesterie.
 
 - **Site du projet** : <https://guycorbaz.github.io/pomone>
 - **Documentation technique (PDF)** : [pomone.pdf](https://github.com/guycorbaz/pomone/releases/download/docs-latest/pomone.pdf) — rolling release, recompilée à chaque push sur `main`.

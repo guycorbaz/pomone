@@ -5,7 +5,7 @@
 ## Application
 welcome = Welcome to Pomone
 welcome-user = Welcome, { $name }!
-welcome-summary = Pomone manages your annual and pluriannual crops, from market gardening to agroforestry.
+welcome-summary = Pomone manages your annual and pluriannual crops: market gardening, field crops, orcharding and agroforestry.
 button-switch-language = Français
 button-create-planting = Create planting
 nav-home = Home
