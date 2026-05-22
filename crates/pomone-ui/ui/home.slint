@@ -1,0 +1,76 @@
+// Pomone — Home (overview) page.
+//
+// Welcome blurb + an "overview" card with three stat rows (strata count,
+// crop families count, location-kinds count). Counts are pushed from Rust
+// at startup and after every persistence event.
+
+import { Palette, Theme, Card, SectionHeader } from "theme.slint";
+
+// One row of the overview card: text label on the left, integer count on the right.
+component StatRow inherits Rectangle {
+    in property <string> label;
+    in property <int> value;
+    height: 48px;
+    HorizontalLayout {
+        spacing: Theme.space-md;
+        Text {
+            text: root.label;
+            color: Palette.text-primary;
+            font-size: Theme.font-size-body;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        Text {
+            text: root.value;
+            color: Palette.primary;
+            font-size: Theme.font-size-numeric;
+            font-weight: Theme.font-weight-semibold;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+        }
+    }
+}
+
+component Divider inherits Rectangle {
+    height: 1px;
+    background: Palette.border;
+}
+
+export component HomePage inherits VerticalLayout {
+    in property <string> welcome-text;
+    in property <string> section-overview-text;
+    in property <string> label-strata;
+    in property <string> label-families;
+    in property <string> label-location-kinds;
+    in property <int> count-strata;
+    in property <int> count-families;
+    in property <int> count-location-kinds;
+
+    padding: Theme.space-2xl;
+    spacing: Theme.space-xl;
+
+    Text {
+        text: root.welcome-text;
+        color: Palette.text-secondary;
+        font-size: Theme.font-size-body;
+        wrap: word-wrap;
+    }
+
+    Card {
+        VerticalLayout {
+            padding: Theme.space-xl;
+            spacing: Theme.space-sm;
+
+            SectionHeader { text: root.section-overview-text; }
+            Rectangle { height: Theme.space-xs; }
+
+            StatRow { label: root.label-strata; value: root.count-strata; }
+            Divider { }
+            StatRow { label: root.label-families; value: root.count-families; }
+            Divider { }
+            StatRow { label: root.label-location-kinds; value: root.count-location-kinds; }
+        }
+    }
+
+    Rectangle { vertical-stretch: 1; }
+}
