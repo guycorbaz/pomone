@@ -4,14 +4,18 @@ Sources LaTeX du manuel utilisateur. Document destiné aux utilisateurs et utili
 
 ## Compilation locale
 
+Le manuel utilise `xelatex` (fontspec + police Lato + Inconsolata).
+Sur Debian/Ubuntu :
+
 ```sh
-latexmk -pdf manuel.tex
+sudo apt install texlive-xetex texlive-fonts-extra texlive-lang-french
+latexmk -xelatex manuel.tex
 ```
 
 ou directement :
 
 ```sh
-pdflatex manuel.tex && pdflatex manuel.tex   # 2 passes pour la TOC
+xelatex manuel.tex && xelatex manuel.tex   # 2 passes pour la TOC
 ```
 
 ## Build CI

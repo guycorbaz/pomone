@@ -27,7 +27,8 @@ jobs:
         with:
           working_directory: docs/manual
           root_file: manuel.tex
-          latexmk_use_xelatex: false
+          # xelatex needed for fontspec (Lato + Inconsolata system fonts).
+          latexmk_use_xelatex: true
           latexmk_shell_escape: false
 
       - name: Upload PDF artifact
