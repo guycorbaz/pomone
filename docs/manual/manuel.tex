@@ -1,0 +1,128 @@
+\documentclass[a4paper,11pt]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{babel}
+\babelprovide[import,main]{french}
+\usepackage{lmodern}
+\usepackage{amssymb}
+\usepackage{microtype}
+\usepackage{geometry}
+\geometry{margin=2.5cm}
+\usepackage{graphicx}
+\usepackage{tabularx}
+
+\usepackage{xcolor}
+\definecolor{pomonegreen}{HTML}{3C6E47}
+\definecolor{pomonelight}{HTML}{FBF7F0}
+\definecolor{pomoneaccent}{HTML}{B85C38}
+\definecolor{codegray}{HTML}{F5F5F5}
+
+\usepackage[
+  colorlinks=true,
+  linkcolor=pomonegreen,
+  urlcolor=pomonegreen,
+  citecolor=pomonegreen,
+  pdftitle={Pomone — Manuel utilisateur},
+  pdfauthor={Projet Pomone},
+  pdfsubject={Manuel utilisateur},
+  pdfkeywords={pomone, maraîchage, agroforesterie, planification, manuel}
+]{hyperref}
+
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries\color{pomonegreen}}
+  {\chaptertitlename\ \thechapter}{20pt}{\Huge}
+\titleformat{\section}{\Large\bfseries\color{pomonegreen}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{pomonegreen!80!black}}{\thesubsection}{1em}{}
+
+\usepackage{listings}
+\lstset{
+  backgroundcolor=\color{codegray},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  framesep=4pt,
+  rulecolor=\color{codegray!80!black},
+  showstringspaces=false,
+  xleftmargin=0pt,
+  xrightmargin=0pt,
+  extendedchars=true,
+  inputencoding=utf8,
+  literate=%
+    {é}{{\'e}}1 {è}{{\`e}}1 {ê}{{\^e}}1 {ë}{{\"e}}1
+    {à}{{\`a}}1 {â}{{\^a}}1
+    {ô}{{\^o}}1 {ö}{{\"o}}1
+    {î}{{\^\i}}1 {ï}{{\"\i}}1
+    {ù}{{\`u}}1 {û}{{\^u}}1 {ü}{{\"u}}1
+    {ç}{{\c{c}}}1
+    {É}{{\'E}}1 {È}{{\`E}}1 {Ê}{{\^E}}1
+    {—}{{---}}1 {–}{{--}}1
+    {…}{{\ldots}}1 {«}{{<<\,}}2 {»}{{\,>>}}2
+    {→}{{$\to$}}1 {←}{{$\leftarrow$}}1
+}
+
+\usepackage{tcolorbox}
+\tcbuselibrary{skins}
+\newtcolorbox{notebox}{
+  colback=pomonelight,
+  colframe=pomonegreen,
+  arc=2pt,
+  boxrule=0.5pt,
+  left=8pt,
+  right=8pt,
+  top=4pt,
+  bottom=4pt,
+}
+\newtcolorbox{warnbox}{
+  colback=pomonelight,
+  colframe=pomoneaccent,
+  arc=2pt,
+  boxrule=0.5pt,
+  left=8pt,
+  right=8pt,
+  top=4pt,
+  bottom=4pt,
+}
+\newtcolorbox{todobox}{
+  colback=codegray,
+  colframe=codegray!80!black,
+  arc=2pt,
+  boxrule=0.5pt,
+  left=8pt,
+  right=8pt,
+  top=4pt,
+  bottom=4pt,
+  fontupper=\itshape
+}
+
+\usepackage{enumitem}
+\setlist{itemsep=2pt,parsep=2pt}
+
+\title{\vspace{-2em}\textcolor{pomonegreen}{\Huge\textbf{Pomone}}\\[0.5em]
+  \large Manuel utilisateur}
+\author{Projet Pomone}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{notebox}
+Ce manuel est destiné aux utilisateurs et utilisatrices de Pomone : maraîchères et maraîchers, jardinières et jardiniers, agroforestières et agroforestiers. Il est compilé automatiquement à chaque push sur \texttt{main} et publié en release \texttt{docs-latest}. Pour la documentation technique destinée aux développeurs, voir \texttt{pomone.pdf}.
+\end{notebox}
+
+\tableofcontents
+\clearpage
+
+\input{sections/introduction}
+\input{sections/installation}
+\input{sections/premiers_pas}
+\input{sections/plantations}
+\input{sections/cultures}
+\input{sections/lieux}
+\input{sections/calendrier}
+\input{sections/recoltes}
+\input{sections/parametres}
+\input{sections/annexes}
+
+\end{document}

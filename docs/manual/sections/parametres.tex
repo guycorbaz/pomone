@@ -1,0 +1,35 @@
+\chapter{Paramètres}
+\label{chap:parametres}
+
+\section{Choix de la base de données}
+
+Pomone supporte deux moteurs de stockage :
+
+\begin{itemize}
+  \item \textbf{SQLite} (par défaut) : un fichier local unique, idéal pour un poste isolé. C'est la configuration recommandée pour la majorité des utilisateur·rices.
+  \item \textbf{MariaDB} : un serveur partagé, utile si plusieurs personnes saisissent depuis différents postes (en réseau local).
+\end{itemize}
+
+\subsection{Tester une connexion}
+
+Le bouton \textbf{Tester la connexion} valide les paramètres sans rien modifier. Utile avant de basculer pour vérifier que MariaDB est accessible.
+
+\subsection{Enregistrer}
+
+Le bouton \textbf{Enregistrer} sauvegarde la configuration et redémarre le backend. Si vous basculez d'un backend à l'autre, vos données existantes \textbf{ne sont pas} déplacées.
+
+\subsection{Enregistrer et migrer}
+
+Le bouton \textbf{Enregistrer et migrer} sauvegarde la configuration et \emph{copie toutes vos données} depuis l'ancien backend vers le nouveau. Utile pour migrer un poste isolé (SQLite) vers un serveur partagé (MariaDB) ou inversement.
+
+\begin{warnbox}
+La migration peut prendre quelques secondes pour une base de taille modeste. Pour les bases volumineuses, prévoyez une fenêtre de maintenance.
+\end{warnbox}
+
+\section{Langue}
+
+Pomone est disponible en \textbf{français} et en \textbf{anglais}. Le bouton de bascule se trouve dans le pied de la barre latérale. La langue choisie est persistée et restaurée au prochain démarrage.
+
+\begin{todobox}
+À venir : sélecteur de thème (clair / sombre), affichage en semaines vs dates, autres préférences héritées de Qrop.
+\end{todobox}

@@ -1,0 +1,68 @@
+\chapter{Installation}
+\label{chap:installation}
+
+\section{Linux}
+
+\subsection{Paquet Debian / Ubuntu (\texttt{.deb})}
+
+Téléchargez le fichier \texttt{pomone\_<version>\_amd64.deb} depuis la page \href{https://github.com/guycorbaz/pomone/releases}{Releases}, puis installez-le :
+
+\begin{lstlisting}[language=bash]
+sudo dpkg -i pomone_0.1.0_amd64.deb
+sudo apt-get install -f   # complete dependencies if needed
+\end{lstlisting}
+
+Le binaire est installé dans \texttt{/usr/bin/pomone}, avec une entrée \texttt{.desktop} et les icônes système. Pomone apparaît dans le menu d'applications de votre environnement de bureau.
+
+Dépendances système requises (installées automatiquement par \texttt{apt}) :
+
+\begin{itemize}
+  \item \texttt{libfontconfig1} (ou \texttt{libfontconfig1t64} sur Ubuntu 24.04+)
+  \item \texttt{libfreetype6}
+  \item \texttt{libxkbcommon0}
+\end{itemize}
+
+\subsection{AppImage}
+
+L'AppImage est un format autonome qui ne nécessite aucune installation. Téléchargez \texttt{pomone\_<version>\_x86\_64.AppImage}, rendez-le exécutable et lancez-le :
+
+\begin{lstlisting}[language=bash]
+chmod +x pomone_0.1.0_x86_64.AppImage
+./pomone_0.1.0_x86_64.AppImage
+\end{lstlisting}
+
+\subsection{Compilation depuis les sources}
+
+\begin{lstlisting}[language=bash]
+git clone https://github.com/guycorbaz/pomone
+cd pomone
+sudo apt install libfontconfig-dev pkg-config   # Debian/Ubuntu
+cargo build --release
+./target/release/pomone
+\end{lstlisting}
+
+Prérequis : \texttt{rustc} 1.80 ou plus récent.
+
+\section{Windows}
+
+\begin{warnbox}
+Le packaging Windows (\texttt{.msi}) est prévu pour une version ultérieure. En attendant, vous pouvez compiler depuis les sources avec \href{https://rustup.rs/}{rustup} installé.
+\end{warnbox}
+
+\section{macOS}
+
+\begin{warnbox}
+Le packaging macOS (\texttt{.dmg}) est prévu pour une version ultérieure. En attendant, vous pouvez compiler depuis les sources avec \href{https://rustup.rs/}{rustup} installé.
+\end{warnbox}
+
+\section{Emplacement des données}
+
+Par défaut, Pomone crée sa base de données SQLite au premier lancement à l'emplacement suivant :
+
+\begin{itemize}
+  \item \textbf{Linux} : \texttt{\~/.local/share/pomone/pomone.sqlite}
+  \item \textbf{Windows} : \texttt{\%APPDATA\%\textbackslash pomone\textbackslash pomone.sqlite}
+  \item \textbf{macOS} : \texttt{\~/Library/Application Support/pomone/pomone.sqlite}
+\end{itemize}
+
+Vous pouvez changer l'emplacement ou basculer vers un serveur MariaDB depuis l'écran \emph{Paramètres} (voir chapitre \ref{chap:parametres}).
