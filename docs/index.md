@@ -27,17 +27,22 @@ Le projet reprend l'ambition libriste de Qrop, créé par André Hoarau et [L'At
 ## Caractéristiques
 
 - **Annuelles & pluriannuelles** unifiées dans le modèle de domaine (`Crop.Lifespan`).
-- **Persistance au choix** : SQLite (local mono-poste) ou MariaDB (multi-utilisateurs) derrière le même trait `Repository`.
+- **Vue Gantt** de la saison sur l'Accueil et l'écran Plantations : barres multi-segments serre → champ → récolte, ligne du jour, clic pour ouvrir le détail.
+- **Tâches & opérations** (en cours d'intégration) : auto-génération depuis les plantations, calendrier mensuel.
+- **Persistance au choix** : SQLite (local mono-poste, recommandé) ou MariaDB (serveur partagé) derrière le même trait `Repository`. Bascule à chaud avec migration des données depuis l'écran Paramètres.
 - **UI native desktop** avec [Slint](https://slint.dev/) — pas de WebView.
 - **Multilingue** (français, anglais) via [Project Fluent](https://projectfluent.org/).
-- **Plateformes v1** : Linux, macOS, Windows.
+- **Manuel utilisateur** PDF embarqué dans l'application (`F1` pour l'ouvrir).
+- **Plateformes** : Linux (`.deb` + AppImage livrés), Windows et macOS prévus post-v1.0.0.
 
 ## Aller plus loin
 
-- [Feuille de route]({{ '/roadmap' | relative_url }}) — état d'avancement par phase.
+- [Feuille de route]({{ '/roadmap' | relative_url }}) — état d'avancement par phase, sous-livraisons de la parité Qrop.
 - [Architecture]({{ '/architecture' | relative_url }}) — principes, flux, modèle de domaine.
-- [Installation & build]({{ '/install' | relative_url }}) — prérequis et procédure.
-- [Documentation complète (PDF)](https://github.com/guycorbaz/pomone/releases/download/docs-latest/pomone.pdf) — version LaTeX, mise à jour à chaque push sur `main`.
+- [Installation & build]({{ '/install' | relative_url }}) — prérequis, procédure, chemin par défaut de la base SQLite.
+- [Manuel utilisateur (PDF)](https://github.com/guycorbaz/pomone/releases/download/docs-latest/manuel.pdf) — destiné aux utilisateurs finaux ; aussi accessible via `F1` dans l'application.
+- [Documentation technique (PDF)](https://github.com/guycorbaz/pomone/releases/download/docs-latest/pomone.pdf) — pour les développeurs (architecture, modèle de domaine, persistance).
+- Les deux PDF sont recompilés à chaque push sur `main`.
 
 ## Licence
 
