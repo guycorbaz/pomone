@@ -1,0 +1,133 @@
+// Pomone — 12-month Gantt timeline.
+//
+// Container component that lays out:
+//   - a month header (12 evenly spaced labels)
+//   - vertical month gridlines
+//   - one Timegraph per planting row (vertically stacked)
+//   - a vertical "today" line overlay
+//
+// The caller provides:
+//   - `rows`: a list of GanttBar (one per planting)
+//   - `month-labels`: 12 strings (typically "Jan", "Fév", … in the user's
+//     locale). Driven from Rust so i18n + season-start customization
+//     stay Rust-side.
+//   - `today-day`: day-of-year of "today" (1..366), or -1 to hide.
+//   - color overrides for the segments and chrome (defaults match the
+//     Pomone light-theme palette in theme.slint).
+//
+// Wiring to a screen happens in PR C; this component stands alone so
+// that styling iterations don't depend on per-page plumbing.
+
+import { GanttBar, Timegraph } from "timegraph.slint";
+
+// Re-export so callers can `import { GanttBar, Timeline } from "timeline.slint"`.
+export { GanttBar }
+
+export component Timeline inherits Rectangle {
+    in property <[GanttBar]> rows;
+    in property <[string]> month-labels;
+    in property <int> total-days: 365;
+    in property <length> month-width: 80px;
+    in property <int> today-day: -1;
+    in property <length> row-height: 36px;
+    in property <length> header-height: 32px;
+    in property <bool> show-names: true;
+    // Colors — defaults track theme.slint light palette.
+    in property <color> greenhouse-color: #C8B89A;
+    in property <color> field-color: #3C6E47;
+    in property <color> harvest-color: #244529;
+    in property <color> today-line-color: #B85C38;
+    in property <color> grid-color: #E2D7C2;
+    in property <color> month-label-color: #6B5D4D;
+    in property <color> name-color: #FBF7F0;
+    in property <color> surface-color: transparent;
+
+    callback row-clicked(string);
+
+    background: root.surface-color;
+
+    // Total horizontal extent of the time axis.
+    property <length> total-width: 12 * root.month-width;
+    property <length> body-height: root.rows.length * root.row-height;
+
+    preferred-width: root.total-width;
+    preferred-height: root.header-height + root.body-height;
+
+    // ---------- Month header ----------
+    Rectangle {
+        x: 0;
+        y: 0;
+        width: root.total-width;
+        height: root.header-height;
+        background: transparent;
+
+        for label[idx] in root.month-labels: Text {
+            x: idx * root.month-width;
+            y: 0;
+            width: root.month-width;
+            height: parent.height;
+            text: label;
+            color: root.month-label-color;
+            font-size: 12px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        // Header bottom border.
+        Rectangle {
+            x: 0;
+            y: parent.height - 1px;
+            width: parent.width;
+            height: 1px;
+            background: root.grid-color;
+        }
+    }
+
+    // ---------- Body ----------
+    Rectangle {
+        x: 0;
+        y: root.header-height;
+        width: root.total-width;
+        height: root.body-height;
+        background: transparent;
+
+        // Vertical month gridlines (13 lines: 12 month starts + final boundary).
+        for i in 13: Rectangle {
+            x: i * root.month-width;
+            y: 0;
+            width: 1px;
+            height: parent.height;
+            background: root.grid-color;
+            opacity: 0.45;
+        }
+
+        // Rows.
+        for row[idx] in root.rows: Timegraph {
+            x: 0;
+            y: idx * root.row-height;
+            width: root.total-width;
+            height: root.row-height;
+            bar: row;
+            total-days: root.total-days;
+            total-width: root.total-width;
+            show-name: root.show-names;
+            greenhouse-color: root.greenhouse-color;
+            field-color: root.field-color;
+            harvest-color: root.harvest-color;
+            name-color: root.name-color;
+            clicked => { root.row-clicked(row.id); }
+        }
+
+        // Today vertical line (drawn last so it sits above the bars).
+        Rectangle {
+            visible: root.today-day >= 0 && root.today-day <= root.total-days;
+            x: (root.today-day * root.total-width) / root.total-days;
+            y: 0;
+            width: 2px;
+            height: parent.height;
+            background: root.today-line-color;
+            opacity: 0.75;
+        }
+    }
+}
