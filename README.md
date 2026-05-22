@@ -14,20 +14,37 @@ petits fruits et agroforesterie.
 
 ## État du projet
 
-**Phase 6 — UI en cours.** Le socle est en place : modèle métier (`pomone-domain`),
-persistence SQLite et MariaDB derrière un trait `Repository` (`pomone-db`), services
-applicatifs (`pomone-app`), i18n fr/en. L'UI Slint expose déjà les écrans Plantings,
-Cultures + Variétés et Locations ; l'écran Calendrier reste à faire.
+**Phase 10 — Parité fonctionnelle Qrop pour v1.0.0, en cours.**
 
-Voir la [feuille de route détaillée](https://guycorbaz.github.io/pomone/roadmap) sur le site.
+Le socle est en place et la plupart des fonctionnalités essentielles sont
+livrées : modèle métier (`pomone-domain`), persistance SQLite ou MariaDB
+derrière un même trait `Repository` (`pomone-db`), services applicatifs
+(`pomone-app`), i18n FR/EN avec Fluent, UI desktop native (Slint).
+
+L'application expose aujourd'hui les écrans **Accueil** (vue Gantt
+résumée de la saison), **Plantations** (liste + vue Gantt multi-segments
+serre/champ/récolte + formulaire annuel/pluriannuel), **Cultures et
+variétés**, **Lieux**, **Strates**, **Calendrier mensuel**, **Détail de
+plantation** avec récoltes annuelles pour les pluriannuelles, et
+**Paramètres** (basculement SQLite ↔ MariaDB avec migration des données
+à la volée).
+
+Le packaging Linux est livré (`.deb` + AppImage avec manuel PDF
+embarqué, accessible depuis l'application via la touche `F1`). Le
+backend des **tâches/opérations** (table + repository) est en place ;
+l'auto-génération depuis les plantations, l'écran Calendrier des tâches
+et la superposition Gantt sont en cours (PRs E et F).
+
+Voir la [feuille de route détaillée](https://guycorbaz.github.io/pomone/roadmap) sur le site et le [manuel utilisateur PDF](https://github.com/guycorbaz/pomone/releases/download/docs-latest/manuel.pdf).
 
 ## Tech
 
 - **Langage** : Rust (édition 2021, MSRV 1.80)
 - **UI** : [Slint](https://slint.dev/) (natif desktop, pas de WebView)
-- **Données** : [sqlx](https://github.com/launchbadge/sqlx) — SQLite et MariaDB au choix
+- **Données** : [sqlx](https://github.com/launchbadge/sqlx) — SQLite ou MariaDB derrière le même trait `Repository`
 - **i18n** : [Project Fluent](https://projectfluent.org/) (français, anglais)
-- **Plateformes v1** : Linux, macOS, Windows
+- **Manuel** : LaTeX (xelatex + TeX Gyre Heros), PDF embarqué dans l'app
+- **Plateformes** : Linux (`.deb` + AppImage livrés), Windows et macOS prévus post-v1.0.0
 
 ## Structure
 
@@ -40,10 +57,11 @@ pomone/
 │   ├── pomone-ui/       # binaire desktop (Slint) — `pomone`
 │   └── pomone-cli/      # binaire admin/debug — `pomone-cli`
 ├── migrations/
-│   ├── sqlite/
-│   └── mariadb/
-├── doc-latex/           # sources LaTeX → PDF (release docs-latest)
+│   ├── sqlite/          # schéma SQLite (un seul 0001_initial.sql pré-v1.0.0)
+│   └── mariadb/         # idem pour MariaDB
+├── doc-latex/           # doc technique LaTeX → pomone.pdf (release docs-latest)
 └── docs/                # site GitHub Pages (Jekyll + Just the Docs)
+    └── manual/          # manuel utilisateur LaTeX → manuel.pdf (embarqué dans l'app)
 ```
 
 ## Build
