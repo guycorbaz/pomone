@@ -9,7 +9,8 @@ use crate::error::DbResult;
 use async_trait::async_trait;
 use pomone_domain::{
     Crop, CropId, Family, FamilyId, Location, LocationId, LocationKind, LocationKindId, Planting,
-    PlantingId, Strata, StrataId, Variety, VarietyId, YearlyHarvest,
+    PlantingId, Strata, StrataId, Task, TaskId, TaskImplement, TaskImplementId, TaskMethod,
+    TaskMethodId, TaskType, TaskTypeId, Variety, VarietyId, YearlyHarvest,
 };
 
 #[async_trait]
@@ -94,6 +95,51 @@ pub trait YearlyHarvestRepo: Send + Sync {
     async fn yearly_harvest_delete(&self, planting_id: PlantingId, year: i32) -> DbResult<()>;
 }
 
+#[async_trait]
+pub trait TaskTypeRepo: Send + Sync {
+    async fn task_type_get(&self, id: TaskTypeId) -> DbResult<Option<TaskType>>;
+    async fn task_type_list(&self) -> DbResult<Vec<TaskType>>;
+    async fn task_type_create(&self, task_type: &TaskType) -> DbResult<()>;
+    async fn task_type_update(&self, task_type: &TaskType) -> DbResult<()>;
+    async fn task_type_delete(&self, id: TaskTypeId) -> DbResult<()>;
+}
+
+#[async_trait]
+pub trait TaskMethodRepo: Send + Sync {
+    async fn task_method_get(&self, id: TaskMethodId) -> DbResult<Option<TaskMethod>>;
+    async fn task_method_list(&self) -> DbResult<Vec<TaskMethod>>;
+    async fn task_method_create(&self, method: &TaskMethod) -> DbResult<()>;
+    async fn task_method_update(&self, method: &TaskMethod) -> DbResult<()>;
+    async fn task_method_delete(&self, id: TaskMethodId) -> DbResult<()>;
+}
+
+#[async_trait]
+pub trait TaskImplementRepo: Send + Sync {
+    async fn task_implement_get(&self, id: TaskImplementId) -> DbResult<Option<TaskImplement>>;
+    async fn task_implement_list(&self) -> DbResult<Vec<TaskImplement>>;
+    async fn task_implement_create(&self, implement: &TaskImplement) -> DbResult<()>;
+    async fn task_implement_update(&self, implement: &TaskImplement) -> DbResult<()>;
+    async fn task_implement_delete(&self, id: TaskImplementId) -> DbResult<()>;
+}
+
+#[async_trait]
+pub trait TaskRepo: Send + Sync {
+    async fn task_get(&self, id: TaskId) -> DbResult<Option<Task>>;
+    async fn task_list(&self) -> DbResult<Vec<Task>>;
+    async fn task_list_for_planting(&self, planting_id: PlantingId) -> DbResult<Vec<Task>>;
+    async fn task_list_for_location(&self, location_id: LocationId) -> DbResult<Vec<Task>>;
+    /// Tasks whose `planned_on` falls within `[from, to]` inclusive.
+    /// Used by the task calendar (PR E).
+    async fn task_list_in_range(
+        &self,
+        from: chrono::NaiveDate,
+        to: chrono::NaiveDate,
+    ) -> DbResult<Vec<Task>>;
+    async fn task_create(&self, task: &Task) -> DbResult<()>;
+    async fn task_update(&self, task: &Task) -> DbResult<()>;
+    async fn task_delete(&self, id: TaskId) -> DbResult<()>;
+}
+
 /// Aggregated trait that backends implement. Application code depends on
 /// `dyn Repository` so backends can be swapped at runtime.
 pub trait Repository:
@@ -105,6 +151,10 @@ pub trait Repository:
     + VarietyRepo
     + PlantingRepo
     + YearlyHarvestRepo
+    + TaskTypeRepo
+    + TaskMethodRepo
+    + TaskImplementRepo
+    + TaskRepo
     + Send
     + Sync
 {

@@ -75,6 +75,9 @@ pub enum DomainError {
 
     #[error("value for {field} cannot be negative (got {value})")]
     NegativeValue { field: &'static str, value: Decimal },
+
+    #[error("invalid hex color '{0}' — expected #RGB or #RRGGBB")]
+    InvalidHexColor(String),
 }
 
 /// Convenience type for domain results.

@@ -165,3 +165,64 @@ CREATE TABLE yearly_harvest (
     CONSTRAINT fk_yearly_harvest_planting
         FOREIGN KEY (planting_id) REFERENCES planting(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------------------------------------------------------------
+-- Tasks (operations) — three taxonomy tables (task_type, task_method,
+-- task_implement) feed the main `task` table. See pomone-domain for
+-- the matching enum / structs and the SQLite mirror for the design
+-- notes (FK rules, category enum, etc.).
+-- ---------------------------------------------------------------
+
+CREATE TABLE task_type (
+    id        BINARY(16)  NOT NULL PRIMARY KEY,
+    name      VARCHAR(255) NOT NULL UNIQUE,
+    category  VARCHAR(16)  NOT NULL,
+    color     VARCHAR(7)   NOT NULL,
+    INDEX idx_task_type_category (category),
+    CONSTRAINT chk_task_type_category CHECK (category IN
+        ('sow','transplant','harvest','weeding','irrigation',
+         'treatment','tillage','other')),
+    CONSTRAINT chk_task_type_color_length
+        CHECK (CHAR_LENGTH(color) IN (4, 7))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE task_method (
+    id     BINARY(16)   NOT NULL PRIMARY KEY,
+    name   VARCHAR(255) NOT NULL UNIQUE,
+    notes  TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE task_implement (
+    id     BINARY(16)   NOT NULL PRIMARY KEY,
+    name   VARCHAR(255) NOT NULL UNIQUE,
+    notes  TEXT
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE task (
+    id              BINARY(16)    NOT NULL PRIMARY KEY,
+    planting_id     BINARY(16),
+    location_id     BINARY(16),
+    task_type_id    BINARY(16)    NOT NULL,
+    task_method_id  BINARY(16),
+    implement_id    BINARY(16),
+    planned_on      DATE          NOT NULL,
+    completed_on    DATE,
+    duration_min    INT,
+    labor_hours     DECIMAL(20,6),
+    notes           TEXT,
+    INDEX idx_task_planting     (planting_id),
+    INDEX idx_task_location     (location_id),
+    INDEX idx_task_type         (task_type_id),
+    INDEX idx_task_planned_on   (planned_on),
+    INDEX idx_task_completed_on (completed_on),
+    CONSTRAINT fk_task_planting
+        FOREIGN KEY (planting_id) REFERENCES planting(id) ON DELETE CASCADE,
+    CONSTRAINT fk_task_location
+        FOREIGN KEY (location_id) REFERENCES location(id) ON DELETE CASCADE,
+    CONSTRAINT fk_task_type
+        FOREIGN KEY (task_type_id) REFERENCES task_type(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_task_method
+        FOREIGN KEY (task_method_id) REFERENCES task_method(id) ON DELETE SET NULL,
+    CONSTRAINT fk_task_implement
+        FOREIGN KEY (implement_id) REFERENCES task_implement(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

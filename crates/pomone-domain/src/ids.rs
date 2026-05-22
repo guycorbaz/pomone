@@ -95,6 +95,19 @@ define_id!(
     PlantingId,
     "Identifier for a concrete planting (variety + location + schedule)."
 );
+define_id!(
+    TaskTypeId,
+    "Identifier for a task type (Sow, Transplant, Harvest, Weeding…)."
+);
+define_id!(
+    TaskMethodId,
+    "Identifier for the method used by a task (Manual, Mechanized…)."
+);
+define_id!(
+    TaskImplementId,
+    "Identifier for the tool used by a task (Hoe, Tractor, Seeder…)."
+);
+define_id!(TaskId, "Identifier for a concrete task / operation.");
 
 #[cfg(test)]
 mod tests {
