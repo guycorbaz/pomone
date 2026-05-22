@@ -17,8 +17,8 @@ use pomone_app::{
     get_planting_detail, list_crops, list_events_in_range, list_family_options,
     list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
     list_plantings, list_strata_options, list_strata_rows, list_varieties_for_crop,
-    list_variety_options, list_yearly_harvests_for_planting, parse_id, services, test_backend,
-    App, AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind,
+    list_variety_options, list_yearly_harvests_for_planting, parse_id, services, test_backend, App,
+    AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind,
     CropInput, CropRow as AppCropRow, FamilyOption, Lang, LifespanKind, LocationInput,
     LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
     PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow, StrataInput, StrataOption,
@@ -772,7 +772,8 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_settings_current_section(SharedString::from(i18n.t("settings-current-section")));
     window.set_settings_current_label(SharedString::from(i18n.t("settings-current-label")));
     window.set_settings_edit_section(SharedString::from(i18n.t("settings-edit-section")));
-    window.set_settings_backend_kind_label(SharedString::from(i18n.t("settings-backend-kind-label")));
+    window
+        .set_settings_backend_kind_label(SharedString::from(i18n.t("settings-backend-kind-label")));
     let backend_kind_labels: Vec<SharedString> = [
         i18n.t("settings-backend-sqlite"),
         i18n.t("settings-backend-mariadb"),
@@ -785,15 +786,18 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_settings_sqlite_path_placeholder(SharedString::from(
         i18n.t("settings-sqlite-path-placeholder"),
     ));
-    window.set_settings_mariadb_host_label(SharedString::from(i18n.t("settings-mariadb-host-label")));
+    window
+        .set_settings_mariadb_host_label(SharedString::from(i18n.t("settings-mariadb-host-label")));
     window.set_settings_mariadb_host_placeholder(SharedString::from(
         i18n.t("settings-mariadb-host-placeholder"),
     ));
-    window.set_settings_mariadb_port_label(SharedString::from(i18n.t("settings-mariadb-port-label")));
+    window
+        .set_settings_mariadb_port_label(SharedString::from(i18n.t("settings-mariadb-port-label")));
     window.set_settings_mariadb_port_placeholder(SharedString::from(
         i18n.t("settings-mariadb-port-placeholder"),
     ));
-    window.set_settings_mariadb_user_label(SharedString::from(i18n.t("settings-mariadb-user-label")));
+    window
+        .set_settings_mariadb_user_label(SharedString::from(i18n.t("settings-mariadb-user-label")));
     window.set_settings_mariadb_user_placeholder(SharedString::from(
         i18n.t("settings-mariadb-user-placeholder"),
     ));

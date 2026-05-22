@@ -109,10 +109,7 @@ async fn build_repo(backend: &BackendConfig) -> AppResult<Box<dyn Repository>> {
 /// (`seed_defaults`); when false the schema is set up but no seed rows
 /// are inserted — that's the path used by data migration, where the
 /// caller is about to copy the source's lookup rows verbatim.
-async fn build_repo_inner(
-    backend: &BackendConfig,
-    seed: bool,
-) -> AppResult<Box<dyn Repository>> {
+async fn build_repo_inner(backend: &BackendConfig, seed: bool) -> AppResult<Box<dyn Repository>> {
     let repo: Box<dyn Repository> = match backend {
         BackendConfig::Sqlite { path } => {
             // SQLite's `create_if_missing` only creates the FILE — its parent

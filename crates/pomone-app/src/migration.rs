@@ -64,7 +64,8 @@ pub async fn copy_all(
     // 2. Locations: pre-order walk so each parent lands before its children
     //    (the FK on `parent_id` would otherwise reject the insert).
     let locations = source.location_list().await?;
-    let by_id: HashMap<LocationId, Location> = locations.iter().map(|l| (l.id, l.clone())).collect();
+    let by_id: HashMap<LocationId, Location> =
+        locations.iter().map(|l| (l.id, l.clone())).collect();
     let mut ordered: Vec<Location> = Vec::with_capacity(locations.len());
     let mut emitted: HashSet<LocationId> = HashSet::new();
     for l in &locations {
@@ -125,7 +126,9 @@ mod tests {
     };
     use crate::test_helpers::seed_test_data;
     use chrono::NaiveDate;
-    use pomone_db::{seed_defaults, FamilyRepo, LocationRepo, PlantingRepo, SqliteRepository, VarietyRepo};
+    use pomone_db::{
+        seed_defaults, FamilyRepo, LocationRepo, PlantingRepo, SqliteRepository, VarietyRepo,
+    };
     use rust_decimal_macros::dec;
 
     async fn seeded_repo() -> SqliteRepository {
@@ -241,8 +244,7 @@ mod tests {
         )
         .unwrap();
         source.variety_create(&variety).await.unwrap();
-        let location =
-            Location::new(k.id, "Verger Est", dec!(20), dec!(5), None, None).unwrap();
+        let location = Location::new(k.id, "Verger Est", dec!(20), dec!(5), None, None).unwrap();
         source.location_create(&location).await.unwrap();
         let planting = create_perennial_planting(
             &source,
@@ -285,8 +287,8 @@ mod tests {
             .await;
         let k = LocationKind::new("Lieu", None).unwrap();
         source.location_kind_create(&k).await.unwrap();
-        let farm = pomone_domain::Location::new(k.id, "Ferme", dec!(100), dec!(100), None, None)
-            .unwrap();
+        let farm =
+            pomone_domain::Location::new(k.id, "Ferme", dec!(100), dec!(100), None, None).unwrap();
         source.location_create(&farm).await.unwrap();
         let bed =
             pomone_domain::Location::new(k.id, "Planche", dec!(5), dec!(1), Some(farm.id), None)
