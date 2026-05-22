@@ -2,7 +2,8 @@
 %
 % Compile with xelatex (or latexmk -xelatex). Requires:
 %   - fontspec (xelatex/lualatex)
-%   - Lato font (Debian: fonts-lato, also in TeX Live)
+%   - TeX Gyre Heros (OTF, part of the standard `tex-gyre` package — present
+%     in every TeX Live install, no system font dependency)
 %   - DejaVu Sans Mono (Debian: fonts-dejavu-core, present on every Linux)
 %
 % Design: modern editorial layout — sans-serif body, generous whitespace,
@@ -14,17 +15,17 @@
 \usepackage{babel}
 \babelprovide[import,main]{french}
 \usepackage{fontspec}
-\setmainfont{Lato}[
-  UprightFont    = *-Regular,
-  ItalicFont     = *-Italic,
-  BoldFont       = *-Bold,
-  BoldItalicFont = *-BoldItalic,
+% TeX Gyre Heros ships as lowercase OTFs (texgyreheros-{regular,italic,bold,bolditalic}.otf)
+% — load explicitly by filename so xelatex/fontspec finds them on any TeX Live.
+\setmainfont{texgyreheros-regular.otf}[
+  ItalicFont     = texgyreheros-italic.otf,
+  BoldFont       = texgyreheros-bold.otf,
+  BoldItalicFont = texgyreheros-bolditalic.otf,
 ]
-\setsansfont{Lato}[
-  UprightFont    = *-Regular,
-  ItalicFont     = *-Italic,
-  BoldFont       = *-Bold,
-  BoldItalicFont = *-BoldItalic,
+\setsansfont{texgyreheros-regular.otf}[
+  ItalicFont     = texgyreheros-italic.otf,
+  BoldFont       = texgyreheros-bold.otf,
+  BoldItalicFont = texgyreheros-bolditalic.otf,
 ]
 \setmonofont{DejaVu Sans Mono}[Scale=0.86]
 
