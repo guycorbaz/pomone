@@ -5,7 +5,7 @@
 
 use crate::error::DbResult;
 use crate::repository::Repository;
-use pomone_domain::{Family, LocationKind, Strata};
+use pomone_domain::{Family, LocationKind, Strata, TaskCategory, TaskType};
 use rust_decimal::Decimal;
 use std::str::FromStr;
 
@@ -127,6 +127,28 @@ fn default_families() -> Vec<Family> {
     .collect()
 }
 
+/// Default task types — one per `TaskCategory`. Names are in French
+/// (Pomone's primary language); users can rename in the app. Colors follow
+/// the light-theme palette: greens for growth phases, terracotta for
+/// remediation, accent for harvest, neutrals for prep.
+fn default_task_types() -> Vec<TaskType> {
+    [
+        (TaskCategory::Sow, "Semis", "#6FAF7A"),
+        (TaskCategory::Transplant, "Repiquage", "#3C6E47"),
+        (TaskCategory::Harvest, "Récolte", "#B85C38"),
+        (TaskCategory::Weeding, "Désherbage", "#B07C25"),
+        (TaskCategory::Irrigation, "Irrigation", "#5F9F8B"),
+        (TaskCategory::Treatment, "Traitement", "#A64238"),
+        (TaskCategory::Tillage, "Travail du sol", "#6B5D4D"),
+        (TaskCategory::Other, "Autre", "#A09887"),
+    ]
+    .into_iter()
+    .map(|(category, name, color)| {
+        TaskType::new(name, category, color).expect("static seed TaskType is always valid")
+    })
+    .collect()
+}
+
 /// Run all seed steps. Each step is a no-op if its target table is non-empty.
 pub async fn seed_defaults(repo: &dyn Repository) -> DbResult<()> {
     if repo.strata_list().await?.is_empty() {
@@ -142,6 +164,11 @@ pub async fn seed_defaults(repo: &dyn Repository) -> DbResult<()> {
     if repo.family_list().await?.is_empty() {
         for f in default_families() {
             repo.family_create(&f).await?;
+        }
+    }
+    if repo.task_type_list().await?.is_empty() {
+        for tt in default_task_types() {
+            repo.task_type_create(&tt).await?;
         }
     }
     Ok(())

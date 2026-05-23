@@ -18,6 +18,7 @@ pub mod planting_detail_view;
 pub mod plantings_view;
 pub mod services;
 pub mod strata_view;
+pub mod task_autogen;
 
 #[cfg(test)]
 mod test_helpers;
@@ -44,3 +45,4 @@ pub use plantings_view::{
     CycleDates, LocationOption, PlantingRow, VarietyOption,
 };
 pub use strata_view::{create_strata, delete_strata, list_strata_rows, StrataInput, StrataRow};
+pub use task_autogen::generate_tasks_for_planting;

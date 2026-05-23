@@ -67,6 +67,12 @@ pub async fn create_annual_planting_from_sowing(
         notes,
     )?;
     repo.planting_create(&planting).await?;
+    // Best-effort auto-generation of the operational tasks (Sow / Transplant
+    // / Harvest). A failure here only logs — the planting is already saved
+    // and the user can re-trigger generation manually later.
+    if let Err(e) = crate::task_autogen::generate_tasks_for_planting(repo, &planting).await {
+        tracing::warn!(error = %e, planting_id = %planting.id, "failed to auto-generate tasks");
+    }
     Ok(planting)
 }
 
@@ -115,6 +121,9 @@ pub async fn create_perennial_planting(
         notes,
     )?;
     repo.planting_create(&planting).await?;
+    if let Err(e) = crate::task_autogen::generate_tasks_for_planting(repo, &planting).await {
+        tracing::warn!(error = %e, planting_id = %planting.id, "failed to auto-generate tasks");
+    }
     Ok(planting)
 }
 
@@ -185,12 +194,12 @@ pub async fn record_yearly_harvest(
 mod tests {
     use super::*;
     use pomone_db::{
-        CropRepo, FamilyRepo, LocationKindRepo, LocationRepo, PlantingRepo, SqliteRepository,
-        StrataRepo, VarietyRepo, YearlyHarvestRepo,
+        seed_defaults, CropRepo, FamilyRepo, LocationKindRepo, LocationRepo, PlantingRepo,
+        SqliteRepository, StrataRepo, TaskRepo, TaskTypeRepo, VarietyRepo, YearlyHarvestRepo,
     };
     use pomone_domain::{
         AnnualProfile, Crop, Family, Lifespan, Location, LocationKind, PluriannualProfile,
-        PruningSeason, Strata, Variety,
+        PruningSeason, Strata, Task, TaskCategory, Variety,
     };
     use rust_decimal_macros::dec;
 
@@ -475,5 +484,93 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, AppError::Inconsistent(_)));
+    }
+
+    // ----- Task auto-generation ------------------------------------------
+
+    #[tokio::test]
+    async fn creating_annual_planting_autogenerates_tasks() {
+        let (repo, vid, lid) = setup_annual().await;
+        // Seed the default TaskTypes so the auto-generator finds matches.
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting_from_sowing(
+            &repo,
+            vid,
+            lid,
+            d(2026, 3, 1),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let tasks = repo.task_list_for_planting(p.id).await.unwrap();
+        // The Marmande profile has DTT set → Sow + Transplant + Harvest.
+        assert_eq!(tasks.len(), 3, "expected sow + transplant + harvest");
+        // Resolve task types so we can look up by category instead of name.
+        let types = repo.task_type_list().await.unwrap();
+        let cat_of = |t: &Task| {
+            types
+                .iter()
+                .find(|tt| tt.id == t.task_type_id)
+                .unwrap()
+                .category
+        };
+        let cats: std::collections::HashSet<_> = tasks.iter().map(cat_of).collect();
+        assert!(cats.contains(&TaskCategory::Sow));
+        assert!(cats.contains(&TaskCategory::Transplant));
+        assert!(cats.contains(&TaskCategory::Harvest));
+    }
+
+    #[tokio::test]
+    async fn creating_perennial_planting_autogenerates_transplant_task() {
+        let (repo, vid, lid) = setup_perennial().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_perennial_planting(
+            &repo,
+            vid,
+            lid,
+            d(2026, 3, 15),
+            None,
+            dec!(2000),
+            50,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let tasks = repo.task_list_for_planting(p.id).await.unwrap();
+        assert_eq!(tasks.len(), 1);
+        // Single transplant task on the establishment date.
+        let types = repo.task_type_list().await.unwrap();
+        let tt = types
+            .iter()
+            .find(|t| t.id == tasks[0].task_type_id)
+            .unwrap();
+        assert_eq!(tt.category, TaskCategory::Transplant);
+        assert_eq!(tasks[0].planned_on, d(2026, 3, 15));
+    }
+
+    #[tokio::test]
+    async fn planting_without_seeded_types_still_saves_logs_only() {
+        // No seed_defaults call here → task_type list is empty.
+        let (repo, vid, lid) = setup_annual().await;
+        let p = create_annual_planting_from_sowing(
+            &repo,
+            vid,
+            lid,
+            d(2026, 3, 1),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        // Planting persisted (the auto-gen failure is logged, not bubbled).
+        assert!(repo.planting_get(p.id).await.unwrap().is_some());
+        // No tasks created.
+        assert!(repo.task_list_for_planting(p.id).await.unwrap().is_empty());
     }
 }
