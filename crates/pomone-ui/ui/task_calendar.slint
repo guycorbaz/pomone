@@ -1,0 +1,266 @@
+// Pomone — Task Calendar screen.
+//
+// Monthly view of operational tasks (semis, repiquage, récolte, désherbage…).
+// Same 6×7 layout as the harvest Calendar — Rust builds a fixed 42-cell
+// model so the grid renders identically every month. Each cell shows day
+// number + up to three task pills, each colored by its `TaskType` color
+// (Rust pushes the resolved hex string). Clicking a pill toggles the
+// task's completion state via Rust.
+
+import { Palette, Theme, Card, SecondaryButton, SectionHeader } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct TaskRow {
+    // Stringified `TaskId` — emitted on click so Rust can toggle completion.
+    task-id: string,
+    // Short text shown inside the pill ("Tomate Marmande · Semis" etc.).
+    label: string,
+    // Hex color of the task's TaskType (e.g. "#3C6E47").
+    color: color,
+    // `true` once the task carries a completed_on date. Renders with reduced
+    // opacity + a checkmark glyph so users see at a glance what's done.
+    completed: bool,
+}
+
+export struct TaskCalendarDay {
+    // 1..=31, or 0 for an empty leading/trailing cell.
+    day-number: int,
+    in-current-month: bool,
+    is-today: bool,
+    tasks: [TaskRow],
+}
+
+// A clickable task pill. Click toggles completion via the host.
+component TaskPill inherits Rectangle {
+    in property <TaskRow> task;
+    callback clicked(string);
+
+    height: 18px;
+    min-width: 0;
+    border-radius: Theme.radius-sm;
+    clip: true;
+    background: task.color;
+    // Completed = dimmed so done items stay visible but visually retreat.
+    opacity: task.completed ? 0.45 : (touch.has-hover ? 0.85 : 1.0);
+    animate opacity { duration: Theme.transition-fast; }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(task.task-id); }
+
+        HorizontalLayout {
+            padding-left: 6px;
+            padding-right: 6px;
+            spacing: 4px;
+            Text {
+                text: task.completed ? "✓" : "•";
+                color: Palette.text-on-primary;
+                font-size: Theme.font-size-label;
+                font-weight: Theme.font-weight-semibold;
+                vertical-alignment: center;
+            }
+            Text {
+                text: task.label;
+                color: Palette.text-on-primary;
+                font-size: Theme.font-size-label;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+}
+
+component DayCell inherits Rectangle {
+    in property <TaskCalendarDay> day;
+    callback task-clicked(string);
+
+    min-width: 0;
+    clip: true;
+    border-width: Theme.border-width;
+    border-color: Palette.border;
+    border-radius: Theme.radius-sm;
+    background: day.is-today ? Palette.surface-alt
+              : day.in-current-month ? Palette.surface
+              :                        Palette.background;
+
+    VerticalLayout {
+        padding: Theme.space-xs;
+        spacing: 2px;
+
+        Text {
+            text: day.day-number > 0 ? day.day-number : "";
+            color: day.in-current-month ? Palette.text-primary : Palette.text-muted;
+            font-size: Theme.font-size-label;
+            font-weight: day.is-today ? Theme.font-weight-bold : Theme.font-weight-medium;
+            horizontal-alignment: right;
+        }
+
+        // Show up to 3 task pills; collapse the rest into a "+N" line so the
+        // cell stays a predictable height.
+        for t[i] in day.tasks: Rectangle {
+            visible: i < 3;
+            height: i < 3 ? 18px : 0;
+            min-width: 0;
+            TaskPill {
+                task: t;
+                width: parent.width;
+                height: 18px;
+                clicked(tid) => { root.task-clicked(tid); }
+            }
+        }
+        if day.tasks.length > 3: Text {
+            text: "+" + (day.tasks.length - 3);
+            color: Palette.text-muted;
+            font-size: Theme.font-size-label;
+        }
+
+        Rectangle { vertical-stretch: 1; }
+    }
+}
+
+export component TaskCalendarPage inherits Rectangle {
+    background: Palette.background;
+
+    in property <string> title-text;
+    in property <string> month-label;
+    in property <string> prev-button-text;
+    in property <string> next-button-text;
+    in property <string> today-button-text;
+    in property <string> empty-state-text;
+    in property <string> hint-text;          // "Cliquez sur une tâche pour basculer son état."
+
+    in property <[string]> weekday-labels;
+    in property <[TaskCalendarDay]> days;
+    in property <bool> any-tasks;
+
+    callback prev-month();
+    callback next-month();
+    callback go-today();
+    callback task-clicked(string);
+
+    ScrollView {
+        VerticalLayout {
+            padding: Theme.space-2xl;
+            spacing: Theme.space-xl;
+
+            // Header
+            HorizontalLayout {
+                spacing: Theme.space-md;
+                Text {
+                    text: title-text;
+                    color: Palette.primary;
+                    font-size: Theme.font-size-h1;
+                    font-weight: Theme.font-weight-bold;
+                    horizontal-stretch: 1;
+                }
+                SecondaryButton { text: prev-button-text; clicked => { prev-month(); } }
+                SecondaryButton { text: today-button-text; clicked => { go-today(); } }
+                SecondaryButton { text: next-button-text; clicked => { next-month(); } }
+            }
+
+            Card {
+                VerticalLayout {
+                    padding: Theme.space-lg;
+                    spacing: Theme.space-md;
+
+                    HorizontalLayout {
+                        Text {
+                            text: month-label;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-h2;
+                            font-weight: Theme.font-weight-semibold;
+                            horizontal-stretch: 1;
+                        }
+                    }
+
+                    GridLayout {
+                        spacing: Theme.space-xs;
+                        Row {
+                            for wd in weekday-labels: Text {
+                                text: wd;
+                                color: Palette.text-muted;
+                                font-size: Theme.font-size-label;
+                                font-weight: Theme.font-weight-semibold;
+                                horizontal-alignment: center;
+                                horizontal-stretch: 1;
+                                min-width: 0;
+                            }
+                        }
+                    }
+
+                    GridLayout {
+                        spacing: Theme.space-xs;
+                        Row {
+                            DayCell { day: days[0];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[1];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[2];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[3];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[4];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[5];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[6];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                        }
+                        Row {
+                            DayCell { day: days[7];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[8];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[9];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[10]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[11]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[12]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[13]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                        }
+                        Row {
+                            DayCell { day: days[14]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[15]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[16]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[17]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[18]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[19]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[20]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                        }
+                        Row {
+                            DayCell { day: days[21]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[22]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[23]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[24]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[25]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[26]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[27]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                        }
+                        Row {
+                            DayCell { day: days[28]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[29]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[30]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[31]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[32]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[33]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[34]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                        }
+                        Row {
+                            DayCell { day: days[35]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[36]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[37]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[38]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[39]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[40]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[41]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                        }
+                    }
+                }
+            }
+
+            Card {
+                VerticalLayout {
+                    padding: Theme.space-md;
+                    spacing: Theme.space-sm;
+                    SectionHeader { text: empty-state-text; visible: !any-tasks; }
+                    Text {
+                        text: hint-text;
+                        color: Palette.text-secondary;
+                        font-size: Theme.font-size-label;
+                    }
+                }
+            }
+        }
+    }
+}

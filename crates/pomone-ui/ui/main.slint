@@ -13,12 +13,13 @@ import { PlantingsPage, PlantingRow } from "plantings.slint";
 import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
 import { LocationsPage, LocationItem } from "locations.slint";
 import { CalendarPage, CalendarDay, CalendarEvent } from "calendar.slint";
+import { TaskCalendarPage, TaskCalendarDay, TaskRow } from "task_calendar.slint";
 import { PlantingDetailPage, DetailLine, YearlyHarvestRow } from "planting_detail.slint";
 import { StrataPage, StrataItem } from "strata.slint";
 import { SettingsPage } from "settings.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, DetailLine, YearlyHarvestRow, StrataItem, GanttBar }
+export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, TaskCalendarDay, TaskRow, DetailLine, YearlyHarvestRow, StrataItem, GanttBar }
 
 export component MainWindow inherits Window {
     title: "Pomone";
@@ -59,6 +60,7 @@ export component MainWindow inherits Window {
     // ------- Sidebar nav labels -------
     in property <string> nav-home-text;
     in property <string> nav-plantings-text;
+    in property <string> nav-tasks-text;
     in property <string> nav-cultures-text;
     in property <string> nav-locations-text;
     in property <string> nav-calendar-text;
@@ -69,6 +71,7 @@ export component MainWindow inherits Window {
     callback toggle-language();
     callback navigate-home();
     callback navigate-plantings();
+    callback navigate-tasks();
     callback navigate-cultures();
     callback navigate-locations();
     callback navigate-calendar();
@@ -344,6 +347,22 @@ export component MainWindow inherits Window {
     callback settings-save-backend(int, string, string, string, string, string, string);
     callback settings-save-and-migrate(int, string, string, string, string, string, string);
 
+    // ------- Task Calendar page state -------
+    in property <string> task-calendar-title-text;
+    in property <string> task-calendar-month-label;
+    in property <string> task-calendar-prev-button-text;
+    in property <string> task-calendar-next-button-text;
+    in property <string> task-calendar-today-button-text;
+    in property <string> task-calendar-empty-state-text;
+    in property <string> task-calendar-hint-text;
+    in property <[string]> task-calendar-weekday-labels;
+    in property <[TaskCalendarDay]> task-calendar-days;
+    in property <bool> task-calendar-any-tasks;
+    callback task-prev-month();
+    callback task-next-month();
+    callback task-go-today();
+    callback task-toggle-completion(string);
+
     init => {
         // Claim focus for the global shortcut scope at startup so Ctrl+1..6
         // and calendar arrow keys are picked up before any LineEdit grabs
@@ -355,7 +374,7 @@ export component MainWindow inherits Window {
 
     shortcuts := FocusScope {
         key-pressed(event) => {
-            // Sidebar shortcuts: Ctrl+1..6 mirror the sidebar order.
+            // Sidebar shortcuts: Ctrl+1..8 mirror the sidebar order.
             if (event.modifiers.control) {
                 if (event.text == "1") {
                     root.current-page = "home";
@@ -368,44 +387,45 @@ export component MainWindow inherits Window {
                     return accept;
                 }
                 if (event.text == "3") {
+                    root.current-page = "tasks";
+                    root.navigate-tasks();
+                    return accept;
+                }
+                if (event.text == "4") {
                     root.current-page = "cultures";
                     root.navigate-cultures();
                     return accept;
                 }
-                if (event.text == "4") {
+                if (event.text == "5") {
                     root.current-page = "locations";
                     root.navigate-locations();
                     return accept;
                 }
-                if (event.text == "5") {
+                if (event.text == "6") {
                     root.current-page = "calendar";
                     root.navigate-calendar();
                     return accept;
                 }
-                if (event.text == "6") {
+                if (event.text == "7") {
                     root.current-page = "strata";
                     root.navigate-strata();
                     return accept;
                 }
-                if (event.text == "7") {
+                if (event.text == "8") {
                     root.current-page = "settings";
                     root.navigate-settings();
                     return accept;
                 }
-                // Help shortcut: F1 is the conventional "open the manual"
-                // key on every desktop OS. Ctrl+8 mirrors the sidebar order
-                // but is harder to memorize, so F1 is the primary binding.
-                if (event.text == "8") {
-                    root.open-manual();
-                    return accept;
-                }
             }
+            // Help shortcut: F1 is the conventional "open the manual"
+            // key on every desktop OS — kept as the sole binding now that
+            // the Ctrl+N row is filled up with sidebar navigation.
             if (event.text == Key.F1) {
                 root.open-manual();
                 return accept;
             }
-            // Calendar arrows: Left/Right step prev/next month when on the
-            // calendar page (avoids hijacking the keys elsewhere).
+            // Calendar arrows: Left/Right step prev/next month on either of
+            // the two month grids (harvest calendar, task calendar).
             if (root.current-page == "calendar") {
                 if (event.text == Key.LeftArrow) {
                     root.prev-month();
@@ -413,6 +433,16 @@ export component MainWindow inherits Window {
                 }
                 if (event.text == Key.RightArrow) {
                     root.next-month();
+                    return accept;
+                }
+            }
+            if (root.current-page == "tasks") {
+                if (event.text == Key.LeftArrow) {
+                    root.task-prev-month();
+                    return accept;
+                }
+                if (event.text == Key.RightArrow) {
+                    root.task-next-month();
                     return accept;
                 }
             }
@@ -493,6 +523,11 @@ export component MainWindow inherits Window {
                     text: nav-plantings-text;
                     selected: current-page == "plantings";
                     clicked => { current-page = "plantings"; navigate-plantings(); }
+                }
+                NavButton {
+                    text: nav-tasks-text;
+                    selected: current-page == "tasks";
+                    clicked => { current-page = "tasks"; navigate-tasks(); }
                 }
                 NavButton {
                     text: nav-cultures-text;
@@ -829,6 +864,24 @@ export component MainWindow inherits Window {
                 next-month => { next-month(); }
                 go-today => { go-today(); }
                 event-clicked(pid) => { calendar-event-clicked(pid); }
+            }
+
+            // ------- Task calendar -------
+            if current-page == "tasks": TaskCalendarPage {
+                title-text: task-calendar-title-text;
+                month-label: task-calendar-month-label;
+                prev-button-text: task-calendar-prev-button-text;
+                next-button-text: task-calendar-next-button-text;
+                today-button-text: task-calendar-today-button-text;
+                empty-state-text: task-calendar-empty-state-text;
+                hint-text: task-calendar-hint-text;
+                weekday-labels: task-calendar-weekday-labels;
+                days: task-calendar-days;
+                any-tasks: task-calendar-any-tasks;
+                prev-month => { task-prev-month(); }
+                next-month => { task-next-month(); }
+                go-today => { task-go-today(); }
+                task-clicked(tid) => { task-toggle-completion(tid); }
             }
 
             // ------- Locations -------
