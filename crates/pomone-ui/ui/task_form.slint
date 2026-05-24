@@ -1,0 +1,217 @@
+// Pomone — Task create/edit form.
+//
+// Single Slint page handling both creation and edition of one Task. The
+// host (Rust) decides which mode by toggling `is-edit-mode` and pre-filling
+// the in-out properties; the Delete button is hidden when `is-edit-mode`
+// is false. Saving emits `save()`; Rust then reads the in-out properties,
+// validates them via `tasks_view::create_task` / `update_task`, and pops
+// the page on success.
+//
+// `task-type-labels` and `planting-labels` are pre-built by Rust so the
+// ComboBox can index into them. Rust keeps a parallel id table to map the
+// selected indices back to UUIDs at save time.
+
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
+
+// Small inline checkbox — std-widgets::CheckBox doesn't expose font-size
+// either, and it's not used anywhere else in the app. Twenty lines of
+// Slint keep the visual language consistent with the rest of the forms.
+component PomoneCheckBox inherits Rectangle {
+    in property <string> text;
+    in-out property <bool> checked;
+
+    height: 32px;
+
+    HorizontalLayout {
+        spacing: Theme.space-sm;
+        alignment: start;
+        vertical-stretch: 0;
+
+        box := Rectangle {
+            width: 20px;
+            height: 20px;
+            border-radius: Theme.radius-sm;
+            border-width: Theme.border-width;
+            border-color: root.checked ? Palette.primary : Palette.border-strong;
+            background: root.checked ? Palette.primary : Palette.surface;
+            animate background, border-color { duration: Theme.transition-fast; }
+
+            Text {
+                text: root.checked ? "✓" : "";
+                color: Palette.text-on-primary;
+                font-size: Theme.font-size-label;
+                font-weight: Theme.font-weight-bold;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Text {
+            text: root.text;
+            color: Palette.text-primary;
+            font-size: Theme.font-size-body;
+            vertical-alignment: center;
+        }
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.checked = !root.checked; }
+    }
+}
+
+export component TaskFormPage inherits Rectangle {
+    background: Palette.background;
+
+    // Mode + labels
+    in property <bool> is-edit-mode: false;
+    in property <string> title-new-text;
+    in property <string> title-edit-text;
+    in property <string> label-task-type;
+    in property <string> label-planting;
+    in property <string> label-planned-on;
+    in property <string> label-notes;
+    in property <string> placeholder-date;
+    in property <string> placeholder-notes;
+    in property <string> label-completed;
+    in property <string> btn-save-text;
+    in property <string> btn-cancel-text;
+    in property <string> btn-delete-text;
+    in property <string> status-text;
+    in property <bool> status-is-error: false;
+
+    // Data driving the dropdowns. `planting-labels` includes a "— Aucun —"
+    // first entry so the user can pick "no planting" from index 0.
+    in property <[string]> task-type-labels;
+    in property <[string]> planting-labels;
+
+    // Form state — bound bi-directionally to ThemedLineEdit / ComboBox.
+    in-out property <int> task-type-index: 0;
+    in-out property <int> planting-index: 0;
+    in-out property <string> planned-on-text;
+    in-out property <string> notes-text;
+    in-out property <bool> completed;
+
+    callback save();
+    callback cancel();
+    callback delete-task();
+
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-xl;
+
+        Text {
+            text: is-edit-mode ? title-edit-text : title-new-text;
+            color: Palette.primary;
+            font-size: Theme.font-size-h1;
+            font-weight: Theme.font-weight-bold;
+        }
+
+        Card {
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-md;
+
+                // Row 1 — task type + planting
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-task-type;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedComboBox {
+                            model: task-type-labels;
+                            current-index <=> task-type-index;
+                            enabled: task-type-labels.length > 0;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-planting;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedComboBox {
+                            model: planting-labels;
+                            current-index <=> planting-index;
+                            enabled: planting-labels.length > 0;
+                        }
+                    }
+                }
+
+                // Row 2 — planned date
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-planned-on;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> planned-on-text;
+                            placeholder-text: placeholder-date;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-completed;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        PomoneCheckBox {
+                            text: label-completed;
+                            checked <=> completed;
+                        }
+                    }
+                }
+
+                // Row 3 — notes (single line for now; multi-line can come later)
+                VerticalLayout {
+                    spacing: Theme.space-xs;
+                    Text {
+                        text: label-notes;
+                        color: Palette.text-secondary;
+                        font-size: Theme.font-size-label;
+                    }
+                    ThemedLineEdit {
+                        text <=> notes-text;
+                        placeholder-text: placeholder-notes;
+                    }
+                }
+
+                if status-text != "": SectionHeader {
+                    text: status-text;
+                    color: status-is-error ? Palette.danger : Palette.text-secondary;
+                }
+
+                // Buttons — Delete only in edit mode.
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    alignment: end;
+                    if is-edit-mode: SecondaryButton {
+                        text: btn-delete-text;
+                        clicked => { delete-task(); }
+                    }
+                    SecondaryButton {
+                        text: btn-cancel-text;
+                        clicked => { cancel(); }
+                    }
+                    PrimaryButton {
+                        text: btn-save-text;
+                        clicked => { save(); }
+                    }
+                }
+            }
+        }
+    }
+}
