@@ -24,6 +24,21 @@ export struct TaskRow {
     completed: bool,
 }
 
+/// One filter chip for the per-category toggle row above the calendar.
+/// Rust pushes one chip per `TaskCategory` (always 8), pre-resolved color
+/// (first type that uses that category) and localized label.
+export struct TaskCategoryChip {
+    // Stable enum key ("sow", "transplant", …) — sent back on click so
+    // Rust can toggle the filter without label translation roundtrips.
+    key: string,
+    // Localized category label ("Semis", "Sowing", …).
+    label: string,
+    // Resolved color of the chip swatch.
+    color: color,
+    // `true` when the filter currently includes this category.
+    selected: bool,
+}
+
 export struct TaskCalendarDay {
     // 1..=31, or 0 for an empty leading/trailing cell.
     day-number: int,
@@ -68,6 +83,43 @@ component TaskPill inherits Rectangle {
                 vertical-alignment: center;
                 overflow: elide;
                 horizontal-stretch: 1;
+            }
+        }
+    }
+}
+
+// A single category filter chip. Click toggles the per-category filter
+// via the host; the visual state mirrors `chip.selected` (full opacity +
+// strong border when on, reduced opacity + thin border when off).
+component CategoryChipView inherits Rectangle {
+    in property <TaskCategoryChip> chip;
+    callback clicked(string);
+
+    height: 28px;
+    min-width: 0;
+    border-radius: Theme.radius-md;
+    border-width: chip.selected ? 2px : Theme.border-width;
+    border-color: chip.selected ? chip.color : Palette.border;
+    background: chip.selected ? chip.color : Palette.surface;
+    opacity: chip.selected ? 1.0 : (touch.has-hover ? 0.95 : 0.55);
+    animate opacity, background, border-color { duration: Theme.transition-fast; }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(chip.key); }
+
+        HorizontalLayout {
+            padding-left: Theme.space-sm;
+            padding-right: Theme.space-sm;
+            spacing: Theme.space-xs;
+            alignment: center;
+
+            Text {
+                text: chip.label;
+                color: chip.selected ? Palette.text-on-primary : Palette.text-secondary;
+                font-size: Theme.font-size-label;
+                font-weight: chip.selected ? Theme.font-weight-semibold : Theme.font-weight-medium;
+                vertical-alignment: center;
             }
         }
     }
@@ -133,9 +185,12 @@ export component TaskCalendarPage inherits Rectangle {
     in property <string> hint-text;          // "Cliquez sur une tâche pour la modifier."
     in property <string> new-task-button-text;  // "+ Nouvelle tâche"
     in property <string> manage-types-button-text;  // "Gérer les types"
+    in property <string> filter-hint-text;         // "Filtrer par type :"
+    in property <string> filter-all-button-text;   // "Tout afficher"
 
     in property <[string]> weekday-labels;
     in property <[TaskCalendarDay]> days;
+    in property <[TaskCategoryChip]> filter-chips;
     in property <bool> any-tasks;
 
     callback prev-month();
@@ -144,6 +199,8 @@ export component TaskCalendarPage inherits Rectangle {
     callback task-clicked(string);
     callback new-task-clicked();
     callback manage-types-clicked();
+    callback toggle-category(string);
+    callback select-all-categories();
 
     ScrollView {
         VerticalLayout {
@@ -165,6 +222,40 @@ export component TaskCalendarPage inherits Rectangle {
                 SecondaryButton { text: prev-button-text; clicked => { prev-month(); } }
                 SecondaryButton { text: today-button-text; clicked => { go-today(); } }
                 SecondaryButton { text: next-button-text; clicked => { next-month(); } }
+            }
+
+            // Filter chips — one per TaskCategory. Rust pushes the full set
+            // (always 8 today) with the resolved color and selected state.
+            if filter-chips.length > 0: Card {
+                VerticalLayout {
+                    padding: Theme.space-md;
+                    spacing: Theme.space-sm;
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        alignment: start;
+                        Text {
+                            text: filter-hint-text;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                        SecondaryButton {
+                            text: filter-all-button-text;
+                            clicked => { select-all-categories(); }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-sm;
+                        alignment: start;
+                        for chip in filter-chips: CategoryChipView {
+                            chip: chip;
+                            clicked(k) => { toggle-category(k); }
+                        }
+                    }
+                }
             }
 
             Card {

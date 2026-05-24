@@ -269,6 +269,8 @@ title-task-calendar = Task calendar
 task-calendar-empty = No tasks planned this month.
 task-calendar-hint = Click a task to edit it (date, type, state, deletion).
 task-calendar-new-task = + New task
+task-calendar-filter-hint = Filter by type:
+task-calendar-filter-all = Show all
 
 ## Task form (create / edit)
 task-form-title-new = New task

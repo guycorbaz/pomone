@@ -271,6 +271,8 @@ title-task-calendar = Calendrier des tâches
 task-calendar-empty = Aucune tâche planifiée ce mois-ci.
 task-calendar-hint = Cliquez sur une tâche pour la modifier (date, type, état, suppression).
 task-calendar-new-task = + Nouvelle tâche
+task-calendar-filter-hint = Filtrer par type :
+task-calendar-filter-all = Tout afficher
 
 ## Task form (create / edit)
 task-form-title-new = Nouvelle tâche

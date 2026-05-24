@@ -50,9 +50,9 @@ use generated::{
     CalendarDay as SlintCalendarDay, CalendarEvent as SlintCalendarEvent, CropRow as SlintCropRow,
     DetailLine as SlintDetailLine, GanttBar as SlintGanttBar, LocationItem as SlintLocationItem,
     MainWindow, PlantingRow as SlintPlantingRow, StrataItem as SlintStrataItem,
-    TaskCalendarDay as SlintTaskCalendarDay, TaskRow as SlintTaskRow,
-    TaskTypeAdminItem as SlintTaskTypeAdminItem, VarietyRow as SlintVarietyRow,
-    YearlyHarvestRow as SlintYearlyHarvestRow,
+    TaskCalendarDay as SlintTaskCalendarDay, TaskCategoryChip as SlintTaskCategoryChip,
+    TaskRow as SlintTaskRow, TaskTypeAdminItem as SlintTaskTypeAdminItem,
+    VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -119,6 +119,12 @@ struct UiState {
     /// Stringified `TaskTypeId` currently being edited in the catalog
     /// form; empty in create mode.
     editing_task_type_id: String,
+    /// Active categories on the Task Calendar's per-category filter row.
+    /// Stored as stable string keys (`"sow"`, `"transplant"`, …) so the
+    /// UI doesn't depend on the enum variant order. When this set holds
+    /// every category, the calendar query runs with no filter (i.e.
+    /// `None` is passed to `list_task_calendar_rows`).
+    task_filter_categories: std::collections::HashSet<String>,
 }
 
 /// Locate the bundled user manual PDF at runtime. Returns the first
@@ -211,6 +217,7 @@ fn main() -> Result<()> {
         task_type_admin_ids: Vec::new(),
         task_type_category_keys: Vec::new(),
         editing_task_type_id: String::new(),
+        task_filter_categories: all_category_keys().into_iter().collect(),
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
@@ -848,6 +855,41 @@ fn main() -> Result<()> {
             }
         });
     }
+    // Click on a filter chip → toggle that category in the active set.
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_toggle_category(move |key| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let k = key.to_string();
+            if s.task_filter_categories.contains(&k) {
+                s.task_filter_categories.remove(&k);
+            } else {
+                s.task_filter_categories.insert(k);
+            }
+            if let Err(e) = refresh_task_calendar(&window, &mut s) {
+                tracing::error!(error = %e, "failed to refresh task calendar after filter toggle");
+            }
+        });
+    }
+    // Click on "Tout afficher" → restore all 8 categories in the filter set.
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_select_all_categories(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            s.task_filter_categories = all_category_keys().into_iter().collect();
+            if let Err(e) = refresh_task_calendar(&window, &mut s) {
+                tracing::error!(error = %e, "failed to refresh task calendar after select-all");
+            }
+        });
+    }
     // Click on an existing task pill → load the task into the form and
     // switch to the task-form page in edit mode.
     {
@@ -1274,6 +1316,12 @@ fn apply_translations(window: &MainWindow, app: &App) {
     // Task Calendar — "Manage types" button
     window.set_task_calendar_manage_types_button_text(SharedString::from(
         i18n.t("task-types-button"),
+    ));
+    window.set_task_calendar_filter_hint_text(SharedString::from(
+        i18n.t("task-calendar-filter-hint"),
+    ));
+    window.set_task_calendar_filter_all_button_text(SharedString::from(
+        i18n.t("task-calendar-filter-all"),
     ));
 
     // Task Types catalog
@@ -2753,9 +2801,26 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
         .checked_add_days(Days::new(41))
         .context("task calendar grid overflow")?;
 
+    // Build the typed filter set from `state.task_filter_categories` (UI
+    // holds them as stable string keys to stay decoupled from the enum).
+    // Empty state = "all on" by convention: pushing `None` to the view
+    // helper means no filtering.
+    let filter_set: std::collections::HashSet<pomone_domain::TaskCategory> = state
+        .task_filter_categories
+        .iter()
+        .filter_map(|k| category_from_key(k))
+        .collect();
+    let filter_arg = if filter_set.len() == category_count_total() {
+        None
+    } else {
+        Some(&filter_set)
+    };
+
     let rows: Vec<AppTaskCalendarRow> = state
         .runtime
-        .block_on(async { list_task_calendar_rows(state.app.repo(), grid_start, grid_end).await })
+        .block_on(async {
+            list_task_calendar_rows(state.app.repo(), grid_start, grid_end, filter_arg).await
+        })
         .context("failed to load task calendar rows")?;
 
     let mut by_date: std::collections::HashMap<NaiveDate, Vec<&AppTaskCalendarRow>> =
@@ -2804,6 +2869,10 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
     let month_key = format!("month-{month}");
     let month_name = i18n.t(&month_key);
     window.set_task_calendar_month_label(SharedString::from(format!("{month_name} {year}")));
+
+    // Keep the chip row in sync (selected state mirrors `state.task_filter_categories`,
+    // colors mirror whatever the user has set in the types catalog).
+    refresh_task_filter_chips(window, state)?;
 
     Ok(())
 }
@@ -3139,6 +3208,94 @@ fn render_task_type_form_error(i18n: &pomone_app::I18n, err: FormError) -> (Shar
         }
     };
     (SharedString::from(msg), true)
+}
+
+/// The eight stable category keys, in the same order as the
+/// `TaskCategory` enum declaration. Kept in sync with
+/// `pomone_app::list_task_category_options` (and ultimately the codec).
+fn all_category_keys() -> Vec<String> {
+    list_task_category_options()
+        .into_iter()
+        .map(|o| o.key)
+        .collect()
+}
+
+/// Number of canonical categories — kept as a function to stay in lockstep
+/// with `all_category_keys` if a new variant ever lands.
+fn category_count_total() -> usize {
+    list_task_category_options().len()
+}
+
+/// Stable-string → `TaskCategory` lookup. `None` for unknown keys so the
+/// caller can decide whether to error or silently skip (the calendar
+/// filter chooses the latter — a stale key just means "this filter does
+/// nothing now", which is recoverable).
+fn category_from_key(key: &str) -> Option<pomone_domain::TaskCategory> {
+    match key {
+        "sow" => Some(pomone_domain::TaskCategory::Sow),
+        "transplant" => Some(pomone_domain::TaskCategory::Transplant),
+        "harvest" => Some(pomone_domain::TaskCategory::Harvest),
+        "weeding" => Some(pomone_domain::TaskCategory::Weeding),
+        "irrigation" => Some(pomone_domain::TaskCategory::Irrigation),
+        "treatment" => Some(pomone_domain::TaskCategory::Treatment),
+        "tillage" => Some(pomone_domain::TaskCategory::Tillage),
+        "other" => Some(pomone_domain::TaskCategory::Other),
+        _ => None,
+    }
+}
+
+/// Map the codec category string to its codec spelling. Mirrors
+/// `pomone_app::tasks_view::category_str` (which is `pub(crate)` and not
+/// reachable from here); kept private so a future refactor can replace it
+/// with the shared helper without touching call-sites.
+fn category_str_for(c: pomone_domain::TaskCategory) -> &'static str {
+    match c {
+        pomone_domain::TaskCategory::Sow => "sow",
+        pomone_domain::TaskCategory::Transplant => "transplant",
+        pomone_domain::TaskCategory::Harvest => "harvest",
+        pomone_domain::TaskCategory::Weeding => "weeding",
+        pomone_domain::TaskCategory::Irrigation => "irrigation",
+        pomone_domain::TaskCategory::Treatment => "treatment",
+        pomone_domain::TaskCategory::Tillage => "tillage",
+        pomone_domain::TaskCategory::Other => "other",
+    }
+}
+
+/// Push the filter-chip row to Slint. For each canonical category, the
+/// chip carries the first matching `TaskType`'s color (so the chip
+/// matches the pills it filters); types whose category has no seed fall
+/// back to a neutral grey.
+fn refresh_task_filter_chips(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let types = state
+        .runtime
+        .block_on(async { state.app.repo().task_type_list().await })
+        .context("failed to load task types for filter chips")?;
+    let mut color_by_cat: std::collections::HashMap<&'static str, String> =
+        std::collections::HashMap::new();
+    for t in types {
+        color_by_cat
+            .entry(category_str_for(t.category))
+            .or_insert(t.color);
+    }
+
+    let i18n = state.app.i18n();
+    let chips: Vec<SlintTaskCategoryChip> = list_task_category_options()
+        .into_iter()
+        .map(|opt| {
+            let color_str = color_by_cat
+                .get(opt.key.as_str())
+                .cloned()
+                .unwrap_or_else(|| "#808080".to_owned());
+            SlintTaskCategoryChip {
+                key: SharedString::from(opt.key.clone()),
+                label: SharedString::from(i18n.t(&opt.label_key)),
+                color: parse_hex_color(&color_str),
+                selected: state.task_filter_categories.contains(&opt.key),
+            }
+        })
+        .collect();
+    window.set_task_calendar_filter_chips(ModelRc::new(VecModel::from(chips)));
+    Ok(())
 }
 
 /// Parse a `#RGB` or `#RRGGBB` string into a Slint `Color`. Invalid input
