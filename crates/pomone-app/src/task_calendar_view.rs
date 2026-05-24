@@ -9,7 +9,7 @@ use crate::error::AppResult;
 use chrono::NaiveDate;
 use pomone_db::Repository;
 use pomone_domain::{TaskCategory, TaskId};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// One task ready to render on a calendar day cell.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,12 +34,22 @@ pub struct TaskCalendarRow {
 /// Fetch all tasks whose `planned_on` falls inside `[from, to]` and decorate
 /// them with their type metadata and a human-friendly label.
 ///
+/// When `categories` is `Some`, only tasks whose type's category is in the
+/// set are returned — used by the calendar's per-category filter chips.
+/// `None` returns everything (no filter); an empty set returns nothing
+/// (the user explicitly deselected all categories).
+///
 /// One DB read per lookup table — same shape as `list_plantings` — which is
 /// fine at Pomone's scale.
+// `implicit_hasher` would have us thread a `BuildHasher` type param through
+// the signature; the only callers (`pomone-ui` + tests) use the default
+// `RandomState`, so the lint adds noise without buying flexibility.
+#[allow(clippy::implicit_hasher)]
 pub async fn list_task_calendar_rows(
     repo: &dyn Repository,
     from: NaiveDate,
     to: NaiveDate,
+    categories: Option<&HashSet<TaskCategory>>,
 ) -> AppResult<Vec<TaskCalendarRow>> {
     let tasks = repo.task_list_in_range(from, to).await?;
     let types = repo.task_type_list().await?;
@@ -59,6 +69,11 @@ pub async fn list_task_calendar_rows(
             // (FK is RESTRICT so this shouldn't happen, but defensive.)
             continue;
         };
+        if let Some(allowed) = categories {
+            if !allowed.contains(&tt.category) {
+                continue;
+            }
+        }
         let context = task
             .planting_id
             .and_then(|pid| plant_by_id.get(&pid))
@@ -127,6 +142,7 @@ mod tests {
             &repo,
             NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
             NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
+            None,
         )
         .await
         .unwrap();
@@ -169,6 +185,7 @@ mod tests {
             &repo,
             NaiveDate::from_ymd_opt(2026, 5, 1).unwrap(),
             NaiveDate::from_ymd_opt(2026, 5, 31).unwrap(),
+            None,
         )
         .await
         .unwrap();
@@ -180,6 +197,69 @@ mod tests {
         // No planting → label falls back to the type name.
         assert_eq!(row.label, "Désherbage");
         assert!(!row.completed);
+    }
+
+    #[tokio::test]
+    async fn category_filter_keeps_only_matching_rows() {
+        use pomone_db::{TaskRepo, TaskTypeRepo};
+        use pomone_domain::Task;
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let types = repo.task_type_list().await.unwrap();
+        let sow = types
+            .iter()
+            .find(|t| t.category == TaskCategory::Sow)
+            .unwrap();
+        let harvest = types
+            .iter()
+            .find(|t| t.category == TaskCategory::Harvest)
+            .unwrap();
+        let weeding = types
+            .iter()
+            .find(|t| t.category == TaskCategory::Weeding)
+            .unwrap();
+        for tt in [sow, harvest, weeding] {
+            let t = Task::new(
+                None,
+                None,
+                tt.id,
+                None,
+                None,
+                NaiveDate::from_ymd_opt(2026, 5, 10).unwrap(),
+                None,
+                None,
+                None,
+                None,
+            );
+            repo.task_create(&t).await.unwrap();
+        }
+
+        let from = NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
+        let to = NaiveDate::from_ymd_opt(2026, 5, 31).unwrap();
+
+        // None → all rows.
+        let all = list_task_calendar_rows(&repo, from, to, None)
+            .await
+            .unwrap();
+        assert_eq!(all.len(), 3);
+
+        // Filter to harvest+weeding.
+        let mut wanted = HashSet::new();
+        wanted.insert(TaskCategory::Harvest);
+        wanted.insert(TaskCategory::Weeding);
+        let filtered = list_task_calendar_rows(&repo, from, to, Some(&wanted))
+            .await
+            .unwrap();
+        assert_eq!(filtered.len(), 2);
+        assert!(filtered
+            .iter()
+            .all(|r| r.category == TaskCategory::Harvest || r.category == TaskCategory::Weeding));
+
+        // Empty set → nothing.
+        let none = list_task_calendar_rows(&repo, from, to, Some(&HashSet::new()))
+            .await
+            .unwrap();
+        assert!(none.is_empty());
     }
 
     #[tokio::test]
