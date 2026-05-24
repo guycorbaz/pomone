@@ -269,7 +269,29 @@ status-manual-open-failed = Impossible d'ouvrir le manuel : { $message }
 nav-tasks = Tâches
 title-task-calendar = Calendrier des tâches
 task-calendar-empty = Aucune tâche planifiée ce mois-ci.
-task-calendar-hint = Cliquez sur une tâche pour basculer son état (à faire ↔ terminée).
+task-calendar-hint = Cliquez sur une tâche pour la modifier (date, type, état, suppression).
+task-calendar-new-task = + Nouvelle tâche
+
+## Task form (create / edit)
+task-form-title-new = Nouvelle tâche
+task-form-title-edit = Modifier la tâche
+task-form-planting-none = — Aucune —
+label-task-type = Type
+label-task-planting = Plantation (optionnel)
+label-task-planned-on = Date prévue
+label-task-notes = Notes
+placeholder-task-notes = Précisions, conditions, observations…
+label-task-completed = Tâche terminée
+btn-task-save = Enregistrer
+btn-task-cancel = Annuler
+btn-task-delete = Supprimer
+
+## Task form errors / status
+error-date-required = La date est requise.
+error-task-no-types = Aucun type de tâche disponible. Réinitialisez les données par défaut.
+error-task-type-required = Le type de tâche est requis.
+error-task-edit-id-missing = Identifiant de tâche manquant pour l'édition.
+status-task-failed = Échec de l'opération sur la tâche : { $message }
 
 ## Gantt timeline
 section-season = Saison

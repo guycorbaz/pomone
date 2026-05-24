@@ -30,12 +30,33 @@ Lorsque vous créez une plantation, Pomone génère automatiquement les opérati
   \item Pour une plantation pluriannuelle : un \textbf{Repiquage} (mise en place) à la date d'établissement.
 \end{itemize}
 
-Chaque tâche s'affiche sous forme de pastille colorée selon son type. Cliquer sur une pastille bascule son état entre « à faire » et « terminée » : la pastille terminée passe en opacité réduite et un check (\texttt{✓}) remplace le point.
+Chaque tâche s'affiche sous forme de pastille colorée selon son type. La pastille porte un point (\texttt{•}) pour une tâche en attente et un check (\texttt{✓}) avec opacité réduite pour une tâche terminée.
+
+\subsection{Créer, modifier, supprimer une tâche}
+
+Le bouton \textbf{+ Nouvelle tâche} dans l'en-tête du calendrier ouvre un formulaire vierge où vous choisissez :
+
+\begin{itemize}
+  \item le \textbf{type} (parmi les huit types par défaut ou ceux que vous avez ajoutés) ;
+  \item la \textbf{plantation} concernée (ou \emph{Aucune} pour une tâche générale d'exploitation) ;
+  \item la \textbf{date prévue} (format \texttt{AAAA-MM-JJ}) ;
+  \item des \textbf{notes} libres (observations, conditions, durée) ;
+  \item la case \textbf{Tâche terminée} si elle est déjà faite.
+\end{itemize}
+
+Cliquer sur une pastille existante dans le calendrier rouvre le même formulaire en mode \emph{édition}, pré-rempli avec les valeurs courantes. Vous pouvez alors :
+
+\begin{itemize}
+  \item changer la date, le type, l'état \emph{terminé / à faire}, les notes ;
+  \item cliquer \textbf{Supprimer} pour effacer la tâche définitivement (le bouton n'apparaît qu'en mode édition).
+\end{itemize}
+
+\textbf{Astuce} : pour marquer rapidement une tâche comme faite, ouvrez-la d'un clic, cochez \emph{Tâche terminée} et validez avec \textbf{Enregistrer}. Re-saver une tâche déjà terminée ne change pas sa date de réalisation.
 
 \subsection{Personnalisation des types}
 
 Pomone fournit huit types de tâches par défaut (Semis, Repiquage, Récolte, Désherbage, Irrigation, Traitement, Travail du sol, Autre) avec leurs couleurs. Chaque type a une \textbf{catégorie stable} (\texttt{TaskCategory}) qui sert à l'auto-génération : vous pouvez renommer librement « Semis » en « Semis serre », la catégorie reste \texttt{Sow} et l'auto-générateur continue de fonctionner.
 
 \begin{todobox}
-À venir : création/édition manuelle d'une tâche, filtre par type, regénération depuis le détail d'une plantation après modification des dates.
+À venir : écran de gestion des types (création / édition / couleur), filtres par type sur le calendrier, récurrence (tâches hebdomadaires), drag-and-drop pour reprogrammer, accès à la liste des tâches depuis le détail d'une plantation.
 \end{todobox}

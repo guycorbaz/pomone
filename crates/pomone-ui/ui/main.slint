@@ -14,6 +14,7 @@ import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
 import { LocationsPage, LocationItem } from "locations.slint";
 import { CalendarPage, CalendarDay, CalendarEvent } from "calendar.slint";
 import { TaskCalendarPage, TaskCalendarDay, TaskRow } from "task_calendar.slint";
+import { TaskFormPage } from "task_form.slint";
 import { PlantingDetailPage, DetailLine, YearlyHarvestRow } from "planting_detail.slint";
 import { StrataPage, StrataItem } from "strata.slint";
 import { SettingsPage } from "settings.slint";
@@ -355,13 +356,47 @@ export component MainWindow inherits Window {
     in property <string> task-calendar-today-button-text;
     in property <string> task-calendar-empty-state-text;
     in property <string> task-calendar-hint-text;
+    in property <string> task-calendar-new-task-button-text;
     in property <[string]> task-calendar-weekday-labels;
     in property <[TaskCalendarDay]> task-calendar-days;
     in property <bool> task-calendar-any-tasks;
     callback task-prev-month();
     callback task-next-month();
     callback task-go-today();
-    callback task-toggle-completion(string);
+    /// Emitted when the user clicks an existing task pill on the calendar.
+    /// Rust loads the task into the form and switches to the task-form page.
+    callback task-edit-requested(string);
+    /// Emitted when the user clicks "+ Nouvelle tâche" in the calendar
+    /// header. Rust resets the form fields and switches to the task-form
+    /// page in creation mode.
+    callback task-new-requested();
+
+    // ------- Task form page state -------
+    in property <bool> task-form-is-edit-mode: false;
+    in property <string> task-form-title-new-text;
+    in property <string> task-form-title-edit-text;
+    in property <string> task-form-label-task-type;
+    in property <string> task-form-label-planting;
+    in property <string> task-form-label-planned-on;
+    in property <string> task-form-label-notes;
+    in property <string> task-form-placeholder-date;
+    in property <string> task-form-placeholder-notes;
+    in property <string> task-form-label-completed;
+    in property <string> task-form-btn-save-text;
+    in property <string> task-form-btn-cancel-text;
+    in property <string> task-form-btn-delete-text;
+    in-out property <string> task-form-status-text;
+    in property <bool> task-form-status-is-error: false;
+    in property <[string]> task-form-type-labels;
+    in property <[string]> task-form-planting-labels;
+    in-out property <int> task-form-type-index: 0;
+    in-out property <int> task-form-planting-index: 0;
+    in-out property <string> task-form-planned-on-text;
+    in-out property <string> task-form-notes-text;
+    in-out property <bool> task-form-completed: false;
+    callback task-form-save();
+    callback task-form-cancel();
+    callback task-form-delete();
 
     init => {
         // Claim focus for the global shortcut scope at startup so Ctrl+1..6
@@ -472,6 +507,11 @@ export component MainWindow inherits Window {
         interval: 6s;     // give the user a beat longer to read migration reports
         running: root.settings-status-text != "";
         triggered => { root.settings-status-text = ""; }
+    }
+    Timer {
+        interval: 4s;
+        running: root.task-form-status-text != "";
+        triggered => { root.task-form-status-text = ""; }
     }
 
     HorizontalLayout {
@@ -875,13 +915,44 @@ export component MainWindow inherits Window {
                 today-button-text: task-calendar-today-button-text;
                 empty-state-text: task-calendar-empty-state-text;
                 hint-text: task-calendar-hint-text;
+                new-task-button-text: task-calendar-new-task-button-text;
                 weekday-labels: task-calendar-weekday-labels;
                 days: task-calendar-days;
                 any-tasks: task-calendar-any-tasks;
                 prev-month => { task-prev-month(); }
                 next-month => { task-next-month(); }
                 go-today => { task-go-today(); }
-                task-clicked(tid) => { task-toggle-completion(tid); }
+                task-clicked(tid) => { task-edit-requested(tid); }
+                new-task-clicked => { task-new-requested(); }
+            }
+
+            // ------- Task form (create / edit) -------
+            if current-page == "task-form": TaskFormPage {
+                is-edit-mode: task-form-is-edit-mode;
+                title-new-text: task-form-title-new-text;
+                title-edit-text: task-form-title-edit-text;
+                label-task-type: task-form-label-task-type;
+                label-planting: task-form-label-planting;
+                label-planned-on: task-form-label-planned-on;
+                label-notes: task-form-label-notes;
+                placeholder-date: task-form-placeholder-date;
+                placeholder-notes: task-form-placeholder-notes;
+                label-completed: task-form-label-completed;
+                btn-save-text: task-form-btn-save-text;
+                btn-cancel-text: task-form-btn-cancel-text;
+                btn-delete-text: task-form-btn-delete-text;
+                status-text: task-form-status-text;
+                status-is-error: task-form-status-is-error;
+                task-type-labels: task-form-type-labels;
+                planting-labels: task-form-planting-labels;
+                task-type-index <=> task-form-type-index;
+                planting-index <=> task-form-planting-index;
+                planned-on-text <=> task-form-planned-on-text;
+                notes-text <=> task-form-notes-text;
+                completed <=> task-form-completed;
+                save => { task-form-save(); }
+                cancel => { task-form-cancel(); }
+                delete-task => { task-form-delete(); }
             }
 
             // ------- Locations -------

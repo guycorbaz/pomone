@@ -13,18 +13,20 @@ use anyhow::{Context, Result};
 use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use fluent::FluentArgs;
 use pomone_app::{
-    create_crop, create_location, create_strata, create_variety, delete_strata,
-    get_planting_detail, list_crops, list_events_in_range, list_family_options,
-    list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
-    list_plantings, list_strata_options, list_strata_rows, list_task_calendar_rows,
-    list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting, parse_id,
-    services, test_backend, toggle_task_completion, App, AppConfig, AppError, BackendConfig,
-    CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput, CropRow as AppCropRow,
-    CycleDates, FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption,
-    LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
-    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow, StrataInput, StrataOption,
-    StrataRow as AppStrataRow, TaskCalendarRow as AppTaskCalendarRow, VarietyInput, VarietyOption,
-    VarietyProfileKind, VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
+    create_crop, create_location, create_strata, create_task, create_variety, delete_strata,
+    delete_task, get_planting_detail, get_task_for_edit, list_crops, list_events_in_range,
+    list_family_options, list_location_kind_options, list_location_options, list_locations_tree,
+    list_parent_options, list_planting_choices, list_plantings, list_strata_options,
+    list_strata_rows, list_task_calendar_rows, list_task_type_options, list_varieties_for_crop,
+    list_variety_options, list_yearly_harvests_for_planting, parse_id, services, test_backend,
+    update_task, App, AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent,
+    CalendarEventKind, CropInput, CropRow as AppCropRow, CycleDates, FamilyOption, Lang,
+    LifespanKind, LocationInput, LocationKindOption, LocationListItem, LocationOption,
+    MigrationReport, ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
+    PlantingRow as AppPlantingRow, StrataInput, StrataOption, StrataRow as AppStrataRow,
+    TaskCalendarRow as AppTaskCalendarRow, TaskEditForm, TaskTypeOption, VarietyInput,
+    VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
+    YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{LocationId, PlantingId, PruningSeason, VarietyId};
 use rust_decimal::Decimal;
@@ -95,6 +97,15 @@ struct UiState {
     /// Needed by the yearly-harvest "Record" callback, which doesn't get
     /// the id passed back through Slint.
     detail_planting_id: String,
+    /// Stringified `TaskTypeId`s parallel to the task form's type dropdown.
+    task_form_type_ids: Vec<String>,
+    /// Stringified `PlantingId`s parallel to the task form's planting
+    /// dropdown. Index 0 is the empty string for the "— Aucun —" entry.
+    task_form_planting_ids: Vec<String>,
+    /// Stringified `TaskId` currently being edited; empty in create mode.
+    editing_task_id: String,
+    /// Page to return to after the task form closes (typically "tasks").
+    task_form_previous_page: String,
 }
 
 /// Locate the bundled user manual PDF at runtime. Returns the first
@@ -180,6 +191,10 @@ fn main() -> Result<()> {
         task_calendar_month: today_local.month(),
         detail_previous_page: "plantings".to_owned(),
         detail_planting_id: String::new(),
+        task_form_type_ids: Vec::new(),
+        task_form_planting_ids: Vec::new(),
+        editing_task_id: String::new(),
+        task_form_previous_page: "tasks".to_owned(),
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
@@ -817,29 +832,106 @@ fn main() -> Result<()> {
             }
         });
     }
+    // Click on an existing task pill → load the task into the form and
+    // switch to the task-form page in edit mode.
     {
         let state = Rc::clone(&state);
         let weak = window.as_weak();
-        window.on_task_toggle_completion(move |task_id_str| {
+        window.on_task_edit_requested(move |task_id_str| {
             let Some(window) = weak.upgrade() else {
                 return;
             };
-            let Ok(task_id) = parse_id(&task_id_str) else {
-                return;
-            };
-            let result = {
-                let s = state.borrow();
-                s.runtime.block_on(async {
-                    toggle_task_completion(s.app.repo(), task_id, Local::now().date_naive()).await
-                })
-            };
-            if let Err(e) = result {
-                tracing::error!(error = %e, "failed to toggle task completion");
-                return;
+            let mut s = state.borrow_mut();
+            "tasks".clone_into(&mut s.task_form_previous_page);
+            if let Err(e) = open_task_form_for_edit(&window, &mut s, &task_id_str) {
+                tracing::error!(error = %e, "failed to open task form for edit");
             }
-            // Re-render the current month so the pill shows the new state.
-            if let Err(e) = refresh_task_calendar(&window, &mut state.borrow_mut()) {
-                tracing::error!(error = %e, "failed to refresh task calendar after toggle");
+        });
+    }
+    // Click on "+ Nouvelle tâche" header button → reset the form and
+    // switch to the task-form page in create mode.
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_new_requested(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            "tasks".clone_into(&mut s.task_form_previous_page);
+            if let Err(e) = open_task_form_for_create(&window, &mut s) {
+                tracing::error!(error = %e, "failed to open task form for create");
+            }
+        });
+    }
+    // Task form: Save (create OR update depending on is_edit_mode).
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_form_save(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            match try_save_task_form(&window, &mut s) {
+                Ok(()) => {
+                    let prev = s.task_form_previous_page.clone();
+                    window.set_current_page(SharedString::from(prev));
+                    if let Err(e) = refresh_task_calendar(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh task calendar after save");
+                    }
+                }
+                Err(e) => {
+                    let (text, is_err) = render_task_form_error(s.app.i18n(), e);
+                    window.set_task_form_status_text(text);
+                    window.set_task_form_status_is_error(is_err);
+                }
+            }
+        });
+    }
+    // Task form: Cancel → drop changes and route back.
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_form_cancel(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let prev = state.borrow().task_form_previous_page.clone();
+            window.set_current_page(SharedString::from(prev));
+            window.set_task_form_status_text(SharedString::from(""));
+        });
+    }
+    // Task form: Delete the task in edit mode.
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_form_delete(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let task_id = s.editing_task_id.clone();
+            if task_id.is_empty() {
+                return; // shouldn't happen — Delete is hidden in create mode.
+            }
+            let result = s
+                .runtime
+                .block_on(async { delete_task(s.app.repo(), &task_id).await });
+            match result {
+                Ok(()) => {
+                    let prev = s.task_form_previous_page.clone();
+                    window.set_current_page(SharedString::from(prev));
+                    if let Err(e) = refresh_task_calendar(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh task calendar after delete");
+                    }
+                }
+                Err(e) => {
+                    let (text, is_err) =
+                        render_task_form_error(s.app.i18n(), FormError::Service(e));
+                    window.set_task_form_status_text(text);
+                    window.set_task_form_status_is_error(is_err);
+                }
             }
         });
     }
@@ -1035,7 +1127,24 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_task_calendar_today_button_text(SharedString::from(i18n.t("calendar-today")));
     window.set_task_calendar_empty_state_text(SharedString::from(i18n.t("task-calendar-empty")));
     window.set_task_calendar_hint_text(SharedString::from(i18n.t("task-calendar-hint")));
+    window.set_task_calendar_new_task_button_text(SharedString::from(
+        i18n.t("task-calendar-new-task"),
+    ));
     window.set_task_calendar_weekday_labels(ModelRc::new(VecModel::from(weekday_labels)));
+
+    // Task form (create / edit)
+    window.set_task_form_title_new_text(SharedString::from(i18n.t("task-form-title-new")));
+    window.set_task_form_title_edit_text(SharedString::from(i18n.t("task-form-title-edit")));
+    window.set_task_form_label_task_type(SharedString::from(i18n.t("label-task-type")));
+    window.set_task_form_label_planting(SharedString::from(i18n.t("label-task-planting")));
+    window.set_task_form_label_planned_on(SharedString::from(i18n.t("label-task-planned-on")));
+    window.set_task_form_label_notes(SharedString::from(i18n.t("label-task-notes")));
+    window.set_task_form_placeholder_date(SharedString::from(i18n.t("placeholder-date")));
+    window.set_task_form_placeholder_notes(SharedString::from(i18n.t("placeholder-task-notes")));
+    window.set_task_form_label_completed(SharedString::from(i18n.t("label-task-completed")));
+    window.set_task_form_btn_save_text(SharedString::from(i18n.t("btn-task-save")));
+    window.set_task_form_btn_cancel_text(SharedString::from(i18n.t("btn-task-cancel")));
+    window.set_task_form_btn_delete_text(SharedString::from(i18n.t("btn-task-delete")));
     let kind_labels: Vec<SharedString> = [
         i18n.t("event-sowing-label"),
         i18n.t("event-transplanting-label"),
@@ -2132,6 +2241,25 @@ fn render_form_error(i18n: &pomone_app::I18n, err: FormError) -> (SharedString, 
     (SharedString::from(msg), true)
 }
 
+/// Same as [`render_form_error`] but with a task-specific service template
+/// so the status banner reads correctly when the failing operation is a
+/// task save / delete rather than a planting one.
+fn render_task_form_error(i18n: &pomone_app::I18n, err: FormError) -> (SharedString, bool) {
+    let msg = match err {
+        FormError::Validation(text) => {
+            let mut args = FluentArgs::new();
+            args.set("message", text);
+            i18n.t_args("status-validation-failed", &args)
+        }
+        FormError::Service(app_err) => {
+            let mut args = FluentArgs::new();
+            args.set("message", app_err.to_string());
+            i18n.t_args("status-task-failed", &args)
+        }
+    };
+    (SharedString::from(msg), true)
+}
+
 fn refresh_strata(window: &MainWindow, state: &mut UiState) -> Result<()> {
     let rows: Result<Vec<AppStrataRow>, AppError> = state
         .runtime
@@ -2521,6 +2649,173 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
     let month_name = i18n.t(&month_key);
     window.set_task_calendar_month_label(SharedString::from(format!("{month_name} {year}")));
 
+    Ok(())
+}
+
+/// Refresh the task form's dropdown models (task types + plantings) from
+/// the DB and store the parallel UUID strings in `state` so the form's
+/// `save` handler can resolve indices back to typed IDs.
+///
+/// Planting list is prefixed with a "— Aucun —" sentinel (empty UUID) so
+/// the user can opt out of attaching the task to a planting.
+fn populate_task_form_options(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let i18n = state.app.i18n();
+    let none_label = i18n.t("task-form-planting-none");
+
+    let (type_opts, planting_opts): (Vec<TaskTypeOption>, Vec<PlantingChoice>) = state
+        .runtime
+        .block_on(async {
+            let types = list_task_type_options(state.app.repo()).await?;
+            let plantings = list_planting_choices(state.app.repo()).await?;
+            Ok::<_, AppError>((types, plantings))
+        })
+        .context("failed to load task form options")?;
+
+    state.task_form_type_ids = type_opts.iter().map(|t| t.id.clone()).collect();
+    let type_labels: Vec<SharedString> = type_opts
+        .into_iter()
+        .map(|t| SharedString::from(t.name))
+        .collect();
+    window.set_task_form_type_labels(ModelRc::new(VecModel::from(type_labels)));
+
+    let mut planting_ids: Vec<String> = Vec::with_capacity(planting_opts.len() + 1);
+    let mut planting_labels: Vec<SharedString> = Vec::with_capacity(planting_opts.len() + 1);
+    planting_ids.push(String::new());
+    planting_labels.push(SharedString::from(none_label));
+    for p in planting_opts {
+        planting_ids.push(p.id);
+        planting_labels.push(SharedString::from(p.label));
+    }
+    state.task_form_planting_ids = planting_ids;
+    window.set_task_form_planting_labels(ModelRc::new(VecModel::from(planting_labels)));
+    Ok(())
+}
+
+/// Reset the form to "create" mode and switch to the task-form page.
+fn open_task_form_for_create(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    populate_task_form_options(window, state)?;
+    state.editing_task_id.clear();
+    window.set_task_form_is_edit_mode(false);
+    window.set_task_form_type_index(0);
+    window.set_task_form_planting_index(0);
+    window.set_task_form_planned_on_text(SharedString::from(today_iso()));
+    window.set_task_form_notes_text(SharedString::from(""));
+    window.set_task_form_completed(false);
+    window.set_task_form_status_text(SharedString::from(""));
+    window.set_task_form_status_is_error(false);
+    window.set_current_page(SharedString::from("task-form"));
+    Ok(())
+}
+
+/// Load the task into the form, switch to "edit" mode, and route to the page.
+fn open_task_form_for_edit(
+    window: &MainWindow,
+    state: &mut UiState,
+    task_id_str: &str,
+) -> Result<()> {
+    populate_task_form_options(window, state)?;
+
+    let form: TaskEditForm = state
+        .runtime
+        .block_on(async { get_task_for_edit(state.app.repo(), task_id_str).await })
+        .context("failed to load task for edit")?;
+
+    let type_idx = state
+        .task_form_type_ids
+        .iter()
+        .position(|id| id == &form.task_type_id)
+        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
+    let planting_idx = state
+        .task_form_planting_ids
+        .iter()
+        .position(|id| id == &form.planting_id)
+        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
+
+    state.editing_task_id.clone_from(&form.task_id);
+    window.set_task_form_is_edit_mode(true);
+    window.set_task_form_type_index(type_idx);
+    window.set_task_form_planting_index(planting_idx);
+    window.set_task_form_planned_on_text(SharedString::from(form.planned_on));
+    window.set_task_form_notes_text(SharedString::from(form.notes));
+    window.set_task_form_completed(form.completed);
+    window.set_task_form_status_text(SharedString::from(""));
+    window.set_task_form_status_is_error(false);
+    window.set_current_page(SharedString::from("task-form"));
+    Ok(())
+}
+
+/// Persist the form contents — either as a new task or as an update to the
+/// existing `state.editing_task_id`. Returns a `FormError` on validation or
+/// service failure so the caller can route the message into the status banner.
+fn try_save_task_form(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
+    if state.task_form_type_ids.is_empty() {
+        return Err(FormError::Validation(i18n.t("error-task-no-types")));
+    }
+
+    let type_idx = window.get_task_form_type_index();
+    let type_idx_usize = usize::try_from(type_idx.max(0)).unwrap_or(0);
+    let task_type_id = state
+        .task_form_type_ids
+        .get(type_idx_usize)
+        .cloned()
+        .ok_or_else(|| FormError::Validation(i18n.t("error-task-type-required")))?;
+
+    let planting_idx = window.get_task_form_planting_index();
+    let planting_idx_usize = usize::try_from(planting_idx.max(0)).unwrap_or(0);
+    let planting_id = state
+        .task_form_planting_ids
+        .get(planting_idx_usize)
+        .cloned()
+        .unwrap_or_default();
+
+    let planned_on = window.get_task_form_planned_on_text().to_string();
+    if planned_on.trim().is_empty() {
+        return Err(FormError::Validation(i18n.t("error-date-required")));
+    }
+    let notes = window.get_task_form_notes_text().to_string();
+    let completed = window.get_task_form_completed();
+    let today = Local::now().date_naive();
+
+    let is_edit = window.get_task_form_is_edit_mode();
+    if is_edit {
+        let task_id = state.editing_task_id.clone();
+        if task_id.is_empty() {
+            return Err(FormError::Validation(i18n.t("error-task-edit-id-missing")));
+        }
+        state
+            .runtime
+            .block_on(async {
+                update_task(
+                    state.app.repo(),
+                    &task_id,
+                    &task_type_id,
+                    &planned_on,
+                    &notes,
+                    completed,
+                    today,
+                )
+                .await
+            })
+            .map_err(FormError::Service)?;
+    } else {
+        state
+            .runtime
+            .block_on(async {
+                create_task(
+                    state.app.repo(),
+                    &planting_id,
+                    &task_type_id,
+                    &planned_on,
+                    &notes,
+                    completed,
+                    today,
+                )
+                .await
+                .map(|_| ())
+            })
+            .map_err(FormError::Service)?;
+    }
     Ok(())
 }
 

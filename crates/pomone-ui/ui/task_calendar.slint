@@ -4,10 +4,12 @@
 // Same 6×7 layout as the harvest Calendar — Rust builds a fixed 42-cell
 // model so the grid renders identically every month. Each cell shows day
 // number + up to three task pills, each colored by its `TaskType` color
-// (Rust pushes the resolved hex string). Clicking a pill toggles the
-// task's completion state via Rust.
+// (Rust pushes the resolved hex string). Clicking a pill opens the task
+// in the edit form (where the user can toggle completion, edit fields, or
+// delete the task); the "+ Nouvelle tâche" button opens the form in
+// creation mode.
 
-import { Palette, Theme, Card, SecondaryButton, SectionHeader } from "theme.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
 import { ScrollView } from "std-widgets.slint";
 
 export struct TaskRow {
@@ -128,7 +130,8 @@ export component TaskCalendarPage inherits Rectangle {
     in property <string> next-button-text;
     in property <string> today-button-text;
     in property <string> empty-state-text;
-    in property <string> hint-text;          // "Cliquez sur une tâche pour basculer son état."
+    in property <string> hint-text;          // "Cliquez sur une tâche pour la modifier."
+    in property <string> new-task-button-text;  // "+ Nouvelle tâche"
 
     in property <[string]> weekday-labels;
     in property <[TaskCalendarDay]> days;
@@ -138,6 +141,7 @@ export component TaskCalendarPage inherits Rectangle {
     callback next-month();
     callback go-today();
     callback task-clicked(string);
+    callback new-task-clicked();
 
     ScrollView {
         VerticalLayout {
@@ -154,6 +158,7 @@ export component TaskCalendarPage inherits Rectangle {
                     font-weight: Theme.font-weight-bold;
                     horizontal-stretch: 1;
                 }
+                PrimaryButton { text: new-task-button-text; clicked => { new-task-clicked(); } }
                 SecondaryButton { text: prev-button-text; clicked => { prev-month(); } }
                 SecondaryButton { text: today-button-text; clicked => { go-today(); } }
                 SecondaryButton { text: next-button-text; clicked => { next-month(); } }

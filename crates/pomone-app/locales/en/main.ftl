@@ -267,7 +267,29 @@ status-manual-open-failed = Couldn't open the manual: { $message }
 nav-tasks = Tasks
 title-task-calendar = Task calendar
 task-calendar-empty = No tasks planned this month.
-task-calendar-hint = Click a task to toggle its state (pending ↔ done).
+task-calendar-hint = Click a task to edit it (date, type, state, deletion).
+task-calendar-new-task = + New task
+
+## Task form (create / edit)
+task-form-title-new = New task
+task-form-title-edit = Edit task
+task-form-planting-none = — None —
+label-task-type = Type
+label-task-planting = Planting (optional)
+label-task-planned-on = Planned date
+label-task-notes = Notes
+placeholder-task-notes = Details, conditions, observations…
+label-task-completed = Task done
+btn-task-save = Save
+btn-task-cancel = Cancel
+btn-task-delete = Delete
+
+## Task form errors / status
+error-date-required = Date is required.
+error-task-no-types = No task types available. Reset the default data.
+error-task-type-required = Task type is required.
+error-task-edit-id-missing = Missing task ID for editing.
+status-task-failed = Task operation failed: { $message }
 
 ## Gantt timeline
 section-season = Season
