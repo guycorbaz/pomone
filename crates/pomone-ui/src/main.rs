@@ -13,20 +13,22 @@ use anyhow::{Context, Result};
 use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use fluent::FluentArgs;
 use pomone_app::{
-    create_crop, create_location, create_strata, create_task, create_variety, delete_strata,
-    delete_task, get_planting_detail, get_task_for_edit, list_crops, list_events_in_range,
-    list_family_options, list_location_kind_options, list_location_options, list_locations_tree,
-    list_parent_options, list_planting_choices, list_plantings, list_strata_options,
-    list_strata_rows, list_task_calendar_rows, list_task_type_options, list_varieties_for_crop,
-    list_variety_options, list_yearly_harvests_for_planting, parse_id, services, test_backend,
-    update_task, App, AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent,
+    create_crop, create_location, create_strata, create_task, create_task_type, create_variety,
+    delete_strata, delete_task, delete_task_type, get_planting_detail, get_task_for_edit,
+    get_task_type_for_edit, list_crops, list_events_in_range, list_family_options,
+    list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
+    list_planting_choices, list_plantings, list_strata_options, list_strata_rows,
+    list_task_calendar_rows, list_task_category_options, list_task_type_options,
+    list_task_types_admin, list_varieties_for_crop, list_variety_options,
+    list_yearly_harvests_for_planting, parse_id, services, test_backend, update_task,
+    update_task_type, App, AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent,
     CalendarEventKind, CropInput, CropRow as AppCropRow, CycleDates, FamilyOption, Lang,
     LifespanKind, LocationInput, LocationKindOption, LocationListItem, LocationOption,
     MigrationReport, ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
     PlantingRow as AppPlantingRow, StrataInput, StrataOption, StrataRow as AppStrataRow,
-    TaskCalendarRow as AppTaskCalendarRow, TaskEditForm, TaskTypeOption, VarietyInput,
-    VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
-    YearlyHarvestRow as AppYearlyHarvestRow,
+    TaskCalendarRow as AppTaskCalendarRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
+    TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption, VarietyProfileKind,
+    VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{LocationId, PlantingId, PruningSeason, VarietyId};
 use rust_decimal::Decimal;
@@ -49,7 +51,8 @@ use generated::{
     DetailLine as SlintDetailLine, GanttBar as SlintGanttBar, LocationItem as SlintLocationItem,
     MainWindow, PlantingRow as SlintPlantingRow, StrataItem as SlintStrataItem,
     TaskCalendarDay as SlintTaskCalendarDay, TaskRow as SlintTaskRow,
-    VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
+    TaskTypeAdminItem as SlintTaskTypeAdminItem, VarietyRow as SlintVarietyRow,
+    YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -106,6 +109,16 @@ struct UiState {
     editing_task_id: String,
     /// Page to return to after the task form closes (typically "tasks").
     task_form_previous_page: String,
+    /// Stringified `TaskTypeId`s parallel to the Task Types admin list,
+    /// so callbacks emitting just a row id can be routed back to typed IDs.
+    task_type_admin_ids: Vec<String>,
+    /// Stable category keys (`"sow"`, `"transplant"`, …) parallel to the
+    /// `task-types-category-labels` ComboBox model. Index 0 must always
+    /// be the first key returned by `list_task_category_options`.
+    task_type_category_keys: Vec<String>,
+    /// Stringified `TaskTypeId` currently being edited in the catalog
+    /// form; empty in create mode.
+    editing_task_type_id: String,
 }
 
 /// Locate the bundled user manual PDF at runtime. Returns the first
@@ -195,6 +208,9 @@ fn main() -> Result<()> {
         task_form_planting_ids: Vec::new(),
         editing_task_id: String::new(),
         task_form_previous_page: "tasks".to_owned(),
+        task_type_admin_ids: Vec::new(),
+        task_type_category_keys: Vec::new(),
+        editing_task_type_id: String::new(),
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
@@ -936,6 +952,115 @@ fn main() -> Result<()> {
         });
     }
 
+    // --- Task Types catalog: navigation in (from Task Calendar header) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_navigate_task_types(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            if let Err(e) = open_task_types_for_create(&window, &mut s) {
+                tracing::error!(error = %e, "failed to open task types page");
+            }
+        });
+    }
+    // --- Task Types: Back button → return to the Task Calendar ---
+    {
+        let weak = window.as_weak();
+        window.on_navigate_task_types_back(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            window.set_current_page(SharedString::from("tasks"));
+            window.set_task_types_status_text(SharedString::from(""));
+        });
+    }
+    // --- Task Types: Save (create OR update based on is_edit_mode) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_types_save(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            match try_save_task_type_form(&window, &mut s) {
+                Ok(()) => {
+                    if let Err(e) = refresh_task_types(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh task types after save");
+                        return;
+                    }
+                    // Reset back to create mode so the user can chain creations.
+                    reset_task_types_form_to_create(&window, &mut s);
+                }
+                Err(e) => {
+                    let (text, is_err) = render_task_type_form_error(s.app.i18n(), e);
+                    window.set_task_types_status_text(text);
+                    window.set_task_types_status_is_error(is_err);
+                }
+            }
+        });
+    }
+    // --- Task Types: Cancel edit (return form to create mode) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_types_cancel_edit(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            reset_task_types_form_to_create(&window, &mut s);
+        });
+    }
+    // --- Task Types: Edit a row → pre-fill the form in edit mode ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_types_edit_row(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            if let Err(e) = open_task_type_form_for_edit(&window, &mut s, &id) {
+                tracing::error!(error = %e, "failed to open task type edit form");
+            }
+        });
+    }
+    // --- Task Types: Delete a row (blocked at DB layer if in use) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_types_delete_row(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let result = s
+                .runtime
+                .block_on(async { delete_task_type(s.app.repo(), &id).await });
+            match result {
+                Ok(()) => {
+                    if let Err(e) = refresh_task_types(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh task types after delete");
+                    }
+                    // If we were editing the type that just got deleted, drop to create mode.
+                    if s.editing_task_type_id == id.as_str() {
+                        reset_task_types_form_to_create(&window, &mut s);
+                    }
+                }
+                Err(e) => {
+                    let (text, is_err) =
+                        render_task_type_form_error(s.app.i18n(), FormError::Service(e));
+                    window.set_task_types_status_text(text);
+                    window.set_task_types_status_is_error(is_err);
+                }
+            }
+        });
+    }
+
     // --- Create variety ---
     {
         let state = Rc::clone(&state);
@@ -1145,6 +1270,37 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_task_form_btn_save_text(SharedString::from(i18n.t("btn-task-save")));
     window.set_task_form_btn_cancel_text(SharedString::from(i18n.t("btn-task-cancel")));
     window.set_task_form_btn_delete_text(SharedString::from(i18n.t("btn-task-delete")));
+
+    // Task Calendar — "Manage types" button
+    window.set_task_calendar_manage_types_button_text(SharedString::from(
+        i18n.t("task-types-button"),
+    ));
+
+    // Task Types catalog
+    window.set_task_types_title_text(SharedString::from(i18n.t("title-task-types")));
+    window.set_task_types_list_title(SharedString::from(i18n.t("task-types-list-title")));
+    window.set_task_types_empty_text(SharedString::from(i18n.t("task-types-empty")));
+    window.set_task_types_form_section_create(SharedString::from(
+        i18n.t("task-types-form-section-create"),
+    ));
+    window.set_task_types_form_section_edit(SharedString::from(
+        i18n.t("task-types-form-section-edit"),
+    ));
+    window.set_task_types_label_name(SharedString::from(i18n.t("label-task-type-name")));
+    window
+        .set_task_types_placeholder_name(SharedString::from(i18n.t("placeholder-task-type-name")));
+    window.set_task_types_label_category(SharedString::from(i18n.t("label-task-type-category")));
+    window.set_task_types_label_color(SharedString::from(i18n.t("label-task-type-color")));
+    window.set_task_types_placeholder_color(SharedString::from(
+        i18n.t("placeholder-task-type-color"),
+    ));
+    window.set_task_types_hint_color(SharedString::from(i18n.t("hint-task-type-color")));
+    window.set_task_types_btn_save_text(SharedString::from(i18n.t("btn-task-type-save")));
+    window.set_task_types_btn_cancel_text(SharedString::from(i18n.t("btn-task-type-cancel")));
+    window.set_task_types_btn_back_text(SharedString::from(i18n.t("btn-task-type-back")));
+    window.set_task_types_edit_text(SharedString::from(i18n.t("btn-task-type-edit")));
+    window.set_task_types_delete_text(SharedString::from(i18n.t("btn-task-type-delete")));
+    window.set_task_types_in_use_text(SharedString::from(i18n.t("task-type-in-use")));
     let kind_labels: Vec<SharedString> = [
         i18n.t("event-sowing-label"),
         i18n.t("event-transplanting-label"),
@@ -2817,6 +2973,172 @@ fn try_save_task_form(window: &MainWindow, state: &mut UiState) -> Result<(), Fo
             .map_err(FormError::Service)?;
     }
     Ok(())
+}
+
+/// One-shot initialization of the category ComboBox model. Idempotent: a
+/// second call is a no-op (we keep the eight canonical categories around
+/// the entire session).
+fn populate_task_type_categories(window: &MainWindow, state: &mut UiState) {
+    if !state.task_type_category_keys.is_empty() {
+        return;
+    }
+    let i18n = state.app.i18n();
+    let opts: Vec<TaskCategoryOption> = list_task_category_options();
+    state.task_type_category_keys = opts.iter().map(|o| o.key.clone()).collect();
+    let labels: Vec<SharedString> = opts
+        .iter()
+        .map(|o| SharedString::from(i18n.t(&o.label_key)))
+        .collect();
+    window.set_task_types_category_labels(ModelRc::new(VecModel::from(labels)));
+}
+
+/// Reload the Task Types admin list from the DB and push it to Slint.
+/// Stores the parallel id table so click callbacks can resolve a row id
+/// back to a typed `TaskTypeId`.
+fn refresh_task_types(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let rows: Vec<TaskTypeAdminRow> = state
+        .runtime
+        .block_on(async { list_task_types_admin(state.app.repo()).await })
+        .context("failed to load task types")?;
+    state.task_type_admin_ids = rows.iter().map(|r| r.id.clone()).collect();
+
+    let i18n = state.app.i18n();
+    let items: Vec<SlintTaskTypeAdminItem> = rows
+        .into_iter()
+        .map(|r| {
+            let cat_label = i18n.t(&format!("category-{}", r.category));
+            SlintTaskTypeAdminItem {
+                id: SharedString::from(r.id),
+                name: SharedString::from(r.name),
+                category_label: SharedString::from(cat_label),
+                color: parse_hex_color(&r.color),
+                color_hex: SharedString::from(r.color),
+                in_use: r.in_use,
+            }
+        })
+        .collect();
+    window.set_task_types_items(ModelRc::new(VecModel::from(items)));
+    Ok(())
+}
+
+/// Reset the catalog form to a blank "create" state and clear the status banner.
+fn reset_task_types_form_to_create(window: &MainWindow, state: &mut UiState) {
+    state.editing_task_type_id.clear();
+    window.set_task_types_is_edit_mode(false);
+    window.set_task_types_form_name(SharedString::from(""));
+    window.set_task_types_form_color(SharedString::from("#3C6E47"));
+    window.set_task_types_form_color_preview(parse_hex_color("#3C6E47"));
+    window.set_task_types_category_index(0);
+    window.set_task_types_status_text(SharedString::from(""));
+    window.set_task_types_status_is_error(false);
+}
+
+/// First-time entry into the catalog page: load categories + list, blank form.
+fn open_task_types_for_create(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    populate_task_type_categories(window, state);
+    refresh_task_types(window, state)?;
+    reset_task_types_form_to_create(window, state);
+    window.set_current_page(SharedString::from("task-types"));
+    Ok(())
+}
+
+/// Load one type into the form and switch to edit mode (category locked).
+fn open_task_type_form_for_edit(window: &MainWindow, state: &mut UiState, id: &str) -> Result<()> {
+    populate_task_type_categories(window, state);
+    refresh_task_types(window, state)?;
+    let form: TaskTypeEditForm = state
+        .runtime
+        .block_on(async { get_task_type_for_edit(state.app.repo(), id).await })
+        .context("failed to load task type for edit")?;
+
+    let cat_idx = state
+        .task_type_category_keys
+        .iter()
+        .position(|k| k == &form.category)
+        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
+
+    state.editing_task_type_id.clone_from(&form.id);
+    window.set_task_types_is_edit_mode(true);
+    window.set_task_types_category_index(cat_idx);
+    window.set_task_types_form_color_preview(parse_hex_color(&form.color));
+    window.set_task_types_form_name(SharedString::from(form.name));
+    window.set_task_types_form_color(SharedString::from(form.color));
+    window.set_task_types_status_text(SharedString::from(""));
+    window.set_task_types_status_is_error(false);
+    Ok(())
+}
+
+/// Persist the form (create or update). Validation: non-empty name +
+/// `#RGB` / `#RRGGBB` color (the domain re-validates both, but checking
+/// here keeps the error message closer to the field).
+fn try_save_task_type_form(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
+    let name = window.get_task_types_form_name().to_string();
+    if name.trim().is_empty() {
+        return Err(FormError::Validation(i18n.t("error-name-required")));
+    }
+    let color = window.get_task_types_form_color().to_string();
+    if color.trim().is_empty() {
+        return Err(FormError::Validation(
+            i18n.t("error-task-type-color-required"),
+        ));
+    }
+
+    let is_edit = window.get_task_types_is_edit_mode();
+    if is_edit {
+        let id = state.editing_task_type_id.clone();
+        if id.is_empty() {
+            return Err(FormError::Validation(
+                i18n.t("error-task-type-edit-id-missing"),
+            ));
+        }
+        state
+            .runtime
+            .block_on(async {
+                update_task_type(state.app.repo(), &id, name.trim(), color.trim()).await
+            })
+            .map_err(FormError::Service)?;
+    } else {
+        let cat_idx = window.get_task_types_category_index();
+        let cat_idx_usize = usize::try_from(cat_idx.max(0)).unwrap_or(0);
+        let category_key = state
+            .task_type_category_keys
+            .get(cat_idx_usize)
+            .cloned()
+            .ok_or_else(|| FormError::Validation(i18n.t("error-task-type-category-required")))?;
+        state
+            .runtime
+            .block_on(async {
+                create_task_type(state.app.repo(), name.trim(), &category_key, color.trim())
+                    .await
+                    .map(|_| ())
+            })
+            .map_err(FormError::Service)?;
+    }
+    Ok(())
+}
+
+/// Same shape as [`render_task_form_error`] but with the task-types-specific
+/// service template, plus a special case for the `task_type_in_use` sentinel
+/// returned by `delete_task_type` so the user sees a clear localized message
+/// instead of the raw FK error.
+fn render_task_type_form_error(i18n: &pomone_app::I18n, err: FormError) -> (SharedString, bool) {
+    let msg = match err {
+        FormError::Validation(text) => {
+            let mut args = FluentArgs::new();
+            args.set("message", text);
+            i18n.t_args("status-validation-failed", &args)
+        }
+        FormError::Service(AppError::Inconsistent(ref code)) if code == "task_type_in_use" => {
+            i18n.t("error-task-type-in-use")
+        }
+        FormError::Service(app_err) => {
+            let mut args = FluentArgs::new();
+            args.set("message", app_err.to_string());
+            i18n.t_args("status-task-type-failed", &args)
+        }
+    };
+    (SharedString::from(msg), true)
 }
 
 /// Parse a `#RGB` or `#RRGGBB` string into a Slint `Color`. Invalid input

@@ -291,6 +291,41 @@ error-task-type-required = Task type is required.
 error-task-edit-id-missing = Missing task ID for editing.
 status-task-failed = Task operation failed: { $message }
 
+## Task Types catalog
+title-task-types = Task types
+task-types-button = Manage types
+task-types-list-title = Catalog
+task-types-empty = No types defined yet. Use the form on the right to add one.
+task-types-form-section-create = New type
+task-types-form-section-edit = Edit type
+label-task-type-name = Name
+placeholder-task-type-name = Manual weeding, Mowing, Scything…
+label-task-type-category = Category
+label-task-type-color = Color
+placeholder-task-type-color = #3C6E47
+hint-task-type-color = Hexadecimal format: "#RGB" or "#RRGGBB".
+btn-task-type-save = Save
+btn-task-type-cancel = Cancel edit
+btn-task-type-back = ← Back to calendar
+btn-task-type-edit = Edit
+btn-task-type-delete = Delete
+task-type-in-use = In use
+error-task-type-color-required = Color is required.
+error-task-type-edit-id-missing = Missing type ID for editing.
+error-task-type-category-required = Category is required.
+error-task-type-in-use = This type is used by existing tasks. Delete or reassign those tasks before deleting the type.
+status-task-type-failed = Type operation failed: { $message }
+
+## Task categories (stable enum labels)
+category-sow = Sowing
+category-transplant = Transplanting
+category-harvest = Harvest
+category-weeding = Weeding
+category-irrigation = Irrigation
+category-treatment = Treatment
+category-tillage = Tillage
+category-other = Other
+
 ## Gantt timeline
 section-season = Season
 empty-season = No annual plantings yet. Add some on the Plantings screen.
