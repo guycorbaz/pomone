@@ -293,7 +293,21 @@ error-date-required = La date est requise.
 error-task-no-types = Aucun type de tâche disponible. Réinitialisez les données par défaut.
 error-task-type-required = Le type de tâche est requis.
 error-task-edit-id-missing = Identifiant de tâche manquant pour l'édition.
+error-recurrence-unit-required = L'unité de récurrence est requise.
 status-task-failed = Échec de l'opération sur la tâche : { $message }
+
+## Task form — recurrence sub-section
+label-task-recurring = Tâche récurrente
+label-task-recurrence-interval = Intervalle
+placeholder-task-recurrence-interval = 7
+label-task-recurrence-unit = Unité
+label-task-recurrence-end-on = Fin (incluse)
+placeholder-task-recurrence-end-on = AAAA-MM-JJ
+hint-task-recurrence-end-on = Laissez vide pour une série sans fin : le calendrier sera étendu automatiquement jusqu'à un an à l'avance.
+recurrence-unit-days = jours
+recurrence-unit-weeks = semaines
+recurrence-unit-months = mois
+task-form-series-badge = Cette tâche fait partie d'une série récurrente. Pour modifier la série, supprimez les occurrences et recréez-la.
 
 ## Task Types catalog
 title-task-types = Types de tâches

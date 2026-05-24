@@ -272,6 +272,24 @@ pub(crate) fn task_category_from_str(s: &str) -> DbResult<pomone_domain::TaskCat
     })
 }
 
+/// `RecurrenceUnit` ↔ DB string, mirroring `#[serde(rename_all = "snake_case")]`.
+pub(crate) fn recurrence_unit_to_str(u: pomone_domain::RecurrenceUnit) -> &'static str {
+    match u {
+        pomone_domain::RecurrenceUnit::Days => "days",
+        pomone_domain::RecurrenceUnit::Weeks => "weeks",
+        pomone_domain::RecurrenceUnit::Months => "months",
+    }
+}
+
+pub(crate) fn recurrence_unit_from_str(s: &str) -> DbResult<pomone_domain::RecurrenceUnit> {
+    Ok(match s {
+        "days" => pomone_domain::RecurrenceUnit::Days,
+        "weeks" => pomone_domain::RecurrenceUnit::Weeks,
+        "months" => pomone_domain::RecurrenceUnit::Months,
+        other => return Err(DbError::Malformed(format!("recurrence unit={other}"))),
+    })
+}
+
 pub(crate) fn decode_planting_schedule(
     kind: &str,
     sown_on: Option<NaiveDate>,

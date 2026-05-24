@@ -64,6 +64,38 @@ Cliquer sur une pastille existante dans le calendrier rouvre le même formulaire
 
 \textbf{Astuce} : pour marquer rapidement une tâche comme faite, ouvrez-la d'un clic, cochez \emph{Tâche terminée} et validez avec \textbf{Enregistrer}. Re-saver une tâche déjà terminée ne change pas sa date de réalisation.
 
+\subsection{Tâches récurrentes}
+
+Une grande partie du travail d'entretien (désherbage, irrigation, observation) suit un rythme régulier. Pomone permet de créer une \textbf{série récurrente} en une seule opération.
+
+Dans le formulaire \textbf{+ Nouvelle tâche}, cochez \textbf{Tâche récurrente}. Trois champs apparaissent :
+
+\begin{itemize}
+  \item \textbf{Intervalle} : le nombre (par ex. 1, 2, 10).
+  \item \textbf{Unité} : \emph{jours}, \emph{semaines} ou \emph{mois}.
+  \item \textbf{Fin (incluse)} : la date de la dernière occurrence souhaitée, pré-remplie avec un an après la date de début. Vous pouvez la modifier ou la \textbf{vider} pour une série \emph{sans fin}.
+\end{itemize}
+
+Quelques exemples :
+
+\begin{itemize}
+  \item Désherber chaque dimanche : intervalle 1, unité \emph{semaines}.
+  \item Irriguer tous les 10 jours en été : intervalle 10, unité \emph{jours}, fin 31 août.
+  \item Inspection mensuelle du verger : intervalle 1, unité \emph{mois}, sans fin.
+\end{itemize}
+
+\subsubsection*{Comment ça marche en interne}
+
+Lorsque vous enregistrez la série, Pomone matérialise immédiatement toutes les occurrences entre la date de début et la date de fin (ou un an à l'avance si la fin est vide). Chaque occurrence devient une vraie tâche dans le calendrier, avec sa propre case « fait », ses propres notes éventuelles, etc.
+
+Pour une série sans fin, Pomone \textbf{étend automatiquement} la liste à chaque ouverture du calendrier des tâches : vous gardez toujours un an d'avance sans rien faire.
+
+\subsubsection*{Modifier ou supprimer une série}
+
+En mode édition d'une occurrence appartenant à une série, un badge « série récurrente » apparaît pour vous le rappeler. Pour cette version (v1.0.0), le formulaire ne permet pas de modifier la règle de récurrence en place : si la série évolue (changement d'unité, de fin), supprimez les occurrences à venir une par une depuis le calendrier et recréez une nouvelle série. Un éditeur de série dédié pourra arriver dans une version future.
+
+\textbf{Note importante} : les calculs respectent les fins de mois. « Tous les 1 mois à partir du 31 mars » donnera 31 mars, 30 avril (et non 1\textsuperscript{er} mai), 31 mai, 30 juin, etc.
+
 \subsection{Gérer les types de tâches}
 
 Pomone fournit huit types de tâches par défaut (Semis, Repiquage, Récolte, Désherbage, Irrigation, Traitement, Travail du sol, Autre) avec leurs couleurs, modifiables et extensibles. Le bouton \textbf{Gérer les types} dans l'en-tête du Calendrier des tâches ouvre l'écran dédié, divisé en deux zones :

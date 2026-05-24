@@ -108,6 +108,11 @@ define_id!(
     "Identifier for the tool used by a task (Hoe, Tractor, Seeder…)."
 );
 define_id!(TaskId, "Identifier for a concrete task / operation.");
+define_id!(
+    TaskSeriesId,
+    "Identifier for a recurring task series (template that materializes \
+     into one Task per occurrence)."
+);
 
 #[cfg(test)]
 mod tests {
