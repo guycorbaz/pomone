@@ -19,6 +19,23 @@ L'écran \emph{Calendrier} affiche une grille mensuelle des événements liés �
 
 \section{Calendrier des tâches}
 
+L'écran \emph{Tâches} (raccourci \texttt{Ctrl+3}) affiche une grille mensuelle dédiée aux opérations de travail : semis, repiquage, récolte, désherbage, irrigation, traitement, travail du sol et autres. Il s'utilise comme le calendrier des récoltes : prev/next/today dans l'en-tête, flèches \texttt{Gauche / Droite} pour feuilleter les mois.
+
+\subsection{Tâches générées automatiquement}
+
+Lorsque vous créez une plantation, Pomone génère automatiquement les opérations correspondantes :
+
+\begin{itemize}
+  \item Pour une plantation annuelle : un \textbf{Semis} à la date de semis (si renseignée), un \textbf{Repiquage} à la date de repiquage (si renseignée), une \textbf{Récolte} à la date de début de récolte.
+  \item Pour une plantation pluriannuelle : un \textbf{Repiquage} (mise en place) à la date d'établissement.
+\end{itemize}
+
+Chaque tâche s'affiche sous forme de pastille colorée selon son type. Cliquer sur une pastille bascule son état entre « à faire » et « terminée » : la pastille terminée passe en opacité réduite et un check (\texttt{✓}) remplace le point.
+
+\subsection{Personnalisation des types}
+
+Pomone fournit huit types de tâches par défaut (Semis, Repiquage, Récolte, Désherbage, Irrigation, Traitement, Travail du sol, Autre) avec leurs couleurs. Chaque type a une \textbf{catégorie stable} (\texttt{TaskCategory}) qui sert à l'auto-génération : vous pouvez renommer librement « Semis » en « Semis serre », la catégorie reste \texttt{Sow} et l'auto-générateur continue de fonctionner.
+
 \begin{todobox}
-\textbf{À venir.} Calendrier dédié aux opérations de travail (semis serre, repiquage, désherbage, irrigation…) avec génération automatique depuis le plan de culture.
+À venir : création/édition manuelle d'une tâche, filtre par type, regénération depuis le détail d'une plantation après modification des dates.
 \end{todobox}

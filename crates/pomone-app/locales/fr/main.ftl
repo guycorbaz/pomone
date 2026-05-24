@@ -265,6 +265,12 @@ status-manual-opened = Manuel ouvert dans le visualiseur système.
 status-manual-not-found = Manuel introuvable. Réinstallez Pomone ou consultez le PDF en ligne.
 status-manual-open-failed = Impossible d'ouvrir le manuel : { $message }
 
+## Task Calendar
+nav-tasks = Tâches
+title-task-calendar = Calendrier des tâches
+task-calendar-empty = Aucune tâche planifiée ce mois-ci.
+task-calendar-hint = Cliquez sur une tâche pour basculer son état (à faire ↔ terminée).
+
 ## Gantt timeline
 section-season = Saison
 empty-season = Aucune plantation annuelle pour cette saison. Créez-en depuis l'écran Plantations.

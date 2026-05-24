@@ -16,14 +16,15 @@ use pomone_app::{
     create_crop, create_location, create_strata, create_variety, delete_strata,
     get_planting_detail, list_crops, list_events_in_range, list_family_options,
     list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
-    list_plantings, list_strata_options, list_strata_rows, list_varieties_for_crop,
-    list_variety_options, list_yearly_harvests_for_planting, parse_id, services, test_backend, App,
-    AppConfig, AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind,
-    CropInput, CropRow as AppCropRow, CycleDates, FamilyOption, Lang, LifespanKind, LocationInput,
-    LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
+    list_plantings, list_strata_options, list_strata_rows, list_task_calendar_rows,
+    list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting, parse_id,
+    services, test_backend, toggle_task_completion, App, AppConfig, AppError, BackendConfig,
+    CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput, CropRow as AppCropRow,
+    CycleDates, FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption,
+    LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
     PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow, StrataInput, StrataOption,
-    StrataRow as AppStrataRow, VarietyInput, VarietyOption, VarietyProfileKind,
-    VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
+    StrataRow as AppStrataRow, TaskCalendarRow as AppTaskCalendarRow, VarietyInput, VarietyOption,
+    VarietyProfileKind, VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{LocationId, PlantingId, PruningSeason, VarietyId};
 use rust_decimal::Decimal;
@@ -45,6 +46,7 @@ use generated::{
     CalendarDay as SlintCalendarDay, CalendarEvent as SlintCalendarEvent, CropRow as SlintCropRow,
     DetailLine as SlintDetailLine, GanttBar as SlintGanttBar, LocationItem as SlintLocationItem,
     MainWindow, PlantingRow as SlintPlantingRow, StrataItem as SlintStrataItem,
+    TaskCalendarDay as SlintTaskCalendarDay, TaskRow as SlintTaskRow,
     VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
@@ -81,6 +83,10 @@ struct UiState {
     calendar_year: i32,
     /// Month (1..=12) currently displayed by the Calendar screen.
     calendar_month: u32,
+    /// Year currently displayed by the Task Calendar screen.
+    task_calendar_year: i32,
+    /// Month (1..=12) currently displayed by the Task Calendar screen.
+    task_calendar_month: u32,
     /// Page to return to when the Back button is pressed on the detail
     /// screen. Stored at the moment the user opens a planting so the
     /// detail view can route back to either the list or the calendar.
@@ -170,6 +176,8 @@ fn main() -> Result<()> {
         parent_location_ids: Vec::new(),
         calendar_year: today_local.year(),
         calendar_month: today_local.month(),
+        task_calendar_year: today_local.year(),
+        task_calendar_month: today_local.month(),
         detail_previous_page: "plantings".to_owned(),
         detail_planting_id: String::new(),
     }));
@@ -739,6 +747,103 @@ fn main() -> Result<()> {
         });
     }
 
+    // --- Task Calendar navigation + completion toggle ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_navigate_tasks(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            if let Err(e) = refresh_task_calendar(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh task calendar");
+            }
+            window.set_current_page(SharedString::from("tasks"));
+            window.set_status_text(SharedString::from(""));
+            window.set_status_is_error(false);
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_prev_month(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            {
+                let mut s = state.borrow_mut();
+                let (y, m) = prev_month(s.task_calendar_year, s.task_calendar_month);
+                s.task_calendar_year = y;
+                s.task_calendar_month = m;
+            }
+            if let Err(e) = refresh_task_calendar(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh task calendar");
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_next_month(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            {
+                let mut s = state.borrow_mut();
+                let (y, m) = next_month(s.task_calendar_year, s.task_calendar_month);
+                s.task_calendar_year = y;
+                s.task_calendar_month = m;
+            }
+            if let Err(e) = refresh_task_calendar(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh task calendar");
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_go_today(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            {
+                let mut s = state.borrow_mut();
+                let now = Local::now().date_naive();
+                s.task_calendar_year = now.year();
+                s.task_calendar_month = now.month();
+            }
+            if let Err(e) = refresh_task_calendar(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh task calendar");
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_toggle_completion(move |task_id_str| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let Ok(task_id) = parse_id(&task_id_str) else {
+                return;
+            };
+            let result = {
+                let s = state.borrow();
+                s.runtime.block_on(async {
+                    toggle_task_completion(s.app.repo(), task_id, Local::now().date_naive()).await
+                })
+            };
+            if let Err(e) = result {
+                tracing::error!(error = %e, "failed to toggle task completion");
+                return;
+            }
+            // Re-render the current month so the pill shows the new state.
+            if let Err(e) = refresh_task_calendar(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh task calendar after toggle");
+            }
+        });
+    }
+
     // --- Create variety ---
     {
         let state = Rc::clone(&state);
@@ -918,7 +1023,19 @@ fn apply_translations(window: &MainWindow, app: &App) {
     .into_iter()
     .map(SharedString::from)
     .collect();
-    window.set_calendar_weekday_labels(ModelRc::new(VecModel::from(weekday_labels)));
+    window.set_calendar_weekday_labels(ModelRc::new(VecModel::from(weekday_labels.clone())));
+
+    // Task calendar — sidebar + page chrome strings; the day grid is built
+    // on every refresh by `refresh_task_calendar`. Re-use the harvest
+    // calendar's prev/next/today and weekday labels.
+    window.set_nav_tasks_text(SharedString::from(i18n.t("nav-tasks")));
+    window.set_task_calendar_title_text(SharedString::from(i18n.t("title-task-calendar")));
+    window.set_task_calendar_prev_button_text(SharedString::from(i18n.t("calendar-prev")));
+    window.set_task_calendar_next_button_text(SharedString::from(i18n.t("calendar-next")));
+    window.set_task_calendar_today_button_text(SharedString::from(i18n.t("calendar-today")));
+    window.set_task_calendar_empty_state_text(SharedString::from(i18n.t("task-calendar-empty")));
+    window.set_task_calendar_hint_text(SharedString::from(i18n.t("task-calendar-hint")));
+    window.set_task_calendar_weekday_labels(ModelRc::new(VecModel::from(weekday_labels)));
     let kind_labels: Vec<SharedString> = [
         i18n.t("event-sowing-label"),
         i18n.t("event-transplanting-label"),
@@ -2334,6 +2451,100 @@ fn refresh_calendar(window: &MainWindow, state: &mut UiState) -> Result<()> {
     window.set_calendar_month_label(SharedString::from(format!("{month_name} {year}")));
 
     Ok(())
+}
+
+/// Rebuild the Task Calendar's 42-cell day grid for `state.task_calendar_*`.
+/// Mirrors [`refresh_calendar`] but operates on `Task`s grouped by
+/// `planned_on`, with each pill carrying its `TaskType` color.
+fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let year = state.task_calendar_year;
+    let month = state.task_calendar_month;
+
+    let first = first_of_month(year, month);
+    let lead = weekday_offset_mon(first);
+    let grid_start = first
+        .checked_sub_days(Days::new(u64::from(lead)))
+        .context("task calendar grid underflow")?;
+    let grid_end = grid_start
+        .checked_add_days(Days::new(41))
+        .context("task calendar grid overflow")?;
+
+    let rows: Vec<AppTaskCalendarRow> = state
+        .runtime
+        .block_on(async { list_task_calendar_rows(state.app.repo(), grid_start, grid_end).await })
+        .context("failed to load task calendar rows")?;
+
+    let mut by_date: std::collections::HashMap<NaiveDate, Vec<&AppTaskCalendarRow>> =
+        std::collections::HashMap::new();
+    for r in &rows {
+        by_date.entry(r.planted_on).or_default().push(r);
+    }
+
+    let today = Local::now().date_naive();
+
+    let mut days: Vec<SlintTaskCalendarDay> = Vec::with_capacity(42);
+    for offset in 0..42 {
+        let date = grid_start
+            .checked_add_days(Days::new(offset))
+            .context("task calendar cell overflow")?;
+        let in_current_month = date.year() == year && date.month() == month;
+        let day_number = if in_current_month {
+            i32::try_from(date.day()).unwrap_or(0)
+        } else {
+            0
+        };
+        let cell_tasks: Vec<SlintTaskRow> = by_date
+            .get(&date)
+            .map(|v| {
+                v.iter()
+                    .map(|r| SlintTaskRow {
+                        task_id: SharedString::from(r.task_id.to_string()),
+                        label: SharedString::from(r.label.clone()),
+                        color: parse_hex_color(&r.color),
+                        completed: r.completed,
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        days.push(SlintTaskCalendarDay {
+            day_number,
+            in_current_month,
+            is_today: date == today,
+            tasks: ModelRc::new(VecModel::from(cell_tasks)),
+        });
+    }
+    window.set_task_calendar_days(ModelRc::new(VecModel::from(days)));
+    window.set_task_calendar_any_tasks(!rows.is_empty());
+
+    let i18n = state.app.i18n();
+    let month_key = format!("month-{month}");
+    let month_name = i18n.t(&month_key);
+    window.set_task_calendar_month_label(SharedString::from(format!("{month_name} {year}")));
+
+    Ok(())
+}
+
+/// Parse a `#RGB` or `#RRGGBB` string into a Slint `Color`. Invalid input
+/// falls back to mid-grey so a malformed seed never crashes the UI.
+fn parse_hex_color(s: &str) -> slint::Color {
+    let hex = s.strip_prefix('#').unwrap_or(s);
+    let (r, g, b) = match hex.len() {
+        3 => (
+            u8::from_str_radix(&hex[0..1], 16).map(|v| v * 17),
+            u8::from_str_radix(&hex[1..2], 16).map(|v| v * 17),
+            u8::from_str_radix(&hex[2..3], 16).map(|v| v * 17),
+        ),
+        6 => (
+            u8::from_str_radix(&hex[0..2], 16),
+            u8::from_str_radix(&hex[2..4], 16),
+            u8::from_str_radix(&hex[4..6], 16),
+        ),
+        _ => return slint::Color::from_rgb_u8(128, 128, 128),
+    };
+    match (r, g, b) {
+        (Ok(r), Ok(g), Ok(b)) => slint::Color::from_rgb_u8(r, g, b),
+        _ => slint::Color::from_rgb_u8(128, 128, 128),
+    }
 }
 
 fn usize_to_i32(n: usize) -> i32 {
