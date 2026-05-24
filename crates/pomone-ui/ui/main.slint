@@ -401,6 +401,21 @@ export component MainWindow inherits Window {
     in-out property <string> task-form-planned-on-text;
     in-out property <string> task-form-notes-text;
     in-out property <bool> task-form-completed: false;
+    // Recurrence sub-section + edit-mode badge.
+    in property <string> task-form-label-recurring;
+    in property <string> task-form-label-recurrence-interval;
+    in property <string> task-form-placeholder-recurrence-interval;
+    in property <string> task-form-label-recurrence-unit;
+    in property <string> task-form-label-recurrence-end-on;
+    in property <string> task-form-placeholder-recurrence-end-on;
+    in property <string> task-form-hint-recurrence-end-on;
+    in property <string> task-form-recurring-series-badge-text;
+    in property <[string]> task-form-recurrence-unit-labels;
+    in-out property <bool> task-form-recurring: false;
+    in-out property <string> task-form-recurrence-interval-text: "7";
+    in-out property <int> task-form-recurrence-unit-index: 0;
+    in-out property <string> task-form-recurrence-end-on-text;
+    in property <bool> task-form-is-part-of-series: false;
     callback task-form-save();
     callback task-form-cancel();
     callback task-form-delete();
@@ -1036,6 +1051,20 @@ export component MainWindow inherits Window {
                 planned-on-text <=> task-form-planned-on-text;
                 notes-text <=> task-form-notes-text;
                 completed <=> task-form-completed;
+                label-recurring: task-form-label-recurring;
+                label-recurrence-interval: task-form-label-recurrence-interval;
+                placeholder-recurrence-interval: task-form-placeholder-recurrence-interval;
+                label-recurrence-unit: task-form-label-recurrence-unit;
+                label-recurrence-end-on: task-form-label-recurrence-end-on;
+                placeholder-recurrence-end-on: task-form-placeholder-recurrence-end-on;
+                hint-recurrence-end-on: task-form-hint-recurrence-end-on;
+                recurring-series-badge-text: task-form-recurring-series-badge-text;
+                recurrence-unit-labels: task-form-recurrence-unit-labels;
+                recurring <=> task-form-recurring;
+                recurrence-interval-text <=> task-form-recurrence-interval-text;
+                recurrence-unit-index <=> task-form-recurrence-unit-index;
+                recurrence-end-on-text <=> task-form-recurrence-end-on-text;
+                is-part-of-series: task-form-is-part-of-series;
                 save => { task-form-save(); }
                 cancel => { task-form-cancel(); }
                 delete-task => { task-form-delete(); }

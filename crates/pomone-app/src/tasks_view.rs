@@ -11,10 +11,13 @@
 
 use crate::error::{AppError, AppResult};
 use crate::plantings_view::parse_id;
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use pomone_db::Repository;
-use pomone_domain::{PlantingId, Task, TaskCategory, TaskId, TaskType, TaskTypeId};
-use std::collections::HashMap;
+use pomone_domain::{
+    PlantingId, RecurrenceRule, RecurrenceUnit, Task, TaskCategory, TaskId, TaskSeries,
+    TaskSeriesId, TaskType, TaskTypeId,
+};
+use std::collections::{HashMap, HashSet};
 
 /// One task type entry for the form's type dropdown.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,6 +53,11 @@ pub struct TaskEditForm {
     pub planned_on: String,
     pub completed: bool,
     pub notes: String,
+    /// `true` when the task was materialized from a recurring series.
+    /// The UI uses this to surface a "🔁 part of a series" badge in
+    /// edit mode (the in-place form intentionally does NOT let the user
+    /// reshape the series — that flow happens elsewhere).
+    pub is_part_of_series: bool,
 }
 
 /// List all task types as dropdown options, sorted by name (matches the
@@ -154,6 +162,7 @@ pub async fn get_task_for_edit(
         planned_on: task.planned_on.format("%Y-%m-%d").to_string(),
         completed: task.completed_on.is_some(),
         notes: task.notes.unwrap_or_default(),
+        is_part_of_series: task.series_id.is_some(),
     })
 }
 
@@ -234,6 +243,7 @@ pub async fn update_task(
         task_type_id,
         task_method_id: existing.task_method_id,
         implement_id: existing.implement_id,
+        series_id: existing.series_id,
         planned_on,
         completed_on,
         duration_min: existing.duration_min,
@@ -250,6 +260,137 @@ pub async fn update_task(
 pub async fn delete_task(repo: &dyn Repository, task_id_str: &str) -> AppResult<()> {
     let id: TaskId = parse_id(task_id_str)?;
     repo.task_delete(id).await?;
+    Ok(())
+}
+
+/// Stable string for [`RecurrenceUnit`] — mirrors the DB codec so the UI
+/// can ship the user's choice as a plain key.
+#[must_use]
+pub fn recurrence_unit_str(u: RecurrenceUnit) -> &'static str {
+    match u {
+        RecurrenceUnit::Days => "days",
+        RecurrenceUnit::Weeks => "weeks",
+        RecurrenceUnit::Months => "months",
+    }
+}
+
+fn recurrence_unit_from(key: &str) -> Option<RecurrenceUnit> {
+    match key {
+        "days" => Some(RecurrenceUnit::Days),
+        "weeks" => Some(RecurrenceUnit::Weeks),
+        "months" => Some(RecurrenceUnit::Months),
+        _ => None,
+    }
+}
+
+/// Rolling horizon used to cap open-ended series (no `end_on`). One year
+/// past the supplied "today" — enough to keep the calendar populated for
+/// the foreseeable usage horizon without exploding row counts.
+fn extend_horizon(today: NaiveDate) -> NaiveDate {
+    NaiveDate::from_ymd_opt(today.year() + 1, today.month(), today.day()).unwrap_or(today)
+}
+
+/// Create a new recurring task series and materialize every occurrence
+/// between `first_planned_on` and `min(end_on, extend_horizon(today))`.
+///
+/// The series carries the recurrence rule + shared metadata ; each
+/// occurrence is a regular [`Task`] row whose `series_id` points back
+/// to the series, so the calendar / filter / CRUD code paths keep
+/// working unchanged.
+#[allow(clippy::too_many_arguments)]
+pub async fn create_recurring_task(
+    repo: &dyn Repository,
+    planting_id_str: &str,
+    task_type_id_str: &str,
+    planned_on_iso: &str,
+    notes: &str,
+    interval: u32,
+    unit_key: &str,
+    end_on_iso: Option<&str>,
+    today: NaiveDate,
+) -> AppResult<String> {
+    let task_type_id: TaskTypeId = parse_id(task_type_id_str)?;
+    let first_planned_on = parse_iso_date_local(planned_on_iso)?;
+    let (planting_id, location_id) = resolve_planting(repo, planting_id_str).await?;
+    let unit = recurrence_unit_from(unit_key)
+        .ok_or_else(|| AppError::Inconsistent(format!("unknown recurrence unit '{unit_key}'")))?;
+    let end_on = match end_on_iso {
+        Some(s) if !s.trim().is_empty() => Some(parse_iso_date_local(s)?),
+        _ => None,
+    };
+    let rule = RecurrenceRule::new(unit, interval, end_on)?;
+    let notes_opt = empty_to_none(notes);
+
+    let series = TaskSeries::new(
+        planting_id,
+        location_id,
+        task_type_id,
+        None,
+        None,
+        rule,
+        first_planned_on,
+        notes_opt.clone(),
+    );
+    repo.task_series_create(&series).await?;
+    materialize_occurrences(repo, &series, today, &HashSet::new()).await?;
+    Ok(series.id.to_string())
+}
+
+/// Walk every active series and top up its occurrences up to
+/// `extend_horizon(today)`. Idempotent — each call dedupes against the
+/// dates already present in the DB.
+///
+/// Called from the UI shell at app start and on each navigation into
+/// the Task Calendar, so an open-ended series materialized last week
+/// gradually grows its 1-year window forward without user action.
+pub async fn extend_series_if_needed(repo: &dyn Repository, today: NaiveDate) -> AppResult<()> {
+    let series_list = repo.task_series_list().await?;
+    if series_list.is_empty() {
+        return Ok(());
+    }
+    let existing_tasks = repo.task_list().await?;
+    // Per-series set of dates that are already materialized, so the
+    // generator skips them instead of writing duplicates.
+    let mut by_series: HashMap<TaskSeriesId, HashSet<NaiveDate>> = HashMap::new();
+    for t in &existing_tasks {
+        if let Some(sid) = t.series_id {
+            by_series.entry(sid).or_default().insert(t.planned_on);
+        }
+    }
+    for s in series_list {
+        let existing = by_series.remove(&s.id).unwrap_or_default();
+        materialize_occurrences(repo, &s, today, &existing).await?;
+    }
+    Ok(())
+}
+
+/// Insert every occurrence of `series` that falls in
+/// `[first, min(end_on, extend_horizon(today))]` and isn't already in
+/// `existing`. Pure helper — the dedup set lets `extend_series_if_needed`
+/// reuse it without re-querying the DB.
+async fn materialize_occurrences(
+    repo: &dyn Repository,
+    series: &TaskSeries,
+    today: NaiveDate,
+    existing: &HashSet<NaiveDate>,
+) -> AppResult<()> {
+    let horizon = extend_horizon(today);
+    for date in series.occurrences_until(horizon) {
+        if existing.contains(&date) {
+            continue;
+        }
+        let occ = Task::new_in_series(
+            series.id,
+            series.planting_id,
+            series.location_id,
+            series.task_type_id,
+            series.task_method_id,
+            series.implement_id,
+            date,
+            series.notes.clone(),
+        );
+        repo.task_create(&occ).await?;
+    }
     Ok(())
 }
 
@@ -471,5 +612,80 @@ mod tests {
             err,
             AppError::Db(pomone_db::DbError::NotFound { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn create_recurring_materializes_bounded_set() {
+        use pomone_db::TaskRepo;
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        pomone_db::seed_defaults(&repo).await.unwrap();
+        let weeding = list_task_type_options(&repo)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|o| o.category == "weeding")
+            .unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 5, 24).unwrap();
+        // Weekly, ending 2026-06-30 → starts 2026-05-24, occurrences on
+        // 24, 31, 07, 14, 21, 28 = 6 tasks.
+        let series_id = create_recurring_task(
+            &repo,
+            "",
+            &weeding.id,
+            "2026-05-24",
+            "désherbage du dimanche",
+            1,
+            "weeks",
+            Some("2026-06-30"),
+            today,
+        )
+        .await
+        .unwrap();
+        let tasks = repo.task_list().await.unwrap();
+        assert_eq!(tasks.len(), 6);
+        let series_uuid: pomone_domain::TaskSeriesId = parse_id(&series_id).unwrap();
+        assert!(tasks.iter().all(|t| t.series_id == Some(series_uuid)));
+    }
+
+    #[tokio::test]
+    async fn extend_series_is_idempotent_and_open_ended() {
+        use pomone_db::TaskRepo;
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        pomone_db::seed_defaults(&repo).await.unwrap();
+        let irrig = list_task_type_options(&repo)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|o| o.category == "irrigation")
+            .unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 5, 24).unwrap();
+        // Open-ended monthly series → materializes 13 occurrences over the
+        // 1-year horizon (months 5,6,7,8,9,10,11,12,1,2,3,4,5 — both ends inclusive).
+        create_recurring_task(
+            &repo,
+            "",
+            &irrig.id,
+            "2026-05-24",
+            "",
+            1,
+            "months",
+            None,
+            today,
+        )
+        .await
+        .unwrap();
+        let first_count = repo.task_list().await.unwrap().len();
+        assert_eq!(first_count, 13);
+
+        // Re-running the extender at the same `today` is a no-op.
+        extend_series_if_needed(&repo, today).await.unwrap();
+        assert_eq!(repo.task_list().await.unwrap().len(), first_count);
+
+        // Pushing today 2 months forward should add 2 new occurrences
+        // (months 6 and 7 of 2027, beyond the original horizon).
+        let later = NaiveDate::from_ymd_opt(2026, 7, 24).unwrap();
+        extend_series_if_needed(&repo, later).await.unwrap();
+        let new_count = repo.task_list().await.unwrap().len();
+        assert_eq!(new_count, first_count + 2);
     }
 }

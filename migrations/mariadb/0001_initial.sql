@@ -198,6 +198,41 @@ CREATE TABLE task_implement (
     notes  TEXT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Recurring task series — see sqlite/0001 for the design rationale.
+-- `task.series_id` (added below) links each occurrence back to the
+-- template; deleting a series sets that column to NULL rather than
+-- cascading so historical occurrences stay queryable.
+CREATE TABLE task_series (
+    id                  BINARY(16)    NOT NULL PRIMARY KEY,
+    planting_id         BINARY(16),
+    location_id         BINARY(16),
+    task_type_id        BINARY(16)    NOT NULL,
+    task_method_id      BINARY(16),
+    implement_id        BINARY(16),
+    recurrence_unit     VARCHAR(16)   NOT NULL,
+    recurrence_interval INT           NOT NULL,
+    first_planned_on    DATE          NOT NULL,
+    end_on              DATE,
+    notes               TEXT,
+    INDEX idx_task_series_planting (planting_id),
+    INDEX idx_task_series_location (location_id),
+    INDEX idx_task_series_type     (task_type_id),
+    CONSTRAINT fk_task_series_planting
+        FOREIGN KEY (planting_id) REFERENCES planting(id) ON DELETE CASCADE,
+    CONSTRAINT fk_task_series_location
+        FOREIGN KEY (location_id) REFERENCES location(id) ON DELETE CASCADE,
+    CONSTRAINT fk_task_series_type
+        FOREIGN KEY (task_type_id) REFERENCES task_type(id) ON DELETE RESTRICT,
+    CONSTRAINT fk_task_series_method
+        FOREIGN KEY (task_method_id) REFERENCES task_method(id) ON DELETE SET NULL,
+    CONSTRAINT fk_task_series_implement
+        FOREIGN KEY (implement_id) REFERENCES task_implement(id) ON DELETE SET NULL,
+    CONSTRAINT chk_task_series_unit
+        CHECK (recurrence_unit IN ('days','weeks','months')),
+    CONSTRAINT chk_task_series_interval
+        CHECK (recurrence_interval >= 1)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE task (
     id              BINARY(16)    NOT NULL PRIMARY KEY,
     planting_id     BINARY(16),
@@ -205,6 +240,7 @@ CREATE TABLE task (
     task_type_id    BINARY(16)    NOT NULL,
     task_method_id  BINARY(16),
     implement_id    BINARY(16),
+    series_id       BINARY(16),
     planned_on      DATE          NOT NULL,
     completed_on    DATE,
     duration_min    INT,
@@ -213,6 +249,7 @@ CREATE TABLE task (
     INDEX idx_task_planting     (planting_id),
     INDEX idx_task_location     (location_id),
     INDEX idx_task_type         (task_type_id),
+    INDEX idx_task_series       (series_id),
     INDEX idx_task_planned_on   (planned_on),
     INDEX idx_task_completed_on (completed_on),
     CONSTRAINT fk_task_planting
@@ -224,5 +261,7 @@ CREATE TABLE task (
     CONSTRAINT fk_task_method
         FOREIGN KEY (task_method_id) REFERENCES task_method(id) ON DELETE SET NULL,
     CONSTRAINT fk_task_implement
-        FOREIGN KEY (implement_id) REFERENCES task_implement(id) ON DELETE SET NULL
+        FOREIGN KEY (implement_id) REFERENCES task_implement(id) ON DELETE SET NULL,
+    CONSTRAINT fk_task_series
+        FOREIGN KEY (series_id) REFERENCES task_series(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

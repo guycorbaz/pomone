@@ -79,6 +79,24 @@ export component TaskFormPage inherits Rectangle {
     in property <string> status-text;
     in property <bool> status-is-error: false;
 
+    // Recurrence section — visible only in create mode.
+    in property <string> label-recurring;
+    in property <string> label-recurrence-interval;
+    in property <string> placeholder-recurrence-interval;
+    in property <string> label-recurrence-unit;
+    in property <string> label-recurrence-end-on;
+    in property <string> placeholder-recurrence-end-on;
+    in property <string> hint-recurrence-end-on;
+    in property <[string]> recurrence-unit-labels;
+    in-out property <bool> recurring;
+    in-out property <string> recurrence-interval-text: "7";
+    in-out property <int> recurrence-unit-index: 0;
+    in-out property <string> recurrence-end-on-text;
+
+    // Edit-mode badge: shown when the task belongs to a series.
+    in property <bool> is-part-of-series: false;
+    in property <string> recurring-series-badge-text;
+
     // Data driving the dropdowns. `planting-labels` includes a "— Aucun —"
     // first entry so the user can pick "no planting" from index 0.
     in property <[string]> task-type-labels;
@@ -187,6 +205,84 @@ export component TaskFormPage inherits Rectangle {
                         text <=> notes-text;
                         placeholder-text: placeholder-notes;
                     }
+                }
+
+                // Edit-mode badge — surfaces the series link without
+                // allowing the user to break it (V1: no in-place series edit).
+                if is-edit-mode && is-part-of-series: Rectangle {
+                    background: Palette.surface-alt;
+                    border-radius: Theme.radius-sm;
+                    border-width: Theme.border-width;
+                    border-color: Palette.border;
+                    height: 36px;
+                    HorizontalLayout {
+                        padding-left: Theme.space-md;
+                        padding-right: Theme.space-md;
+                        Text {
+                            text: "🔁  " + recurring-series-badge-text;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                // Recurrence section — create mode only. The checkbox flips
+                // the rest of the section in/out so the form stays compact
+                // for one-shot tasks (the common case).
+                if !is-edit-mode: PomoneCheckBox {
+                    text: label-recurring;
+                    checked <=> recurring;
+                }
+                if !is-edit-mode && recurring: HorizontalLayout {
+                    spacing: Theme.space-md;
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-recurrence-interval;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> recurrence-interval-text;
+                            placeholder-text: placeholder-recurrence-interval;
+                            input-type: number;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-recurrence-unit;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedComboBox {
+                            model: recurrence-unit-labels;
+                            current-index <=> recurrence-unit-index;
+                            enabled: recurrence-unit-labels.length > 0;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-recurrence-end-on;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> recurrence-end-on-text;
+                            placeholder-text: placeholder-recurrence-end-on;
+                        }
+                    }
+                }
+                if !is-edit-mode && recurring: Text {
+                    text: hint-recurrence-end-on;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-label;
+                    wrap: word-wrap;
                 }
 
                 if status-text != "": SectionHeader {

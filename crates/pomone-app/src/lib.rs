@@ -56,6 +56,7 @@ pub use task_types_view::{
     TaskTypeEditForm,
 };
 pub use tasks_view::{
-    create_task, delete_task, get_task_for_edit, list_planting_choices, list_task_type_options,
-    update_task, PlantingChoice, TaskEditForm, TaskTypeOption,
+    create_recurring_task, create_task, delete_task, extend_series_if_needed, get_task_for_edit,
+    list_planting_choices, list_task_type_options, recurrence_unit_str, update_task,
+    PlantingChoice, TaskEditForm, TaskTypeOption,
 };

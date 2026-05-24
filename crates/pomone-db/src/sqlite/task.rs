@@ -1,22 +1,25 @@
-//! `TaskTypeRepo` / `TaskMethodRepo` / `TaskImplementRepo` / `TaskRepo`
-//! implementations for SQLite.
+//! `TaskTypeRepo` / `TaskMethodRepo` / `TaskImplementRepo` /
+//! `TaskSeriesRepo` / `TaskRepo` implementations for SQLite.
 //!
-//! All four sub-traits share this file because they map to four closely
-//! related tables (`task_type`, `task_method`, `task_implement`, `task`)
-//! and the helper conversions are the same. Split them into separate
-//! files if/when they grow noticeably.
+//! All five sub-traits share this file because they map to five closely
+//! related tables (`task_type`, `task_method`, `task_implement`,
+//! `task_series`, `task`) and the helper conversions are the same.
+//! Split them into separate files if/when they grow noticeably.
 
 use crate::codec::{
-    opt_decimal_from_text, opt_decimal_to_text, task_category_from_str, task_category_to_str,
+    opt_decimal_from_text, opt_decimal_to_text, recurrence_unit_from_str, recurrence_unit_to_str,
+    task_category_from_str, task_category_to_str,
 };
 use crate::error::{DbError, DbResult};
-use crate::repository::{TaskImplementRepo, TaskMethodRepo, TaskRepo, TaskTypeRepo};
+use crate::repository::{
+    TaskImplementRepo, TaskMethodRepo, TaskRepo, TaskSeriesRepo, TaskTypeRepo,
+};
 use crate::sqlite::SqliteRepository;
 use async_trait::async_trait;
 use chrono::NaiveDate;
 use pomone_domain::{
-    LocationId, PlantingId, Task, TaskId, TaskImplement, TaskImplementId, TaskMethod, TaskMethodId,
-    TaskType, TaskTypeId,
+    LocationId, PlantingId, RecurrenceRule, Task, TaskId, TaskImplement, TaskImplementId,
+    TaskMethod, TaskMethodId, TaskSeries, TaskSeriesId, TaskType, TaskTypeId,
 };
 use sqlx::Row;
 use uuid::Uuid;
@@ -240,11 +243,110 @@ fn row_to_task_implement(row: sqlx::sqlite::SqliteRow) -> DbResult<TaskImplement
 }
 
 // ============================================================
+// TaskSeriesRepo
+// ============================================================
+
+const TASK_SERIES_COLUMNS: &str =
+    "id, planting_id, location_id, task_type_id, task_method_id, implement_id, \
+     recurrence_unit, recurrence_interval, first_planned_on, end_on, notes";
+
+#[async_trait]
+impl TaskSeriesRepo for SqliteRepository {
+    async fn task_series_get(&self, id: TaskSeriesId) -> DbResult<Option<TaskSeries>> {
+        let row = sqlx::query(&format!(
+            "SELECT {TASK_SERIES_COLUMNS} FROM task_series WHERE id = ?1"
+        ))
+        .bind(id.as_uuid())
+        .fetch_optional(&self.pool)
+        .await?;
+        row.map(row_to_task_series).transpose()
+    }
+
+    async fn task_series_list(&self) -> DbResult<Vec<TaskSeries>> {
+        let rows = sqlx::query(&format!(
+            "SELECT {TASK_SERIES_COLUMNS} FROM task_series ORDER BY first_planned_on"
+        ))
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter().map(row_to_task_series).collect()
+    }
+
+    async fn task_series_create(&self, s: &TaskSeries) -> DbResult<()> {
+        sqlx::query(&format!(
+            "INSERT INTO task_series ({TASK_SERIES_COLUMNS}) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
+        ))
+        .bind(s.id.as_uuid())
+        .bind(s.planting_id.map(PlantingId::as_uuid))
+        .bind(s.location_id.map(LocationId::as_uuid))
+        .bind(s.task_type_id.as_uuid())
+        .bind(s.task_method_id.map(TaskMethodId::as_uuid))
+        .bind(s.implement_id.map(TaskImplementId::as_uuid))
+        .bind(recurrence_unit_to_str(s.rule.unit))
+        .bind(i64::from(s.rule.interval))
+        .bind(s.first_planned_on)
+        .bind(s.rule.end_on)
+        .bind(s.notes.as_deref())
+        .execute(&self.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn task_series_delete(&self, id: TaskSeriesId) -> DbResult<()> {
+        let res = sqlx::query("DELETE FROM task_series WHERE id = ?1")
+            .bind(id.as_uuid())
+            .execute(&self.pool)
+            .await?;
+        if res.rows_affected() == 0 {
+            return Err(DbError::NotFound {
+                kind: "task_series",
+                id: id.to_string(),
+            });
+        }
+        Ok(())
+    }
+}
+
+fn row_to_task_series(row: sqlx::sqlite::SqliteRow) -> DbResult<TaskSeries> {
+    let id: Uuid = row.try_get("id")?;
+    let task_type_id: Uuid = row.try_get("task_type_id")?;
+    let planting_id: Option<Uuid> = row.try_get("planting_id")?;
+    let location_id: Option<Uuid> = row.try_get("location_id")?;
+    let task_method_id: Option<Uuid> = row.try_get("task_method_id")?;
+    let implement_id: Option<Uuid> = row.try_get("implement_id")?;
+    let unit_str: String = row.try_get("recurrence_unit")?;
+    let interval_raw: i64 = row.try_get("recurrence_interval")?;
+    let interval = u32::try_from(interval_raw).map_err(|_| {
+        DbError::Malformed(format!(
+            "recurrence_interval out of u32 range: {interval_raw}"
+        ))
+    })?;
+    let rule = RecurrenceRule::new(
+        recurrence_unit_from_str(&unit_str)?,
+        interval,
+        row.try_get("end_on")?,
+    )
+    .map_err(|e| DbError::Malformed(format!("bad recurrence rule: {e}")))?;
+    Ok(TaskSeries {
+        id: TaskSeriesId::from(id),
+        planting_id: planting_id.map(PlantingId::from),
+        location_id: location_id.map(LocationId::from),
+        task_type_id: TaskTypeId::from(task_type_id),
+        task_method_id: task_method_id.map(TaskMethodId::from),
+        implement_id: implement_id.map(TaskImplementId::from),
+        rule,
+        first_planned_on: row.try_get("first_planned_on")?,
+        notes: row.try_get("notes")?,
+    })
+}
+
+// ============================================================
 // TaskRepo
 // ============================================================
 
 const TASK_COLUMNS: &str = "id, planting_id, location_id, task_type_id, task_method_id, \
-                            implement_id, planned_on, completed_on, duration_min, labor_hours, notes";
+                            implement_id, series_id, planned_on, completed_on, duration_min, \
+                            labor_hours, notes";
 
 #[async_trait]
 impl TaskRepo for SqliteRepository {
@@ -299,7 +401,8 @@ impl TaskRepo for SqliteRepository {
 
     async fn task_create(&self, t: &Task) -> DbResult<()> {
         sqlx::query(&format!(
-            "INSERT INTO task ({TASK_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
+            "INSERT INTO task ({TASK_COLUMNS}) VALUES \
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"
         ))
         .bind(t.id.as_uuid())
         .bind(t.planting_id.map(PlantingId::as_uuid))
@@ -307,6 +410,7 @@ impl TaskRepo for SqliteRepository {
         .bind(t.task_type_id.as_uuid())
         .bind(t.task_method_id.map(TaskMethodId::as_uuid))
         .bind(t.implement_id.map(TaskImplementId::as_uuid))
+        .bind(t.series_id.map(TaskSeriesId::as_uuid))
         .bind(t.planned_on)
         .bind(t.completed_on)
         .bind(t.duration_min.map(i64::from))
@@ -320,8 +424,9 @@ impl TaskRepo for SqliteRepository {
     async fn task_update(&self, t: &Task) -> DbResult<()> {
         let res = sqlx::query(
             "UPDATE task SET planting_id = ?2, location_id = ?3, task_type_id = ?4, \
-             task_method_id = ?5, implement_id = ?6, planned_on = ?7, completed_on = ?8, \
-             duration_min = ?9, labor_hours = ?10, notes = ?11 WHERE id = ?1",
+             task_method_id = ?5, implement_id = ?6, series_id = ?7, planned_on = ?8, \
+             completed_on = ?9, duration_min = ?10, labor_hours = ?11, notes = ?12 \
+             WHERE id = ?1",
         )
         .bind(t.id.as_uuid())
         .bind(t.planting_id.map(PlantingId::as_uuid))
@@ -329,6 +434,7 @@ impl TaskRepo for SqliteRepository {
         .bind(t.task_type_id.as_uuid())
         .bind(t.task_method_id.map(TaskMethodId::as_uuid))
         .bind(t.implement_id.map(TaskImplementId::as_uuid))
+        .bind(t.series_id.map(TaskSeriesId::as_uuid))
         .bind(t.planned_on)
         .bind(t.completed_on)
         .bind(t.duration_min.map(i64::from))
@@ -367,6 +473,7 @@ fn row_to_task(row: sqlx::sqlite::SqliteRow) -> DbResult<Task> {
     let location_id: Option<Uuid> = row.try_get("location_id")?;
     let task_method_id: Option<Uuid> = row.try_get("task_method_id")?;
     let implement_id: Option<Uuid> = row.try_get("implement_id")?;
+    let series_id: Option<Uuid> = row.try_get("series_id")?;
     let duration_min: Option<i64> = row.try_get("duration_min")?;
     let labor_hours_text: Option<String> = row.try_get("labor_hours")?;
     let duration_min = duration_min
@@ -382,6 +489,7 @@ fn row_to_task(row: sqlx::sqlite::SqliteRow) -> DbResult<Task> {
         task_type_id: TaskTypeId::from(task_type_id),
         task_method_id: task_method_id.map(TaskMethodId::from),
         implement_id: implement_id.map(TaskImplementId::from),
+        series_id: series_id.map(TaskSeriesId::from),
         planned_on: row.try_get("planned_on")?,
         completed_on: row.try_get("completed_on")?,
         duration_min,
@@ -518,5 +626,57 @@ mod tests {
         // FK on task.task_type_id is ON DELETE RESTRICT — deletion must error.
         let err = repo.task_type_delete(tt_id).await.unwrap_err();
         assert!(matches!(err, DbError::Sqlx(_)), "got {err:?}");
+    }
+
+    #[tokio::test]
+    async fn task_series_roundtrip_with_occurrences() {
+        use pomone_domain::{RecurrenceRule, RecurrenceUnit, TaskSeries};
+        let (repo, tt_id) = fresh_repo_with_type().await;
+        let rule = RecurrenceRule::new(
+            RecurrenceUnit::Weeks,
+            2,
+            Some(NaiveDate::from_ymd_opt(2026, 8, 1).unwrap()),
+        )
+        .unwrap();
+        let series = TaskSeries::new(
+            None,
+            None,
+            tt_id,
+            None,
+            None,
+            rule,
+            NaiveDate::from_ymd_opt(2026, 5, 10).unwrap(),
+            Some("désherbage hebdo".into()),
+        );
+        repo.task_series_create(&series).await.unwrap();
+        let got = repo.task_series_get(series.id).await.unwrap().unwrap();
+        assert_eq!(got.rule.unit, RecurrenceUnit::Weeks);
+        assert_eq!(got.rule.interval, 2);
+        assert_eq!(
+            got.rule.end_on,
+            Some(NaiveDate::from_ymd_opt(2026, 8, 1).unwrap())
+        );
+        assert_eq!(got.notes.as_deref(), Some("désherbage hebdo"));
+
+        // A task in the series materializes with series_id set; deleting
+        // the series sets it back to NULL (ON DELETE SET NULL).
+        let occ = pomone_domain::Task::new_in_series(
+            series.id,
+            None,
+            None,
+            tt_id,
+            None,
+            None,
+            NaiveDate::from_ymd_opt(2026, 5, 10).unwrap(),
+            None,
+        );
+        let occ_id = occ.id;
+        repo.task_create(&occ).await.unwrap();
+        let fetched = repo.task_get(occ_id).await.unwrap().unwrap();
+        assert_eq!(fetched.series_id, Some(series.id));
+
+        repo.task_series_delete(series.id).await.unwrap();
+        let orphan = repo.task_get(occ_id).await.unwrap().unwrap();
+        assert_eq!(orphan.series_id, None);
     }
 }

@@ -17,7 +17,9 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{LocationId, PlantingId, TaskId, TaskImplementId, TaskMethodId, TaskTypeId};
+use crate::ids::{
+    LocationId, PlantingId, TaskId, TaskImplementId, TaskMethodId, TaskSeriesId, TaskTypeId,
+};
 
 /// A single scheduled or completed operation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,6 +45,11 @@ pub struct Task {
     pub duration_min: Option<u32>,
     /// Actual labor time in hours (for costing). Decimal to allow 0.25h etc.
     pub labor_hours: Option<Decimal>,
+    /// Optional link to the [`TaskSeries`](crate::TaskSeries) that
+    /// materialized this occurrence. `None` for one-shot tasks
+    /// (manual creates + auto-gen at planting creation); `Some` for
+    /// each row produced by a recurring template.
+    pub series_id: Option<TaskSeriesId>,
     /// Free-form notes (max 4 KiB, enforced by [`Task::new`]).
     pub notes: Option<String>,
 }
@@ -54,6 +61,7 @@ impl Task {
     /// finishing earlier than planned), so the two dates aren't compared.
     /// Notes aren't length-checked at the domain level — the DB column
     /// applies the only hard cap.
+    #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn new(
         planting_id: Option<PlantingId>,
@@ -75,10 +83,43 @@ impl Task {
             task_type_id,
             task_method_id,
             implement_id,
+            series_id: None,
             planned_on,
             completed_on,
             duration_min,
             labor_hours,
+            notes,
+        }
+    }
+
+    /// Like [`Task::new`] but tied to a recurring series. Used by the
+    /// app-layer occurrence generator when materializing a
+    /// [`TaskSeries`](crate::TaskSeries).
+    #[allow(clippy::too_many_arguments)]
+    #[must_use]
+    pub fn new_in_series(
+        series_id: TaskSeriesId,
+        planting_id: Option<PlantingId>,
+        location_id: Option<LocationId>,
+        task_type_id: TaskTypeId,
+        task_method_id: Option<TaskMethodId>,
+        implement_id: Option<TaskImplementId>,
+        planned_on: NaiveDate,
+        notes: Option<String>,
+    ) -> Self {
+        let notes = crate::validation::normalize_optional(notes);
+        Self {
+            id: TaskId::new(),
+            planting_id,
+            location_id,
+            task_type_id,
+            task_method_id,
+            implement_id,
+            series_id: Some(series_id),
+            planned_on,
+            completed_on: None,
+            duration_min: None,
+            labor_hours: None,
             notes,
         }
     }

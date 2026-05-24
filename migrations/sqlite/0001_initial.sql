@@ -187,6 +187,29 @@ CREATE TABLE task_implement (
     notes  TEXT
 ) STRICT;
 
+-- Recurring task series. `task_series` is the template ; each
+-- materialized occurrence is a regular `task` row whose `series_id`
+-- points back here. Deleting a series sets `task.series_id = NULL`
+-- on its occurrences rather than cascading — historical occurrences
+-- stay queryable even when the user removes the series itself.
+CREATE TABLE task_series (
+    id                  BLOB    NOT NULL PRIMARY KEY,
+    planting_id         BLOB             REFERENCES planting(id)        ON DELETE CASCADE,
+    location_id         BLOB             REFERENCES location(id)        ON DELETE CASCADE,
+    task_type_id        BLOB    NOT NULL REFERENCES task_type(id)       ON DELETE RESTRICT,
+    task_method_id      BLOB             REFERENCES task_method(id)     ON DELETE SET NULL,
+    implement_id        BLOB             REFERENCES task_implement(id)  ON DELETE SET NULL,
+    recurrence_unit     TEXT    NOT NULL CHECK (recurrence_unit IN ('days','weeks','months')),
+    recurrence_interval INTEGER NOT NULL CHECK (recurrence_interval >= 1),
+    first_planned_on    TEXT    NOT NULL,
+    end_on              TEXT,
+    notes               TEXT
+) STRICT;
+
+CREATE INDEX idx_task_series_planting ON task_series(planting_id);
+CREATE INDEX idx_task_series_location ON task_series(location_id);
+CREATE INDEX idx_task_series_type     ON task_series(task_type_id);
+
 CREATE TABLE task (
     id                BLOB    NOT NULL PRIMARY KEY,
     planting_id       BLOB             REFERENCES planting(id)        ON DELETE CASCADE,
@@ -194,6 +217,7 @@ CREATE TABLE task (
     task_type_id      BLOB    NOT NULL REFERENCES task_type(id)       ON DELETE RESTRICT,
     task_method_id    BLOB             REFERENCES task_method(id)     ON DELETE SET NULL,
     implement_id      BLOB             REFERENCES task_implement(id)  ON DELETE SET NULL,
+    series_id         BLOB             REFERENCES task_series(id)     ON DELETE SET NULL,
     planned_on        TEXT    NOT NULL,
     completed_on      TEXT,
     duration_min      INTEGER,
@@ -205,5 +229,6 @@ CREATE TABLE task (
 CREATE INDEX idx_task_planting     ON task(planting_id);
 CREATE INDEX idx_task_location     ON task(location_id);
 CREATE INDEX idx_task_type         ON task(task_type_id);
+CREATE INDEX idx_task_series       ON task(series_id);
 CREATE INDEX idx_task_planned_on   ON task(planned_on);
 CREATE INDEX idx_task_completed_on ON task(completed_on);

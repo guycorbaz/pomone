@@ -291,7 +291,21 @@ error-date-required = Date is required.
 error-task-no-types = No task types available. Reset the default data.
 error-task-type-required = Task type is required.
 error-task-edit-id-missing = Missing task ID for editing.
+error-recurrence-unit-required = Recurrence unit is required.
 status-task-failed = Task operation failed: { $message }
+
+## Task form — recurrence sub-section
+label-task-recurring = Recurring task
+label-task-recurrence-interval = Interval
+placeholder-task-recurrence-interval = 7
+label-task-recurrence-unit = Unit
+label-task-recurrence-end-on = End (inclusive)
+placeholder-task-recurrence-end-on = YYYY-MM-DD
+hint-task-recurrence-end-on = Leave empty for an open-ended series: the calendar will extend automatically up to one year ahead.
+recurrence-unit-days = days
+recurrence-unit-weeks = weeks
+recurrence-unit-months = months
+task-form-series-badge = This task is part of a recurring series. To modify the series, delete the occurrences and recreate it.
 
 ## Task Types catalog
 title-task-types = Task types

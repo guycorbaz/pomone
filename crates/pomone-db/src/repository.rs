@@ -10,7 +10,8 @@ use async_trait::async_trait;
 use pomone_domain::{
     Crop, CropId, Family, FamilyId, Location, LocationId, LocationKind, LocationKindId, Planting,
     PlantingId, Strata, StrataId, Task, TaskId, TaskImplement, TaskImplementId, TaskMethod,
-    TaskMethodId, TaskType, TaskTypeId, Variety, VarietyId, YearlyHarvest,
+    TaskMethodId, TaskSeries, TaskSeriesId, TaskType, TaskTypeId, Variety, VarietyId,
+    YearlyHarvest,
 };
 
 #[async_trait]
@@ -123,6 +124,14 @@ pub trait TaskImplementRepo: Send + Sync {
 }
 
 #[async_trait]
+pub trait TaskSeriesRepo: Send + Sync {
+    async fn task_series_get(&self, id: TaskSeriesId) -> DbResult<Option<TaskSeries>>;
+    async fn task_series_list(&self) -> DbResult<Vec<TaskSeries>>;
+    async fn task_series_create(&self, series: &TaskSeries) -> DbResult<()>;
+    async fn task_series_delete(&self, id: TaskSeriesId) -> DbResult<()>;
+}
+
+#[async_trait]
 pub trait TaskRepo: Send + Sync {
     async fn task_get(&self, id: TaskId) -> DbResult<Option<Task>>;
     async fn task_list(&self) -> DbResult<Vec<Task>>;
@@ -154,6 +163,7 @@ pub trait Repository:
     + TaskTypeRepo
     + TaskMethodRepo
     + TaskImplementRepo
+    + TaskSeriesRepo
     + TaskRepo
     + Send
     + Sync
