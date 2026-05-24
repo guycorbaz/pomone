@@ -20,6 +20,7 @@ pub mod services;
 pub mod strata_view;
 pub mod task_autogen;
 pub mod task_calendar_view;
+pub mod task_types_view;
 pub mod tasks_view;
 
 #[cfg(test)]
@@ -49,6 +50,11 @@ pub use plantings_view::{
 pub use strata_view::{create_strata, delete_strata, list_strata_rows, StrataInput, StrataRow};
 pub use task_autogen::generate_tasks_for_planting;
 pub use task_calendar_view::{list_task_calendar_rows, toggle_task_completion, TaskCalendarRow};
+pub use task_types_view::{
+    create_task_type, delete_task_type, get_task_type_for_edit, list_task_category_options,
+    list_task_types_admin, update_task_type, TaskCategoryOption, TaskTypeAdminRow,
+    TaskTypeEditForm,
+};
 pub use tasks_view::{
     create_task, delete_task, get_task_for_edit, list_planting_choices, list_task_type_options,
     update_task, PlantingChoice, TaskEditForm, TaskTypeOption,

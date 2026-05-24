@@ -1,0 +1,275 @@
+// Pomone — Task Types catalog screen.
+//
+// Manages the lookup table behind every task's "type" field (Semis,
+// Repiquage, Récolte, Désherbage…). Pre-seeded with 8 defaults — one per
+// `TaskCategory` — that the user can rename, recolor, or extend.
+//
+// Layout mirrors `strata.slint`: list on the left (2/3 width), form on
+// the right (1/3 width). The form doubles as create + edit; the host
+// flips `is-edit-mode` on row-click and pre-fills the in-out properties.
+
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
+import { ScrollView, ListView } from "std-widgets.slint";
+
+export struct TaskTypeAdminItem {
+    id: string,
+    name: string,
+    /// Localized category label, already resolved by Rust (e.g. "Semis").
+    category-label: string,
+    /// Resolved color for the swatch. Parsed Rust-side from the hex string.
+    color: color,
+    /// Raw hex (e.g. "#3C6E47") — surfaced so the row can pre-fill the
+    /// form via Rust without an extra round-trip.
+    color-hex: string,
+    in-use: bool,
+}
+
+component ColorSwatch inherits Rectangle {
+    in property <color> swatch-color;
+    width: 24px;
+    height: 24px;
+    border-radius: Theme.radius-sm;
+    border-width: Theme.border-width;
+    border-color: Palette.border-strong;
+    background: swatch-color;
+}
+
+component TaskTypeRowView inherits Card {
+    in property <TaskTypeAdminItem> entry;
+    in property <string> edit-text;
+    in property <string> delete-text;
+    in property <string> in-use-text;
+    callback edit(string);
+    callback delete(string);
+    height: 80px;
+
+    HorizontalLayout {
+        padding: Theme.space-md;
+        spacing: Theme.space-md;
+        alignment: center;
+
+        ColorSwatch { swatch-color: entry.color; }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 2px;
+            Text {
+                text: entry.name;
+                color: Palette.text-primary;
+                font-size: Theme.font-size-body;
+                font-weight: Theme.font-weight-semibold;
+            }
+            HorizontalLayout {
+                spacing: Theme.space-sm;
+                Text {
+                    text: entry.category-label;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-label;
+                    vertical-alignment: center;
+                }
+                if entry.in-use: Text {
+                    text: in-use-text;
+                    color: Palette.text-secondary;
+                    font-size: Theme.font-size-label;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        SecondaryButton {
+            text: edit-text;
+            clicked => { edit(entry.id); }
+        }
+        SecondaryButton {
+            text: delete-text;
+            enabled: !entry.in-use;
+            clicked => { delete(entry.id); }
+        }
+    }
+}
+
+export component TaskTypesPage inherits Rectangle {
+    background: Palette.background;
+
+    // Chrome strings
+    in property <string> title-text;
+    in property <string> list-title;
+    in property <string> empty-text;
+    in property <string> form-section-create;
+    in property <string> form-section-edit;
+    in property <string> label-name;
+    in property <string> placeholder-name;
+    in property <string> label-category;
+    in property <string> label-color;
+    in property <string> placeholder-color;
+    in property <string> hint-color;
+    in property <string> btn-save-text;
+    in property <string> btn-cancel-text;
+    in property <string> btn-back-text;
+    in property <string> edit-text;
+    in property <string> delete-text;
+    in property <string> in-use-text;
+    in property <string> status-text;
+    in property <bool> status-is-error: false;
+
+    // Data
+    in property <[TaskTypeAdminItem]> types;
+    in property <[string]> category-labels;
+    in-out property <int> category-index: 0;
+
+    // Form state
+    in property <bool> is-edit-mode: false;
+    in-out property <string> form-name;
+    in-out property <string> form-color: "#3C6E47";
+    /// Preview color, kept in sync with `form-color` by the host so the
+    /// swatch reflects what the user is typing live.
+    in property <color> form-color-preview;
+
+    callback save();
+    callback cancel();
+    callback edit-row(string);
+    callback delete-row(string);
+    callback go-back();
+
+    ScrollView {
+        VerticalLayout {
+            padding: Theme.space-2xl;
+            spacing: Theme.space-xl;
+
+            HorizontalLayout {
+                spacing: Theme.space-md;
+                Text {
+                    text: title-text;
+                    color: Palette.primary;
+                    font-size: Theme.font-size-h1;
+                    font-weight: Theme.font-weight-bold;
+                    horizontal-stretch: 1;
+                }
+                SecondaryButton {
+                    text: btn-back-text;
+                    clicked => { go-back(); }
+                }
+            }
+
+            HorizontalLayout {
+                spacing: Theme.space-xl;
+
+                // -------- List --------
+                Card {
+                    horizontal-stretch: 2;
+                    VerticalLayout {
+                        padding: Theme.space-xl;
+                        spacing: Theme.space-md;
+
+                        SectionHeader { text: list-title; }
+
+                        if types.length == 0: Text {
+                            text: empty-text;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-body;
+                            horizontal-alignment: center;
+                        }
+                        if types.length > 0: list-area := Rectangle {
+                            min-height: 320px;
+                            preferred-height: 480px;
+                            vertical-stretch: 1;
+                            ListView {
+                                for item in types: TaskTypeRowView {
+                                    entry: item;
+                                    edit-text: edit-text;
+                                    delete-text: delete-text;
+                                    in-use-text: in-use-text;
+                                    width: list-area.width;
+                                    edit(id) => { edit-row(id); }
+                                    delete(id) => { delete-row(id); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // -------- Form --------
+                Card {
+                    horizontal-stretch: 1;
+                    VerticalLayout {
+                        padding: Theme.space-xl;
+                        spacing: Theme.space-md;
+
+                        SectionHeader {
+                            text: is-edit-mode ? form-section-edit : form-section-create;
+                        }
+
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text {
+                                text: label-name;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedLineEdit {
+                                text <=> form-name;
+                                placeholder-text: placeholder-name;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text {
+                                text: label-category;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            // Category is structural — disabled in edit mode.
+                            ThemedComboBox {
+                                model: category-labels;
+                                current-index <=> category-index;
+                                enabled: category-labels.length > 0 && !is-edit-mode;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text {
+                                text: label-color;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            HorizontalLayout {
+                                spacing: Theme.space-sm;
+                                ColorSwatch { swatch-color: form-color-preview; }
+                                ThemedLineEdit {
+                                    text <=> form-color;
+                                    placeholder-text: placeholder-color;
+                                    horizontal-stretch: 1;
+                                }
+                            }
+                            Text {
+                                text: hint-color;
+                                color: Palette.text-muted;
+                                font-size: Theme.font-size-label;
+                            }
+                        }
+
+                        if status-text != "": Text {
+                            text: status-text;
+                            color: status-is-error ? Palette.danger : Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            wrap: word-wrap;
+                        }
+
+                        HorizontalLayout {
+                            spacing: Theme.space-md;
+                            alignment: end;
+                            if is-edit-mode: SecondaryButton {
+                                text: btn-cancel-text;
+                                clicked => { cancel(); }
+                            }
+                            PrimaryButton {
+                                text: btn-save-text;
+                                clicked => { save(); }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

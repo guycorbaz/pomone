@@ -69,8 +69,9 @@ fn to_type_option(t: TaskType) -> TaskTypeOption {
 }
 
 /// Map the domain `TaskCategory` to its codec string. Kept in sync with the
-/// `task_category_to_str` helper in `pomone-db`.
-fn category_str(c: TaskCategory) -> &'static str {
+/// `task_category_to_str` helper in `pomone-db`. Shared with
+/// `task_types_view` so the catalog editor presents the same labels.
+pub(crate) fn category_str(c: TaskCategory) -> &'static str {
     match c {
         TaskCategory::Sow => "sow",
         TaskCategory::Transplant => "transplant",
@@ -80,6 +81,22 @@ fn category_str(c: TaskCategory) -> &'static str {
         TaskCategory::Treatment => "treatment",
         TaskCategory::Tillage => "tillage",
         TaskCategory::Other => "other",
+    }
+}
+
+/// Inverse of [`category_str`]. Returns `None` for unknown strings so the
+/// caller can decide whether to error or silently fall back.
+pub(crate) fn category_from_str(s: &str) -> Option<TaskCategory> {
+    match s {
+        "sow" => Some(TaskCategory::Sow),
+        "transplant" => Some(TaskCategory::Transplant),
+        "harvest" => Some(TaskCategory::Harvest),
+        "weeding" => Some(TaskCategory::Weeding),
+        "irrigation" => Some(TaskCategory::Irrigation),
+        "treatment" => Some(TaskCategory::Treatment),
+        "tillage" => Some(TaskCategory::Tillage),
+        "other" => Some(TaskCategory::Other),
+        _ => None,
     }
 }
 

@@ -15,12 +15,13 @@ import { LocationsPage, LocationItem } from "locations.slint";
 import { CalendarPage, CalendarDay, CalendarEvent } from "calendar.slint";
 import { TaskCalendarPage, TaskCalendarDay, TaskRow } from "task_calendar.slint";
 import { TaskFormPage } from "task_form.slint";
+import { TaskTypesPage, TaskTypeAdminItem } from "task_types.slint";
 import { PlantingDetailPage, DetailLine, YearlyHarvestRow } from "planting_detail.slint";
 import { StrataPage, StrataItem } from "strata.slint";
 import { SettingsPage } from "settings.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, TaskCalendarDay, TaskRow, DetailLine, YearlyHarvestRow, StrataItem, GanttBar }
+export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, TaskCalendarDay, TaskRow, DetailLine, YearlyHarvestRow, StrataItem, GanttBar, TaskTypeAdminItem }
 
 export component MainWindow inherits Window {
     title: "Pomone";
@@ -357,6 +358,7 @@ export component MainWindow inherits Window {
     in property <string> task-calendar-empty-state-text;
     in property <string> task-calendar-hint-text;
     in property <string> task-calendar-new-task-button-text;
+    in property <string> task-calendar-manage-types-button-text;
     in property <[string]> task-calendar-weekday-labels;
     in property <[TaskCalendarDay]> task-calendar-days;
     in property <bool> task-calendar-any-tasks;
@@ -397,6 +399,40 @@ export component MainWindow inherits Window {
     callback task-form-save();
     callback task-form-cancel();
     callback task-form-delete();
+
+    // ------- Task Types catalog page state -------
+    in property <string> task-types-title-text;
+    in property <string> task-types-list-title;
+    in property <string> task-types-empty-text;
+    in property <string> task-types-form-section-create;
+    in property <string> task-types-form-section-edit;
+    in property <string> task-types-label-name;
+    in property <string> task-types-placeholder-name;
+    in property <string> task-types-label-category;
+    in property <string> task-types-label-color;
+    in property <string> task-types-placeholder-color;
+    in property <string> task-types-hint-color;
+    in property <string> task-types-btn-save-text;
+    in property <string> task-types-btn-cancel-text;
+    in property <string> task-types-btn-back-text;
+    in property <string> task-types-edit-text;
+    in property <string> task-types-delete-text;
+    in property <string> task-types-in-use-text;
+    in-out property <string> task-types-status-text;
+    in property <bool> task-types-status-is-error: false;
+    in property <[TaskTypeAdminItem]> task-types-items;
+    in property <[string]> task-types-category-labels;
+    in-out property <int> task-types-category-index: 0;
+    in property <bool> task-types-is-edit-mode: false;
+    in-out property <string> task-types-form-name;
+    in-out property <string> task-types-form-color: "#3C6E47";
+    in property <color> task-types-form-color-preview;
+    callback task-types-save();
+    callback task-types-cancel-edit();
+    callback task-types-edit-row(string);
+    callback task-types-delete-row(string);
+    callback navigate-task-types();
+    callback navigate-task-types-back();
 
     init => {
         // Claim focus for the global shortcut scope at startup so Ctrl+1..6
@@ -512,6 +548,11 @@ export component MainWindow inherits Window {
         interval: 4s;
         running: root.task-form-status-text != "";
         triggered => { root.task-form-status-text = ""; }
+    }
+    Timer {
+        interval: 4s;
+        running: root.task-types-status-text != "";
+        triggered => { root.task-types-status-text = ""; }
     }
 
     HorizontalLayout {
@@ -916,6 +957,7 @@ export component MainWindow inherits Window {
                 empty-state-text: task-calendar-empty-state-text;
                 hint-text: task-calendar-hint-text;
                 new-task-button-text: task-calendar-new-task-button-text;
+                manage-types-button-text: task-calendar-manage-types-button-text;
                 weekday-labels: task-calendar-weekday-labels;
                 days: task-calendar-days;
                 any-tasks: task-calendar-any-tasks;
@@ -924,6 +966,42 @@ export component MainWindow inherits Window {
                 go-today => { task-go-today(); }
                 task-clicked(tid) => { task-edit-requested(tid); }
                 new-task-clicked => { task-new-requested(); }
+                manage-types-clicked => { navigate-task-types(); }
+            }
+
+            // ------- Task types catalog (create / edit / delete) -------
+            if current-page == "task-types": TaskTypesPage {
+                title-text: task-types-title-text;
+                list-title: task-types-list-title;
+                empty-text: task-types-empty-text;
+                form-section-create: task-types-form-section-create;
+                form-section-edit: task-types-form-section-edit;
+                label-name: task-types-label-name;
+                placeholder-name: task-types-placeholder-name;
+                label-category: task-types-label-category;
+                label-color: task-types-label-color;
+                placeholder-color: task-types-placeholder-color;
+                hint-color: task-types-hint-color;
+                btn-save-text: task-types-btn-save-text;
+                btn-cancel-text: task-types-btn-cancel-text;
+                btn-back-text: task-types-btn-back-text;
+                edit-text: task-types-edit-text;
+                delete-text: task-types-delete-text;
+                in-use-text: task-types-in-use-text;
+                status-text: task-types-status-text;
+                status-is-error: task-types-status-is-error;
+                types: task-types-items;
+                category-labels: task-types-category-labels;
+                category-index <=> task-types-category-index;
+                is-edit-mode: task-types-is-edit-mode;
+                form-name <=> task-types-form-name;
+                form-color <=> task-types-form-color;
+                form-color-preview: task-types-form-color-preview;
+                save => { task-types-save(); }
+                cancel => { task-types-cancel-edit(); }
+                edit-row(id) => { task-types-edit-row(id); }
+                delete-row(id) => { task-types-delete-row(id); }
+                go-back => { navigate-task-types-back(); }
             }
 
             // ------- Task form (create / edit) -------

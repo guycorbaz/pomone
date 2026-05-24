@@ -293,6 +293,41 @@ error-task-type-required = Le type de tâche est requis.
 error-task-edit-id-missing = Identifiant de tâche manquant pour l'édition.
 status-task-failed = Échec de l'opération sur la tâche : { $message }
 
+## Task Types catalog
+title-task-types = Types de tâches
+task-types-button = Gérer les types
+task-types-list-title = Catalogue
+task-types-empty = Aucun type défini. Utilisez le formulaire à droite pour en créer.
+task-types-form-section-create = Nouveau type
+task-types-form-section-edit = Modifier le type
+label-task-type-name = Nom
+placeholder-task-type-name = Désherbage manuel, Tonte, Fauchage…
+label-task-type-category = Catégorie
+label-task-type-color = Couleur
+placeholder-task-type-color = #3C6E47
+hint-task-type-color = Format hexadécimal : « #RGB » ou « #RRGGBB ».
+btn-task-type-save = Enregistrer
+btn-task-type-cancel = Annuler la modification
+btn-task-type-back = ← Retour au calendrier
+btn-task-type-edit = Modifier
+btn-task-type-delete = Supprimer
+task-type-in-use = Utilisé
+error-task-type-color-required = La couleur est requise.
+error-task-type-edit-id-missing = Identifiant du type manquant pour l'édition.
+error-task-type-category-required = La catégorie est requise.
+error-task-type-in-use = Ce type est utilisé par des tâches existantes. Supprimez ou réaffectez ces tâches avant de pouvoir supprimer le type.
+status-task-type-failed = Échec de l'opération sur le type : { $message }
+
+## Task categories (stable enum labels)
+category-sow = Semis
+category-transplant = Repiquage
+category-harvest = Récolte
+category-weeding = Désherbage
+category-irrigation = Irrigation
+category-treatment = Traitement
+category-tillage = Travail du sol
+category-other = Autre
+
 ## Gantt timeline
 section-season = Saison
 empty-season = Aucune plantation annuelle pour cette saison. Créez-en depuis l'écran Plantations.

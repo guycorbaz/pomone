@@ -132,6 +132,7 @@ export component TaskCalendarPage inherits Rectangle {
     in property <string> empty-state-text;
     in property <string> hint-text;          // "Cliquez sur une tâche pour la modifier."
     in property <string> new-task-button-text;  // "+ Nouvelle tâche"
+    in property <string> manage-types-button-text;  // "Gérer les types"
 
     in property <[string]> weekday-labels;
     in property <[TaskCalendarDay]> days;
@@ -142,6 +143,7 @@ export component TaskCalendarPage inherits Rectangle {
     callback go-today();
     callback task-clicked(string);
     callback new-task-clicked();
+    callback manage-types-clicked();
 
     ScrollView {
         VerticalLayout {
@@ -159,6 +161,7 @@ export component TaskCalendarPage inherits Rectangle {
                     horizontal-stretch: 1;
                 }
                 PrimaryButton { text: new-task-button-text; clicked => { new-task-clicked(); } }
+                SecondaryButton { text: manage-types-button-text; clicked => { manage-types-clicked(); } }
                 SecondaryButton { text: prev-button-text; clicked => { prev-month(); } }
                 SecondaryButton { text: today-button-text; clicked => { go-today(); } }
                 SecondaryButton { text: next-button-text; clicked => { next-month(); } }

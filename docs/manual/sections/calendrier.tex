@@ -53,10 +53,34 @@ Cliquer sur une pastille existante dans le calendrier rouvre le même formulaire
 
 \textbf{Astuce} : pour marquer rapidement une tâche comme faite, ouvrez-la d'un clic, cochez \emph{Tâche terminée} et validez avec \textbf{Enregistrer}. Re-saver une tâche déjà terminée ne change pas sa date de réalisation.
 
-\subsection{Personnalisation des types}
+\subsection{Gérer les types de tâches}
 
-Pomone fournit huit types de tâches par défaut (Semis, Repiquage, Récolte, Désherbage, Irrigation, Traitement, Travail du sol, Autre) avec leurs couleurs. Chaque type a une \textbf{catégorie stable} (\texttt{TaskCategory}) qui sert à l'auto-génération : vous pouvez renommer librement « Semis » en « Semis serre », la catégorie reste \texttt{Sow} et l'auto-générateur continue de fonctionner.
+Pomone fournit huit types de tâches par défaut (Semis, Repiquage, Récolte, Désherbage, Irrigation, Traitement, Travail du sol, Autre) avec leurs couleurs, modifiables et extensibles. Le bouton \textbf{Gérer les types} dans l'en-tête du Calendrier des tâches ouvre l'écran dédié, divisé en deux zones :
+
+\begin{itemize}
+  \item \textbf{Catalogue} (à gauche) : la liste des types existants avec leur pastille de couleur, leur catégorie et l'indication « Utilisé » lorsqu'au moins une tâche y est rattachée. Chaque ligne porte les boutons \textbf{Modifier} et \textbf{Supprimer}. Le bouton Supprimer est désactivé pour les types « Utilisé » : il faut d'abord supprimer ou réaffecter les tâches concernées.
+  \item \textbf{Formulaire} (à droite) : crée un nouveau type ou modifie le type sélectionné.
+\end{itemize}
+
+\subsubsection*{Créer un type}
+
+\begin{enumerate}
+  \item Saisissez un \textbf{nom} (par exemple « Désherbage thermique »).
+  \item Choisissez une \textbf{catégorie} parmi les huit catégories stables. La catégorie sert à l'auto-génération : créer un nouveau « Semis » personnel ne casse pas l'auto-gen, qui prend le premier type trouvé dans la catégorie.
+  \item Indiquez une \textbf{couleur} au format hexadécimal \texttt{\#RGB} ou \texttt{\#RRGGBB}. La pastille à gauche du champ affiche la couleur courante.
+  \item Cliquez \textbf{Enregistrer}.
+\end{enumerate}
+
+\subsubsection*{Modifier un type}
+
+Cliquez \textbf{Modifier} sur la ligne désirée : le formulaire bascule en mode édition, pré-rempli avec les valeurs actuelles. Vous pouvez changer le \textbf{nom} et la \textbf{couleur} ; la catégorie est verrouillée car elle est structurelle (changer la catégorie de « Semis » risquerait de casser l'auto-génération des tâches). Pour migrer un type vers une autre catégorie, supprimez-le et recréez-en un nouveau.
+
+\textbf{Astuce} : renommer « Semis » en « Semis serre » préserve la catégorie \texttt{Sow} ; l'auto-générateur continue d'utiliser ce type lors de la création d'une nouvelle plantation, sans aucune modification de code.
+
+\subsubsection*{Supprimer un type}
+
+Cliquez \textbf{Supprimer} sur une ligne dont le type n'est pas « Utilisé ». Si le bouton est désactivé, ouvrez d'abord le calendrier, modifiez ou supprimez les tâches qui utilisent ce type, puis revenez sur l'écran de gestion.
 
 \begin{todobox}
-À venir : écran de gestion des types (création / édition / couleur), filtres par type sur le calendrier, récurrence (tâches hebdomadaires), drag-and-drop pour reprogrammer, accès à la liste des tâches depuis le détail d'une plantation.
+À venir : filtres par type sur le calendrier des tâches, récurrence (tâches hebdomadaires / mensuelles), drag-and-drop pour reprogrammer, accès à la liste des tâches depuis le détail d'une plantation.
 \end{todobox}
