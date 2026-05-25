@@ -8,6 +8,7 @@
 pub mod app;
 pub mod calendar_view;
 pub mod config;
+pub mod crop_map_view;
 pub mod cultures_view;
 pub mod error;
 pub mod harvest_view;
@@ -29,6 +30,10 @@ mod test_helpers;
 pub use app::{test_backend, App};
 pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
 pub use config::{default_config_path, AppConfig, BackendConfig};
+pub use crop_map_view::{
+    list_crop_map_lanes, move_planting_to_location, split_planting, CropMapBar, CropMapLane,
+    SplitPart,
+};
 pub use cultures_view::{
     create_crop, create_variety, list_crops, list_family_options, list_strata_options,
     list_varieties_for_crop, CropInput, CropRow, FamilyOption, LifespanKind, StrataOption,

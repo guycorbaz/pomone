@@ -16,17 +16,19 @@ use pomone_app::{
     create_crop, create_location, create_recurring_task, create_strata, create_task,
     create_task_type, create_variety, delete_strata, delete_task, delete_task_type,
     extend_series_if_needed, get_planting_detail, get_task_for_edit, get_task_type_for_edit,
-    list_crops, list_events_in_range, list_family_options, list_location_kind_options,
-    list_location_options, list_locations_tree, list_parent_options, list_planting_choices,
-    list_plantings, list_strata_options, list_strata_rows, list_task_calendar_rows,
-    list_task_category_options, list_task_type_options, list_task_types_admin,
-    list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting, parse_id,
-    recurrence_unit_str, services, test_backend, update_task, update_task_type, App, AppConfig,
+    list_crop_map_lanes, list_crops, list_events_in_range, list_family_options,
+    list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
+    list_planting_choices, list_plantings, list_strata_options, list_strata_rows,
+    list_task_calendar_rows, list_task_category_options, list_task_type_options,
+    list_task_types_admin, list_varieties_for_crop, list_variety_options,
+    list_yearly_harvests_for_planting, move_planting_to_location, parse_id, recurrence_unit_str,
+    services, split_planting, test_backend, update_task, update_task_type, App, AppConfig,
     AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput,
-    CropRow as AppCropRow, CycleDates, FamilyOption, Lang, LifespanKind, LocationInput,
-    LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
-    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
-    StrataInput, StrataOption, StrataRow as AppStrataRow, TaskCalendarRow as AppTaskCalendarRow,
+    CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates,
+    FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption, LocationListItem,
+    LocationOption, MigrationReport, ParentLocationOption, PlantingChoice,
+    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow, SplitPart, StrataInput,
+    StrataOption, StrataRow as AppStrataRow, TaskCalendarRow as AppTaskCalendarRow,
     TaskCategoryOption, TaskEditForm, TaskTypeAdminRow, TaskTypeEditForm, TaskTypeOption,
     VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
     YearlyHarvestRow as AppYearlyHarvestRow,
@@ -48,7 +50,9 @@ mod generated {
     slint::include_modules!();
 }
 use generated::{
-    CalendarDay as SlintCalendarDay, CalendarEvent as SlintCalendarEvent, CropRow as SlintCropRow,
+    CalendarDay as SlintCalendarDay, CalendarEvent as SlintCalendarEvent,
+    CropMapBarItem as SlintCropMapBar, CropMapLaneItem as SlintCropMapLane,
+    CropMapLocationOption as SlintCropMapLocationOption, CropRow as SlintCropRow,
     DetailLine as SlintDetailLine, GanttBar as SlintGanttBar, LocationItem as SlintLocationItem,
     MainWindow, PlantingRow as SlintPlantingRow, StrataItem as SlintStrataItem,
     TaskCalendarDay as SlintTaskCalendarDay, TaskCategoryChip as SlintTaskCategoryChip,
@@ -129,6 +133,9 @@ struct UiState {
     /// Stable `RecurrenceUnit` keys (`"days"` / `"weeks"` / `"months"`)
     /// parallel to the task form's recurrence-unit ComboBox model.
     task_form_recurrence_unit_keys: Vec<String>,
+    /// Stringified `LocationId`s parallel to the Crop Map's move-picker
+    /// list AND the split-form ComboBoxes (same underlying ordering).
+    crop_map_location_ids: Vec<String>,
 }
 
 /// Locate the bundled user manual PDF at runtime. Returns the first
@@ -223,6 +230,7 @@ fn main() -> Result<()> {
         editing_task_type_id: String::new(),
         task_filter_categories: all_category_keys().into_iter().collect(),
         task_form_recurrence_unit_keys: Vec::new(),
+        crop_map_location_ids: Vec::new(),
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
@@ -549,6 +557,112 @@ fn main() -> Result<()> {
             window.set_current_page(SharedString::from("settings"));
             window.set_settings_status_text(SharedString::from(""));
             window.set_settings_status_is_error(false);
+        });
+    }
+    // --- Crop Map navigation + selection / move / split callbacks ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_navigate_crop_map(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            if let Err(e) = refresh_crop_map(&window, &mut s) {
+                tracing::error!(error = %e, "failed to refresh crop map");
+            }
+            window.set_current_page(SharedString::from("crop-map"));
+            window.set_crop_map_selected_planting_id(SharedString::from(""));
+            window.set_crop_map_move_picker_visible(false);
+            window.set_crop_map_split_form_visible(false);
+            window.set_crop_map_split_status_text(SharedString::from(""));
+        });
+    }
+    {
+        let weak = window.as_weak();
+        window.on_crop_map_bar_clicked(move |pid| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            // Toggle: clicking the same bar deselects.
+            let current = window.get_crop_map_selected_planting_id();
+            if current.as_str() == pid.as_str() {
+                window.set_crop_map_selected_planting_id(SharedString::from(""));
+            } else {
+                window.set_crop_map_selected_planting_id(pid);
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_crop_map_move_to(move |pid, lid| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let result = s
+                .runtime
+                .block_on(async { move_planting_to_location(s.app.repo(), &pid, &lid).await });
+            if let Err(e) = result {
+                tracing::error!(error = %e, "failed to move planting");
+                return;
+            }
+            if let Err(e) = refresh_crop_map(&window, &mut s) {
+                tracing::error!(error = %e, "failed to refresh crop map after move");
+            }
+            window.set_crop_map_selected_planting_id(SharedString::from(""));
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_crop_map_split_clicked(move |pid| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let s = state.borrow();
+            // Pre-fill the split form with a 50/50 default + the source's
+            // current location in part A, the next location in the list
+            // for part B (so the user only needs to confirm in the
+            // happy case).
+            if let Err(e) = prefill_split_form(&window, &s, &pid) {
+                tracing::warn!(error = %e, "failed to prefill split form");
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_crop_map_split_confirm(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            match try_confirm_split(&window, &mut s) {
+                Ok(()) => {
+                    window.set_crop_map_split_form_visible(false);
+                    window.set_crop_map_selected_planting_id(SharedString::from(""));
+                    if let Err(e) = refresh_crop_map(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh crop map after split");
+                    }
+                }
+                Err(e) => {
+                    let (text, is_err) = render_form_error(s.app.i18n(), e);
+                    window.set_crop_map_split_status_text(text);
+                    window.set_crop_map_split_status_is_error(is_err);
+                }
+            }
+        });
+    }
+    {
+        let weak = window.as_weak();
+        window.on_crop_map_split_cancel(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            window.set_crop_map_split_form_visible(false);
+            window.set_crop_map_split_status_text(SharedString::from(""));
         });
     }
     {
@@ -1207,7 +1321,33 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_nav_locations_text(SharedString::from(i18n.t("nav-locations")));
     window.set_nav_calendar_text(SharedString::from(i18n.t("nav-calendar")));
     window.set_nav_strata_text(SharedString::from(i18n.t("nav-strata")));
+    window.set_nav_crop_map_text(SharedString::from(i18n.t("nav-crop-map")));
     window.set_nav_help_text(SharedString::from(i18n.t("nav-help")));
+
+    // Crop Map — static labels; lanes / pickers come from refresh_crop_map.
+    window.set_crop_map_title_text(SharedString::from(i18n.t("title-crop-map")));
+    window.set_crop_map_hint_text(SharedString::from(i18n.t("crop-map-hint")));
+    window.set_crop_map_empty_text(SharedString::from(i18n.t("crop-map-empty")));
+    window.set_crop_map_btn_move_text(SharedString::from(i18n.t("btn-crop-map-move")));
+    window.set_crop_map_btn_split_text(SharedString::from(i18n.t("btn-crop-map-split")));
+    window.set_crop_map_btn_deselect_text(SharedString::from(i18n.t("btn-crop-map-deselect")));
+    window.set_crop_map_picker_title(SharedString::from(i18n.t("crop-map-picker-title")));
+    window.set_crop_map_picker_cancel_text(SharedString::from(i18n.t("crop-map-picker-cancel")));
+    window.set_crop_map_split_title(SharedString::from(i18n.t("crop-map-split-title")));
+    window.set_crop_map_split_hint(SharedString::from(i18n.t("crop-map-split-hint")));
+    window.set_crop_map_split_part_a_label(SharedString::from(i18n.t("crop-map-split-part-a")));
+    window.set_crop_map_split_part_b_label(SharedString::from(i18n.t("crop-map-split-part-b")));
+    window.set_crop_map_split_location_label(SharedString::from(i18n.t("crop-map-split-location")));
+    window.set_crop_map_split_area_label(SharedString::from(i18n.t("crop-map-split-area")));
+    window.set_crop_map_split_count_label(SharedString::from(i18n.t("crop-map-split-count")));
+    window.set_crop_map_split_placeholder_area(SharedString::from(
+        i18n.t("crop-map-split-placeholder-area"),
+    ));
+    window.set_crop_map_split_placeholder_count(SharedString::from(
+        i18n.t("crop-map-split-placeholder-count"),
+    ));
+    window.set_crop_map_split_confirm_text(SharedString::from(i18n.t("crop-map-split-confirm")));
+    window.set_crop_map_split_cancel_text(SharedString::from(i18n.t("crop-map-split-cancel")));
 
     // Strata page — static labels; the list and status come from refresh_strata.
     window.set_strata_title_text(SharedString::from(i18n.t("title-strata")));
@@ -3451,6 +3591,152 @@ fn refresh_task_filter_chips(window: &MainWindow, state: &mut UiState) -> Result
         })
         .collect();
     window.set_task_calendar_filter_chips(ModelRc::new(VecModel::from(chips)));
+    Ok(())
+}
+
+/// Push the Crop Map data to Slint: lanes + month labels + parallel
+/// `(label, id)` table for the move-picker and split-form ComboBoxes.
+fn refresh_crop_map(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let lanes: Vec<AppCropMapLane> = state
+        .runtime
+        .block_on(async { list_crop_map_lanes(state.app.repo()).await })
+        .context("failed to load crop map")?;
+
+    // Parallel id table — same ordering as the lanes so move-picker /
+    // split ComboBoxes are interchangeable. We also derive the label
+    // model from the same list.
+    state.crop_map_location_ids = lanes.iter().map(|l| l.location_id.clone()).collect();
+    let move_targets: Vec<SlintCropMapLocationOption> = lanes
+        .iter()
+        .map(|l| SlintCropMapLocationOption {
+            location_id: SharedString::from(l.location_id.clone()),
+            label: SharedString::from(l.label.clone()),
+        })
+        .collect();
+    window.set_crop_map_move_target_options(ModelRc::new(VecModel::from(move_targets)));
+    let split_labels: Vec<SharedString> = lanes
+        .iter()
+        .map(|l| SharedString::from(l.label.clone()))
+        .collect();
+    window.set_crop_map_split_target_labels(ModelRc::new(VecModel::from(split_labels)));
+
+    let slint_lanes: Vec<SlintCropMapLane> = lanes
+        .into_iter()
+        .map(|l| SlintCropMapLane {
+            location_id: SharedString::from(l.location_id),
+            label: SharedString::from(l.label),
+            dimensions_label: SharedString::from(l.dimensions_label),
+            bars: ModelRc::new(VecModel::from(
+                l.bars.into_iter().map(bar_to_slint).collect::<Vec<_>>(),
+            )),
+        })
+        .collect();
+    window.set_crop_map_lanes(ModelRc::new(VecModel::from(slint_lanes)));
+
+    // Month labels — re-use the Gantt translations so the season axis
+    // stays consistent across screens.
+    let i18n = state.app.i18n();
+    let months: Vec<SharedString> = (1..=12)
+        .map(|m| SharedString::from(i18n.t(&format!("gantt-month-{m}"))))
+        .collect();
+    window.set_crop_map_month_labels(ModelRc::new(VecModel::from(months)));
+    Ok(())
+}
+
+fn bar_to_slint(b: AppCropMapBar) -> SlintCropMapBar {
+    SlintCropMapBar {
+        planting_id: SharedString::from(b.planting_id),
+        label: SharedString::from(b.label),
+        color: parse_hex_color(&b.color_hex),
+        start_doy: b.start_doy,
+        end_doy: b.end_doy,
+    }
+}
+
+/// Pre-fill the split form with sensible defaults so the happy path is
+/// a single Confirm click: part A = source's current location with half
+/// the area+count; part B = next location in the list (cycles back to
+/// the first if the source is the last one) with the other half.
+fn prefill_split_form(window: &MainWindow, state: &UiState, planting_id: &str) -> Result<()> {
+    let p_id: PlantingId = parse_id(planting_id)?;
+    let planting = state
+        .runtime
+        .block_on(async { state.app.repo().planting_get(p_id).await })?
+        .context("planting referenced by the split form vanished")?;
+    let source_location_str = planting.location_id.to_string();
+    let source_idx = state
+        .crop_map_location_ids
+        .iter()
+        .position(|id| id == &source_location_str)
+        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
+    // Pick a *different* location for part B when possible.
+    let next_idx = if state.crop_map_location_ids.len() > 1 {
+        let n = state.crop_map_location_ids.len();
+        let i = usize::try_from(source_idx).unwrap_or(0);
+        i32::try_from((i + 1) % n).unwrap_or(0)
+    } else {
+        source_idx
+    };
+    let half_area = planting.area_m2 / Decimal::from(2);
+    let half_count = planting.plants_count / 2;
+    let remainder_count = planting.plants_count - half_count;
+
+    window.set_crop_map_split_part_a_location_index(source_idx);
+    window.set_crop_map_split_part_b_location_index(next_idx);
+    window.set_crop_map_split_part_a_area(SharedString::from(half_area.normalize().to_string()));
+    window.set_crop_map_split_part_b_area(SharedString::from(half_area.normalize().to_string()));
+    window.set_crop_map_split_part_a_count(SharedString::from(half_count.to_string()));
+    window.set_crop_map_split_part_b_count(SharedString::from(remainder_count.to_string()));
+    window.set_crop_map_split_status_text(SharedString::from(""));
+    window.set_crop_map_split_status_is_error(false);
+    Ok(())
+}
+
+/// Validate the split form fields and call `split_planting`. Validation
+/// errors are surfaced as `FormError::Validation` so the existing
+/// `render_form_error` template picks them up.
+fn try_confirm_split(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
+    let pid = window.get_crop_map_selected_planting_id().to_string();
+    if pid.is_empty() {
+        return Err(FormError::Validation(i18n.t("error-no-planting-selected")));
+    }
+    let part = |loc_idx: i32,
+                area_text: SharedString,
+                count_text: SharedString|
+     -> Result<SplitPart, FormError> {
+        let usize_idx = usize::try_from(loc_idx.max(0)).unwrap_or(0);
+        let location_id = state
+            .crop_map_location_ids
+            .get(usize_idx)
+            .cloned()
+            .ok_or_else(|| FormError::Validation(i18n.t("error-location-required")))?;
+        let area: Decimal = Decimal::from_str(area_text.trim())
+            .map_err(|_| FormError::Validation(i18n.t("error-number-invalid")))?;
+        let count: u32 = count_text
+            .trim()
+            .parse()
+            .map_err(|_| FormError::Validation(i18n.t("error-number-invalid")))?;
+        Ok(SplitPart {
+            location_id,
+            area_m2: area,
+            plants_count: count,
+        })
+    };
+    let part_a = part(
+        window.get_crop_map_split_part_a_location_index(),
+        window.get_crop_map_split_part_a_area(),
+        window.get_crop_map_split_part_a_count(),
+    )?;
+    let part_b = part(
+        window.get_crop_map_split_part_b_location_index(),
+        window.get_crop_map_split_part_b_area(),
+        window.get_crop_map_split_part_b_count(),
+    )?;
+    state
+        .runtime
+        .block_on(async { split_planting(state.app.repo(), &pid, &[part_a, part_b]).await })
+        .map_err(FormError::Service)?;
     Ok(())
 }
 
