@@ -1,0 +1,479 @@
+// Pomone — Crop Map screen (bed occupancy across the season).
+//
+// One horizontal lane per Location, with one colored bar per Planting
+// positioned by its day-of-year span. Click on a bar selects it; the
+// header then exposes "Déplacer vers…" (popup picker among other
+// locations) and "Diviser" (full-page form).
+//
+// Drag-and-drop is deliberately NOT here — the bar-click + popup-picker
+// flow is more predictable in Slint 1.8 (where there's no native
+// drag-and-drop) and just as quick once the user knows it. The split
+// page covers the case Qrop solves with "drag while holding Shift".
+
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct CropMapBarItem {
+    planting-id: string,
+    label: string,
+    color: color,
+    start-doy: int,
+    end-doy: int,
+}
+
+export struct CropMapLaneItem {
+    location-id: string,
+    label: string,
+    dimensions-label: string,
+    bars: [CropMapBarItem],
+}
+
+/// Lightweight option for the "Déplacer vers…" popup. Just the id +
+/// the same `"Parent / Child"` label used in the main list.
+export struct CropMapLocationOption {
+    location-id: string,
+    label: string,
+}
+
+// One bar on a lane. `selected` flags the currently-picked planting
+// (only one at a time) — the bar gets a strong border and full opacity.
+//
+// Sizing: width derives from the day-of-year span scaled to the
+// caller-supplied `lane-width` ; height is also caller-supplied via
+// `lane-height` (Slint components don't expose their enclosing parent
+// from inside an inherits-Rectangle root, so we pass it explicitly).
+component CropMapBar inherits Rectangle {
+    in property <CropMapBarItem> bar;
+    in property <bool> selected;
+    in property <length> lane-width;
+    in property <length> lane-height;
+    in property <int> total-days: 365;
+    callback clicked(string);
+
+    property <length> per-day: lane-width / total-days;
+    x: bar.start-doy * per-day;
+    width: (bar.end-doy - bar.start-doy + 1) * per-day;
+    height: lane-height - 4px;
+    y: 2px;
+    border-radius: Theme.radius-sm;
+    background: bar.color;
+    border-width: selected ? 2px : Theme.border-width;
+    border-color: selected ? Palette.text-primary : Palette.border;
+    opacity: selected ? 1.0 : (touch.has-hover ? 0.95 : 0.85);
+    animate opacity, border-width { duration: Theme.transition-fast; }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(bar.planting-id); }
+    }
+
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 4px;
+        Text {
+            text: bar.label;
+            color: Palette.text-on-primary;
+            font-size: Theme.font-size-label;
+            font-weight: Theme.font-weight-semibold;
+            vertical-alignment: center;
+            horizontal-alignment: left;
+            overflow: elide;
+        }
+    }
+}
+
+// One lane = one row with the location label + the bars laid out on its timeline.
+component CropMapLaneView inherits Rectangle {
+    in property <CropMapLaneItem> lane;
+    in property <string> selected-planting-id;
+    in property <int> total-days: 365;
+    in property <length> label-col-width: 220px;
+    callback bar-clicked(string);
+
+    height: 44px;
+    background: Palette.surface;
+    border-width: Theme.border-width;
+    border-color: Palette.border;
+    border-radius: Theme.radius-sm;
+
+    HorizontalLayout {
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-md;
+        spacing: Theme.space-md;
+        VerticalLayout {
+            width: label-col-width;
+            spacing: 2px;
+            alignment: center;
+            Text {
+                text: lane.label;
+                color: Palette.text-primary;
+                font-size: Theme.font-size-label;
+                font-weight: Theme.font-weight-semibold;
+                overflow: elide;
+            }
+            Text {
+                text: lane.dimensions-label;
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+                overflow: elide;
+            }
+        }
+        timeline := Rectangle {
+            horizontal-stretch: 1;
+            background: Palette.background;
+            border-radius: Theme.radius-sm;
+            for bar in lane.bars: CropMapBar {
+                bar: bar;
+                selected: root.selected-planting-id == bar.planting-id;
+                lane-width: timeline.width;
+                lane-height: timeline.height;
+                total-days: root.total-days;
+                clicked(pid) => { root.bar-clicked(pid); }
+            }
+        }
+    }
+}
+
+export component CropMapPage inherits Rectangle {
+    background: Palette.background;
+
+    in property <string> title-text;
+    in property <string> hint-text;
+    in property <string> empty-text;
+    in property <string> btn-move-text;
+    in property <string> btn-split-text;
+    in property <string> btn-deselect-text;
+    in property <string> picker-title;
+    in property <string> picker-cancel-text;
+
+    // Split overlay strings (V1 = split into exactly 2 parts).
+    in property <string> split-title;
+    in property <string> split-hint;
+    in property <string> split-part-a-label;
+    in property <string> split-part-b-label;
+    in property <string> split-location-label;
+    in property <string> split-area-label;
+    in property <string> split-count-label;
+    in property <string> split-placeholder-area;
+    in property <string> split-placeholder-count;
+    in property <string> split-confirm-text;
+    in property <string> split-cancel-text;
+    in property <string> split-status-text;
+    in property <bool> split-status-is-error: false;
+
+    in property <[CropMapLaneItem]> lanes;
+    in property <[string]> month-labels;
+    in property <[CropMapLocationOption]> move-target-options;
+    in property <[string]> split-target-labels;
+
+    in-out property <string> selected-planting-id;
+    in-out property <bool> move-picker-visible: false;
+    in-out property <bool> split-form-visible: false;
+    in-out property <int> split-part-a-location-index: 0;
+    in-out property <int> split-part-b-location-index: 0;
+    in-out property <string> split-part-a-area;
+    in-out property <string> split-part-b-area;
+    in-out property <string> split-part-a-count;
+    in-out property <string> split-part-b-count;
+
+    callback bar-clicked(string);
+    callback move-to(string, string);   // planting-id, target-location-id
+    callback split-clicked(string);
+    callback split-confirm();
+    callback split-cancel();
+
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-xl;
+
+        // Header: title + actions on the current selection.
+        HorizontalLayout {
+            spacing: Theme.space-md;
+            Text {
+                text: title-text;
+                color: Palette.primary;
+                font-size: Theme.font-size-h1;
+                font-weight: Theme.font-weight-bold;
+                horizontal-stretch: 1;
+            }
+            SecondaryButton {
+                text: btn-move-text;
+                enabled: selected-planting-id != "";
+                clicked => { move-picker-visible = true; }
+            }
+            PrimaryButton {
+                text: btn-split-text;
+                enabled: selected-planting-id != "";
+                clicked => {
+                    split-clicked(selected-planting-id);
+                    split-form-visible = true;
+                }
+            }
+            SecondaryButton {
+                text: btn-deselect-text;
+                enabled: selected-planting-id != "";
+                clicked => {
+                    selected-planting-id = "";
+                    move-picker-visible = false;
+                }
+            }
+        }
+
+        Text {
+            text: hint-text;
+            color: Palette.text-secondary;
+            font-size: Theme.font-size-label;
+            wrap: word-wrap;
+        }
+
+        // Month-label row, aligned to the timeline gutter (220px label col
+        // + space-md spacing matches the lane layout).
+        HorizontalLayout {
+            padding-left: Theme.space-md;
+            spacing: Theme.space-md;
+            Rectangle { width: 220px; }   // matches label-col-width
+            Rectangle {
+                horizontal-stretch: 1;
+                height: 24px;
+                HorizontalLayout {
+                    for label in month-labels: Text {
+                        text: label;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-label;
+                        font-weight: Theme.font-weight-semibold;
+                        horizontal-alignment: center;
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        if lanes.length == 0: Card {
+            VerticalLayout {
+                padding: Theme.space-xl;
+                Text {
+                    text: empty-text;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-body;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+        if lanes.length > 0: ScrollView {
+            min-height: 200px;
+            preferred-height: 480px;
+            vertical-stretch: 1;
+            VerticalLayout {
+                spacing: Theme.space-xs;
+                for lane in lanes: CropMapLaneView {
+                    lane: lane;
+                    selected-planting-id: root.selected-planting-id;
+                    bar-clicked(pid) => { root.bar-clicked(pid); }
+                }
+            }
+        }
+    }
+
+    // Split overlay — V1 limited to splitting in 2 parts. Heavier
+    // operations (3-way split, redistributing tasks) are PR-follow-up
+    // material; doing them in-app is rare enough that one Save + redo
+    // covers it.
+    if split-form-visible: Rectangle {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        background: #00000099;
+        TouchArea {
+            clicked => { root.split-form-visible = false; root.split-cancel(); }
+        }
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: 560px;
+            height: 480px;
+            background: Palette.surface;
+            border-radius: Theme.radius-md;
+            border-width: Theme.border-width;
+            border-color: Palette.border;
+            TouchArea { }
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-md;
+                Text {
+                    text: split-title;
+                    color: Palette.text-primary;
+                    font-size: Theme.font-size-h3;
+                    font-weight: Theme.font-weight-semibold;
+                }
+                Text {
+                    text: split-hint;
+                    color: Palette.text-secondary;
+                    font-size: Theme.font-size-label;
+                    wrap: word-wrap;
+                }
+                // Part A
+                Card {
+                    VerticalLayout {
+                        padding: Theme.space-md;
+                        spacing: Theme.space-sm;
+                        Text {
+                            text: split-part-a-label;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text { text: split-location-label; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                            ThemedComboBox {
+                                model: split-target-labels;
+                                current-index <=> split-part-a-location-index;
+                                enabled: split-target-labels.length > 0;
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: Theme.space-md;
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                spacing: Theme.space-xs;
+                                Text { text: split-area-label; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                                ThemedLineEdit { text <=> split-part-a-area; placeholder-text: split-placeholder-area; input-type: decimal; }
+                            }
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                spacing: Theme.space-xs;
+                                Text { text: split-count-label; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                                ThemedLineEdit { text <=> split-part-a-count; placeholder-text: split-placeholder-count; input-type: number; }
+                            }
+                        }
+                    }
+                }
+                // Part B
+                Card {
+                    VerticalLayout {
+                        padding: Theme.space-md;
+                        spacing: Theme.space-sm;
+                        Text {
+                            text: split-part-b-label;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text { text: split-location-label; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                            ThemedComboBox {
+                                model: split-target-labels;
+                                current-index <=> split-part-b-location-index;
+                                enabled: split-target-labels.length > 0;
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: Theme.space-md;
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                spacing: Theme.space-xs;
+                                Text { text: split-area-label; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                                ThemedLineEdit { text <=> split-part-b-area; placeholder-text: split-placeholder-area; input-type: decimal; }
+                            }
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                spacing: Theme.space-xs;
+                                Text { text: split-count-label; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                                ThemedLineEdit { text <=> split-part-b-count; placeholder-text: split-placeholder-count; input-type: number; }
+                            }
+                        }
+                    }
+                }
+                if split-status-text != "": Text {
+                    text: split-status-text;
+                    color: split-status-is-error ? Palette.danger : Palette.text-secondary;
+                    font-size: Theme.font-size-label;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    alignment: end;
+                    SecondaryButton {
+                        text: split-cancel-text;
+                        clicked => { root.split-form-visible = false; root.split-cancel(); }
+                    }
+                    PrimaryButton {
+                        text: split-confirm-text;
+                        clicked => { root.split-confirm(); }
+                    }
+                }
+            }
+        }
+    }
+
+    // Move-picker overlay — full-screen translucent backdrop + centered card.
+    // Slint 1.8 has no PopupWindow with controlled visibility, so we draw
+    // it manually and gate it on `move-picker-visible`.
+    if move-picker-visible: Rectangle {
+        x: 0; y: 0;
+        width: 100%; height: 100%;
+        background: #00000099;
+        TouchArea {
+            // Click on the backdrop dismisses the picker.
+            clicked => { root.move-picker-visible = false; }
+        }
+        Rectangle {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            width: 440px;
+            height: 360px;
+            background: Palette.surface;
+            border-radius: Theme.radius-md;
+            border-width: Theme.border-width;
+            border-color: Palette.border;
+            // Prevent backdrop click-through from inside the dialog.
+            TouchArea { }
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-md;
+                Text {
+                    text: picker-title;
+                    color: Palette.text-primary;
+                    font-size: Theme.font-size-h3;
+                    font-weight: Theme.font-weight-semibold;
+                }
+                ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        for opt in move-target-options: Rectangle {
+                            height: 40px;
+                            border-radius: Theme.radius-sm;
+                            background: pick-touch.has-hover ? Palette.surface-alt : transparent;
+                            pick-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.move-to(root.selected-planting-id, opt.location-id);
+                                    root.move-picker-visible = false;
+                                }
+                            }
+                            HorizontalLayout {
+                                padding-left: Theme.space-md;
+                                padding-right: Theme.space-md;
+                                Text {
+                                    text: opt.label;
+                                    color: Palette.text-primary;
+                                    font-size: Theme.font-size-body;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    SecondaryButton {
+                        text: picker-cancel-text;
+                        clicked => { root.move-picker-visible = false; }
+                    }
+                }
+            }
+        }
+    }
+}

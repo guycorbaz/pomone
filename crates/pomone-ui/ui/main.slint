@@ -16,12 +16,13 @@ import { CalendarPage, CalendarDay, CalendarEvent } from "calendar.slint";
 import { TaskCalendarPage, TaskCalendarDay, TaskRow, TaskCategoryChip } from "task_calendar.slint";
 import { TaskFormPage } from "task_form.slint";
 import { TaskTypesPage, TaskTypeAdminItem } from "task_types.slint";
+import { CropMapPage, CropMapLaneItem, CropMapBarItem, CropMapLocationOption } from "crop_map.slint";
 import { PlantingDetailPage, DetailLine, YearlyHarvestRow } from "planting_detail.slint";
 import { StrataPage, StrataItem } from "strata.slint";
 import { SettingsPage } from "settings.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, StrataItem, GanttBar, TaskTypeAdminItem }
+export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, StrataItem, GanttBar, TaskTypeAdminItem, CropMapLaneItem, CropMapBarItem, CropMapLocationOption }
 
 export component MainWindow inherits Window {
     title: "Pomone";
@@ -68,6 +69,7 @@ export component MainWindow inherits Window {
     in property <string> nav-calendar-text;
     in property <string> nav-strata-text;
     in property <string> nav-settings-text;
+    in property <string> nav-crop-map-text;
     in property <string> nav-help-text;
 
     callback toggle-language();
@@ -79,6 +81,7 @@ export component MainWindow inherits Window {
     callback navigate-calendar();
     callback navigate-strata();
     callback navigate-settings();
+    callback navigate-crop-map();
     // Opens the bundled user manual PDF with the system default viewer.
     // Does not change `current-page`.
     callback open-manual();
@@ -454,6 +457,47 @@ export component MainWindow inherits Window {
     callback navigate-task-types();
     callback navigate-task-types-back();
 
+    // ------- Crop Map page state -------
+    in property <string> crop-map-title-text;
+    in property <string> crop-map-hint-text;
+    in property <string> crop-map-empty-text;
+    in property <string> crop-map-btn-move-text;
+    in property <string> crop-map-btn-split-text;
+    in property <string> crop-map-btn-deselect-text;
+    in property <string> crop-map-picker-title;
+    in property <string> crop-map-picker-cancel-text;
+    in property <string> crop-map-split-title;
+    in property <string> crop-map-split-hint;
+    in property <string> crop-map-split-part-a-label;
+    in property <string> crop-map-split-part-b-label;
+    in property <string> crop-map-split-location-label;
+    in property <string> crop-map-split-area-label;
+    in property <string> crop-map-split-count-label;
+    in property <string> crop-map-split-placeholder-area;
+    in property <string> crop-map-split-placeholder-count;
+    in property <string> crop-map-split-confirm-text;
+    in property <string> crop-map-split-cancel-text;
+    in-out property <string> crop-map-split-status-text;
+    in property <bool> crop-map-split-status-is-error: false;
+    in property <[CropMapLaneItem]> crop-map-lanes;
+    in property <[string]> crop-map-month-labels;
+    in property <[CropMapLocationOption]> crop-map-move-target-options;
+    in property <[string]> crop-map-split-target-labels;
+    in-out property <string> crop-map-selected-planting-id;
+    in-out property <bool> crop-map-move-picker-visible: false;
+    in-out property <bool> crop-map-split-form-visible: false;
+    in-out property <int> crop-map-split-part-a-location-index: 0;
+    in-out property <int> crop-map-split-part-b-location-index: 0;
+    in-out property <string> crop-map-split-part-a-area;
+    in-out property <string> crop-map-split-part-b-area;
+    in-out property <string> crop-map-split-part-a-count;
+    in-out property <string> crop-map-split-part-b-count;
+    callback crop-map-bar-clicked(string);
+    callback crop-map-move-to(string, string);
+    callback crop-map-split-clicked(string);
+    callback crop-map-split-confirm();
+    callback crop-map-split-cancel();
+
     init => {
         // Claim focus for the global shortcut scope at startup so Ctrl+1..6
         // and calendar arrow keys are picked up before any LineEdit grabs
@@ -505,6 +549,11 @@ export component MainWindow inherits Window {
                 if (event.text == "8") {
                     root.current-page = "settings";
                     root.navigate-settings();
+                    return accept;
+                }
+                if (event.text == "9") {
+                    root.current-page = "crop-map";
+                    root.navigate-crop-map();
                     return accept;
                 }
             }
@@ -573,6 +622,11 @@ export component MainWindow inherits Window {
         interval: 4s;
         running: root.task-types-status-text != "";
         triggered => { root.task-types-status-text = ""; }
+    }
+    Timer {
+        interval: 4s;
+        running: root.crop-map-split-status-text != "";
+        triggered => { root.crop-map-split-status-text = ""; }
     }
 
     HorizontalLayout {
@@ -654,6 +708,11 @@ export component MainWindow inherits Window {
                     text: nav-settings-text;
                     selected: current-page == "settings";
                     clicked => { current-page = "settings"; navigate-settings(); }
+                }
+                NavButton {
+                    text: nav-crop-map-text;
+                    selected: current-page == "crop-map";
+                    clicked => { current-page = "crop-map"; navigate-crop-map(); }
                 }
                 // Help is an action, not a page — never appears `selected`.
                 // Clicking it asks Rust to open the bundled manual PDF with
@@ -1025,6 +1084,49 @@ export component MainWindow inherits Window {
                 edit-row(id) => { task-types-edit-row(id); }
                 delete-row(id) => { task-types-delete-row(id); }
                 go-back => { navigate-task-types-back(); }
+            }
+
+            // ------- Crop Map -------
+            if current-page == "crop-map": CropMapPage {
+                title-text: crop-map-title-text;
+                hint-text: crop-map-hint-text;
+                empty-text: crop-map-empty-text;
+                btn-move-text: crop-map-btn-move-text;
+                btn-split-text: crop-map-btn-split-text;
+                btn-deselect-text: crop-map-btn-deselect-text;
+                picker-title: crop-map-picker-title;
+                picker-cancel-text: crop-map-picker-cancel-text;
+                split-title: crop-map-split-title;
+                split-hint: crop-map-split-hint;
+                split-part-a-label: crop-map-split-part-a-label;
+                split-part-b-label: crop-map-split-part-b-label;
+                split-location-label: crop-map-split-location-label;
+                split-area-label: crop-map-split-area-label;
+                split-count-label: crop-map-split-count-label;
+                split-placeholder-area: crop-map-split-placeholder-area;
+                split-placeholder-count: crop-map-split-placeholder-count;
+                split-confirm-text: crop-map-split-confirm-text;
+                split-cancel-text: crop-map-split-cancel-text;
+                split-status-text: crop-map-split-status-text;
+                split-status-is-error: crop-map-split-status-is-error;
+                lanes: crop-map-lanes;
+                month-labels: crop-map-month-labels;
+                move-target-options: crop-map-move-target-options;
+                split-target-labels: crop-map-split-target-labels;
+                selected-planting-id <=> crop-map-selected-planting-id;
+                move-picker-visible <=> crop-map-move-picker-visible;
+                split-form-visible <=> crop-map-split-form-visible;
+                split-part-a-location-index <=> crop-map-split-part-a-location-index;
+                split-part-b-location-index <=> crop-map-split-part-b-location-index;
+                split-part-a-area <=> crop-map-split-part-a-area;
+                split-part-b-area <=> crop-map-split-part-b-area;
+                split-part-a-count <=> crop-map-split-part-a-count;
+                split-part-b-count <=> crop-map-split-part-b-count;
+                bar-clicked(pid) => { crop-map-bar-clicked(pid); }
+                move-to(pid, lid) => { crop-map-move-to(pid, lid); }
+                split-clicked(pid) => { crop-map-split-clicked(pid); }
+                split-confirm => { crop-map-split-confirm(); }
+                split-cancel => { crop-map-split-cancel(); }
             }
 
             // ------- Task form (create / edit) -------

@@ -344,6 +344,30 @@ category-treatment = Traitement
 category-tillage = Travail du sol
 category-other = Autre
 
+## Crop Map
+nav-crop-map = Carte
+title-crop-map = Carte des cultures
+crop-map-hint = Cliquez sur une barre pour la sélectionner. Vous pourrez ensuite la déplacer vers un autre lieu ou la diviser entre plusieurs lieux.
+crop-map-empty = Aucun lieu défini pour le moment. Créez-en depuis l'écran Lieux.
+btn-crop-map-move = Déplacer vers…
+btn-crop-map-split = Diviser
+btn-crop-map-deselect = Désélectionner
+crop-map-picker-title = Choisir un lieu de destination
+crop-map-picker-cancel = Annuler
+crop-map-split-title = Diviser la plantation
+crop-map-split-hint = Répartissez la plantation entre deux lieux. La part A conserve l'historique (tâches, récoltes) ; la part B est créée fraîche. Les totaux ne sont pas vérifiés — à vous de choisir.
+crop-map-split-part-a = Part A (conserve l'historique)
+crop-map-split-part-b = Part B (nouvelle plantation)
+crop-map-split-location = Lieu
+crop-map-split-area = Surface (m²)
+crop-map-split-count = Nombre de plants
+crop-map-split-placeholder-area = 10
+crop-map-split-placeholder-count = 50
+crop-map-split-confirm = Diviser
+crop-map-split-cancel = Annuler
+error-no-planting-selected = Aucune plantation sélectionnée.
+error-location-required = Le lieu de destination est requis.
+
 ## Gantt timeline
 section-season = Saison
 empty-season = Aucune plantation annuelle pour cette saison. Créez-en depuis l'écran Plantations.

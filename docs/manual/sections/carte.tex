@@ -1,0 +1,51 @@
+\chapter{Carte des cultures}
+\label{chap:carte}
+
+\section{Vue d'ensemble}
+
+L'écran \emph{Carte des cultures} (raccourci \texttt{Ctrl+9}) affiche l'occupation de chaque lieu sur les 12 mois de la saison. Chaque ligne représente un \textbf{lieu} (planche, parcelle, serre…) et chaque barre colorée représente une \textbf{plantation} positionnée selon ses dates :
+
+\begin{itemize}
+  \item Pour une plantation annuelle (\texttt{Cycle}), la barre s'étend de la première opération connue (semis, repiquage ou première récolte) jusqu'à la dernière récolte.
+  \item Pour une plantation pluriannuelle (\texttt{Perennial}), la barre couvre toute l'année — la plantation occupe le lieu en permanence.
+\end{itemize}
+
+La couleur d'une barre est dérivée déterministiquement de la \textbf{famille botanique} de la culture, ce qui aide à repérer les rotations en un coup d'œil.
+
+\section{Sélectionner une plantation}
+
+Cliquer sur une barre la sélectionne (bordure renforcée et opacité maximale). Recliquer la désélectionne. Une seule plantation peut être sélectionnée à la fois. Une fois une plantation choisie, les boutons \textbf{Déplacer vers…}, \textbf{Diviser} et \textbf{Désélectionner} s'activent dans l'en-tête.
+
+\section{Déplacer une plantation}
+
+\begin{enumerate}
+  \item Cliquez sur la plantation à déplacer.
+  \item Cliquez sur \textbf{Déplacer vers…} dans l'en-tête.
+  \item Une fenêtre apparaît avec la liste de tous les lieux. Cliquez sur celui de destination.
+  \item La plantation passe immédiatement sur la nouvelle ligne. Ses tâches et ses récoltes annuelles restent attachées à elle (elles suivent la plantation, pas le lieu).
+\end{enumerate}
+
+\section{Diviser une plantation}
+
+Une plantation peut être divisée entre deux lieux distincts — utile lorsque vous avez surévalué l'occupation d'une planche ou que vous voulez expérimenter une autre disposition.
+
+\begin{enumerate}
+  \item Cliquez sur la plantation à diviser.
+  \item Cliquez sur \textbf{Diviser} dans l'en-tête.
+  \item Une fenêtre apparaît avec deux blocs : \textbf{Part A} et \textbf{Part B}, pré-remplis avec un partage 50/50 (la part A garde le lieu courant, la part B propose le lieu suivant dans la liste).
+  \item Ajustez les surfaces (m²) et le nombre de plants de chaque part.
+  \item Validez avec \textbf{Diviser}.
+\end{enumerate}
+
+\subsection*{Ce qui se passe en interne}
+
+\begin{itemize}
+  \item La \textbf{Part A} \emph{conserve} la plantation d'origine (même identifiant). Toutes ses tâches et ses récoltes annuelles restent attachées à elle.
+  \item La \textbf{Part B} \emph{est créée} comme une nouvelle plantation, qui hérite de la variété, des dates, du nom et des notes de l'originale. Elle démarre avec aucune tâche ni récolte associée.
+\end{itemize}
+
+\textbf{Note} : la somme des surfaces et le nombre total de plants ne sont pas vérifiés automatiquement par rapport à l'originale — Pomone vous laisse le contrôle. C'est à vous de choisir si vous voulez répartir strictement la surface initiale ou en profiter pour ajuster.
+
+\begin{todobox}
+À venir : drag-and-drop pour déplacer une barre directement à la souris ; division en 3 parts ou plus dans un seul écran ; alertes de rotation (interdire la même famille deux saisons consécutives sur la même planche).
+\end{todobox}

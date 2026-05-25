@@ -342,6 +342,30 @@ category-treatment = Treatment
 category-tillage = Tillage
 category-other = Other
 
+## Crop Map
+nav-crop-map = Map
+title-crop-map = Crop Map
+crop-map-hint = Click a bar to select it. You can then move it to another location or split it between several locations.
+crop-map-empty = No location defined yet. Add some from the Locations screen.
+btn-crop-map-move = Move to…
+btn-crop-map-split = Split
+btn-crop-map-deselect = Deselect
+crop-map-picker-title = Pick a destination location
+crop-map-picker-cancel = Cancel
+crop-map-split-title = Split the planting
+crop-map-split-hint = Split the planting between two locations. Part A keeps the history (tasks, harvests); part B is created fresh. Totals are not checked — your call.
+crop-map-split-part-a = Part A (keeps the history)
+crop-map-split-part-b = Part B (new planting)
+crop-map-split-location = Location
+crop-map-split-area = Area (m²)
+crop-map-split-count = Plants count
+crop-map-split-placeholder-area = 10
+crop-map-split-placeholder-count = 50
+crop-map-split-confirm = Split
+crop-map-split-cancel = Cancel
+error-no-planting-selected = No planting selected.
+error-location-required = Destination location is required.
+
 ## Gantt timeline
 section-season = Season
 empty-season = No annual plantings yet. Add some on the Plantings screen.
