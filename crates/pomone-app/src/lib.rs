@@ -10,6 +10,7 @@ pub mod calendar_view;
 pub mod config;
 pub mod crop_map_view;
 pub mod cultures_view;
+pub mod demo;
 pub mod error;
 pub mod harvest_view;
 pub mod i18n;
@@ -39,6 +40,7 @@ pub use cultures_view::{
     list_varieties_for_crop, CropInput, CropRow, FamilyOption, LifespanKind, StrataOption,
     VarietyInput, VarietyProfileKind, VarietyRow,
 };
+pub use demo::{seed_demo_data, DemoSummary};
 pub use error::{AppError, AppResult};
 pub use harvest_view::{list_yearly_harvests_for_planting, YearlyHarvestRow};
 pub use i18n::{I18n, Lang};
