@@ -20,11 +20,32 @@ La navigation se fait via la barre latérale gauche qui reste visible en permane
   \item \textbf{Calendrier} : vue mensuelle des événements de récolte.
   \item \textbf{Strates} : la hauteur de végétation (pour l'agroforesterie).
   \item \textbf{Paramètres} : configuration de la base de données et de la langue.
+  \item \textbf{Carte} : vue d'occupation des planches sur les 12 mois de la saison (voir chapitre \ref{chap:carte}).
 \end{itemize}
 
 \begin{notebox}
-Chaque entrée de la barre latérale dispose d'un raccourci clavier \texttt{Ctrl+1} à \texttt{Ctrl+8} dans l'ordre indiqué ci-dessus, et \texttt{F1} ouvre ce manuel à tout moment.
+Chaque entrée de la barre latérale dispose d'un raccourci clavier \texttt{Ctrl+1} à \texttt{Ctrl+9} dans l'ordre indiqué ci-dessus, et \texttt{F1} ouvre ce manuel à tout moment.
 \end{notebox}
+
+\section{Découvrir Pomone avec un jeu de données de démo}
+
+Pour explorer Pomone sans avoir à tout saisir manuellement, l'outil en ligne de commande \texttt{pomone-cli} peut peupler la base configurée avec un jeu de démonstration réaliste :
+
+\begin{itemize}
+  \item 5 cultures (Tomate, Carotte, Laitue, Courgette, Pommier)
+  \item 7 variétés
+  \item 7 lieux (un jardin avec 4 planches + 1 serre + un verger)
+  \item 7 plantations (6 annuelles + 1 pluriannuelle) avec dates ancrées sur l'année courante
+  \item 1 série récurrente (désherbage hebdomadaire)
+\end{itemize}
+
+Lancez la commande depuis la racine du dépôt (sur une base \textbf{vide}, sinon elle refuse de toucher à vos données) :
+
+\begin{verbatim}
+cargo run -p pomone-cli -- seed-demo
+\end{verbatim}
+
+La commande utilise la base configurée dans \texttt{\textasciitilde/.config/pomone/config.toml} (SQLite par défaut). Pour repartir sur une démo neuve, supprimez d'abord la base : \texttt{rm \textasciitilde/.local/share/pomone/pomone.sqlite}, puis relancez Pomone une fois pour recréer la base vide avant d'appeler \texttt{seed-demo}.
 
 \section{Workflow recommandé pour démarrer}
 
