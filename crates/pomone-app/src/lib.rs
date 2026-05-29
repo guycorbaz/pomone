@@ -49,7 +49,9 @@ pub use locations_view::{
     LocationInput, LocationKindOption, LocationListItem, ParentLocationOption,
 };
 pub use migration::{copy_all, MigrationReport};
-pub use planting_detail_view::{get_planting_detail, DetailLine, PlantingDetail};
+pub use planting_detail_view::{
+    get_planting_detail, list_planting_tasks, DetailLine, PlantingDetail, PlantingTaskRow,
+};
 pub use plantings_view::{
     list_location_options, list_plantings, list_variety_options, parse_id, parse_iso_date,
     CycleDates, LocationOption, PlantingRow, VarietyOption,

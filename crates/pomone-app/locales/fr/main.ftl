@@ -102,6 +102,10 @@ label-transplanted-on = Date de repiquage
 label-first-harvest = Première récolte
 label-last-harvest = Dernière récolte
 empty-planting-detail = Plantation introuvable.
+section-planting-tasks = Tâches
+empty-planting-tasks = Aucune tâche pour cette plantation.
+task-badge-overdue = en retard
+task-badge-done = fait
 
 ## Yearly harvest (perennials)
 section-yearly-harvest = Récoltes annuelles

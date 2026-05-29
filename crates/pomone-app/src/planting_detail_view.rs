@@ -10,6 +10,7 @@ use chrono::NaiveDate;
 use pomone_db::Repository;
 use pomone_domain::{Planting, PlantingId, PlantingSchedule};
 use rust_decimal::Decimal;
+use std::collections::HashMap;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -37,6 +38,72 @@ pub struct PlantingDetail {
     /// True iff the underlying schedule is `Perennial`. The UI uses this to
     /// decide whether to render the yearly-harvest section.
     pub is_perennial: bool,
+}
+
+/// One task attached to a planting, ready to render in the detail screen's
+/// task list. Mirrors the calendar's `TaskCalendarRow` shape but trades the
+/// typed `TaskId`/`category` for plain strings the UI can forward directly,
+/// and adds an `overdue` flag the calendar derives from cell position.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlantingTaskRow {
+    pub task_id: String,
+    /// ISO-8601 (`YYYY-MM-DD`) planned date.
+    pub planned_on: String,
+    /// Localized name of the task type (`"Semis"`, `"Désherbage"`…).
+    pub type_name: String,
+    /// Hex color from the `TaskType` (e.g. `"#3C6E47"`), for the row's dot.
+    pub color: String,
+    /// `true` if the task has a `completed_on` date set.
+    pub completed: bool,
+    /// `true` if still pending and planned in the past (relative to `today`).
+    pub overdue: bool,
+    /// Free-text notes, empty when unset.
+    pub notes: String,
+}
+
+/// List the tasks anchored to one planting, decorated with their type
+/// metadata and sorted pending-first then by planned date. `today` drives the
+/// `overdue` flag so callers stay deterministic in tests.
+///
+/// Returns an empty vec for a planting with no tasks; an unknown/invalid id is
+/// surfaced as `Inconsistent` (same contract as [`get_planting_detail`]).
+pub async fn list_planting_tasks(
+    repo: &dyn Repository,
+    id_str: &str,
+    today: NaiveDate,
+) -> AppResult<Vec<PlantingTaskRow>> {
+    let uuid = Uuid::from_str(id_str)
+        .map_err(|e| AppError::Inconsistent(format!("invalid PlantingId '{id_str}': {e}")))?;
+    let planting_id = PlantingId::from(uuid);
+
+    let tasks = repo.task_list_for_planting(planting_id).await?;
+    let types = repo.task_type_list().await?;
+    let types_by_id: HashMap<_, _> = types.iter().map(|t| (t.id, t)).collect();
+
+    let mut rows: Vec<PlantingTaskRow> = tasks
+        .into_iter()
+        .filter_map(|task| {
+            // Orphan task whose type was deleted — skip rather than crash.
+            // (FK is RESTRICT so this shouldn't happen, but stay defensive.)
+            let tt = types_by_id.get(&task.task_type_id)?;
+            Some(PlantingTaskRow {
+                task_id: task.id.to_string(),
+                planned_on: task.planned_on.format("%Y-%m-%d").to_string(),
+                type_name: tt.name.clone(),
+                color: tt.color.clone(),
+                completed: task.completed_on.is_some(),
+                overdue: task.is_overdue(today),
+                notes: task.notes.unwrap_or_default(),
+            })
+        })
+        .collect();
+    // Pending tasks first (false < true), each group by ascending date.
+    rows.sort_by(|a, b| {
+        a.completed
+            .cmp(&b.completed)
+            .then(a.planned_on.cmp(&b.planned_on))
+    });
+    Ok(rows)
 }
 
 /// Format `Some(date)` as `YYYY-MM-DD`, `None` as a dash placeholder.
@@ -194,6 +261,78 @@ mod tests {
         assert!(keys.contains(&"label-sown-on"));
         assert!(keys.contains(&"label-first-harvest"));
         assert!(keys.contains(&"label-last-harvest"));
+    }
+
+    #[tokio::test]
+    async fn planting_tasks_are_decorated_sorted_and_flag_overdue() {
+        use crate::tasks_view::create_task;
+        use pomone_db::TaskTypeRepo;
+        use pomone_domain::TaskCategory;
+
+        let repo = fresh_repo().await;
+        seed_test_data(&repo).await.unwrap();
+        let varieties = repo.variety_list().await.unwrap();
+        let locations = repo.location_list().await.unwrap();
+        let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        let planting = create_annual_planting_from_sowing(
+            &repo,
+            varieties[0].id,
+            bed.id,
+            d(2026, 3, 1),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let pid = planting.id.to_string();
+
+        // Auto-gen already created sow/transplant/harvest tasks; add a manual
+        // weeding pending in the past so we can assert the overdue flag.
+        let weeding = repo
+            .task_type_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|t| t.category == TaskCategory::Weeding)
+            .unwrap();
+        create_task(
+            &repo,
+            &pid,
+            &weeding.id.to_string(),
+            "2026-04-15",
+            "binage",
+            false,
+            d(2026, 5, 1),
+        )
+        .await
+        .unwrap();
+
+        let today = d(2026, 5, 1);
+        let rows = list_planting_tasks(&repo, &pid, today).await.unwrap();
+
+        // At least the manual weeding + the auto-gen tasks are present.
+        assert!(rows.len() >= 2);
+        // Pending tasks come before completed ones.
+        let first_completed = rows.iter().position(|r| r.completed);
+        if let Some(idx) = first_completed {
+            assert!(rows[..idx].iter().all(|r| !r.completed));
+        }
+        let weed = rows.iter().find(|r| r.type_name == "Désherbage").unwrap();
+        assert_eq!(weed.planned_on, "2026-04-15");
+        assert!(weed.overdue, "past pending task should be overdue");
+        assert!(weed.color.starts_with('#'));
+        assert_eq!(weed.notes, "binage");
+    }
+
+    #[tokio::test]
+    async fn planting_tasks_rejects_invalid_id() {
+        let repo = fresh_repo().await;
+        let err = list_planting_tasks(&repo, "not-a-uuid", d(2026, 5, 1))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(_)));
     }
 
     #[tokio::test]

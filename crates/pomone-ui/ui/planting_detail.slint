@@ -21,6 +21,16 @@ export struct YearlyHarvestRow {
     notes: string,
 }
 
+export struct PlantingTaskRow {
+    task-id: string,
+    planned-on: string,
+    type-name: string,
+    color: color,
+    completed: bool,
+    overdue: bool,
+    notes: string,
+}
+
 export component PlantingDetailPage inherits Rectangle {
     background: Palette.background;
 
@@ -46,6 +56,14 @@ export component PlantingDetailPage inherits Rectangle {
 
     in property <string> empty-state-text;    // shown when no detail loaded
     in property <bool> has-detail;
+
+    // ---------- Tasks section ----------
+    in property <string> tasks-section-text;
+    in property <string> tasks-empty-text;
+    in property <string> tasks-overdue-badge;   // localized "overdue"
+    in property <string> tasks-done-badge;      // localized "done"
+    in property <[PlantingTaskRow]> task-rows;
+    callback task-clicked(string);              // task-id
 
     // ---------- Yearly harvest section (perennials only) ----------
     in property <bool> is-perennial;
@@ -238,6 +256,83 @@ export component PlantingDetailPage inherits Rectangle {
                             color: Palette.text-primary;
                             font-size: Theme.font-size-body;
                             wrap: word-wrap;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---------- Tasks attached to this planting ----------
+        if has-detail: Card {
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-md;
+
+                SectionHeader { text: tasks-section-text; }
+
+                if task-rows.length == 0: Text {
+                    text: tasks-empty-text;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-body;
+                    horizontal-alignment: center;
+                }
+
+                for task in task-rows: Rectangle {
+                    border-radius: Theme.radius-sm;
+                    background: row-touch.has-hover ? Palette.surface-alt : transparent;
+
+                    row-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.task-clicked(task.task-id); }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: Theme.space-sm;
+                        padding-right: Theme.space-sm;
+                        padding-top: Theme.space-xs;
+                        padding-bottom: Theme.space-xs;
+                        spacing: Theme.space-md;
+
+                        // Colored dot for the task type.
+                        Rectangle {
+                            width: 12px;
+                            height: 12px;
+                            border-radius: 6px;
+                            background: task.color;
+                            y: (parent.height - self.height) / 2;
+                        }
+
+                        Text {
+                            text: task.type-name;
+                            color: task.completed ? Palette.text-muted : Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                            horizontal-stretch: 1;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+
+                        // Status badge: done > overdue (mutually exclusive).
+                        if task.completed: Text {
+                            text: tasks-done-badge;
+                            color: Palette.success;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            vertical-alignment: center;
+                        }
+                        if !task.completed && task.overdue: Text {
+                            text: tasks-overdue-badge;
+                            color: Palette.danger;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            vertical-alignment: center;
+                        }
+
+                        Text {
+                            text: task.planned-on;
+                            color: task.overdue && !task.completed ? Palette.danger : Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            vertical-alignment: center;
                         }
                     }
                 }

@@ -100,6 +100,10 @@ label-transplanted-on = Transplant date
 label-first-harvest = First harvest
 label-last-harvest = Last harvest
 empty-planting-detail = Planting not found.
+section-planting-tasks = Tasks
+empty-planting-tasks = No task for this planting yet.
+task-badge-overdue = overdue
+task-badge-done = done
 
 ## Yearly harvest (perennials)
 section-yearly-harvest = Yearly harvests

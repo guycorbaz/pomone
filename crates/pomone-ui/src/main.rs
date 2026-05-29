@@ -18,8 +18,8 @@ use pomone_app::{
     extend_series_if_needed, get_planting_detail, get_task_for_edit, get_task_type_for_edit,
     list_crop_map_lanes, list_crops, list_events_in_range, list_family_options,
     list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
-    list_planting_choices, list_plantings, list_strata_options, list_strata_rows,
-    list_task_calendar_rows, list_task_category_options, list_task_type_options,
+    list_planting_choices, list_planting_tasks, list_plantings, list_strata_options,
+    list_strata_rows, list_task_calendar_rows, list_task_category_options, list_task_type_options,
     list_task_types_admin, list_varieties_for_crop, list_variety_options,
     list_yearly_harvests_for_planting, move_planting_to_location, parse_id, recurrence_unit_str,
     services, split_planting, test_backend, update_task, update_task_type, App, AppConfig,
@@ -27,11 +27,11 @@ use pomone_app::{
     CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates,
     FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption, LocationListItem,
     LocationOption, MigrationReport, ParentLocationOption, PlantingChoice,
-    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow, SplitPart, StrataInput,
-    StrataOption, StrataRow as AppStrataRow, TaskCalendarRow as AppTaskCalendarRow,
-    TaskCategoryOption, TaskEditForm, TaskTypeAdminRow, TaskTypeEditForm, TaskTypeOption,
-    VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
-    YearlyHarvestRow as AppYearlyHarvestRow,
+    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
+    PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
+    StrataRow as AppStrataRow, TaskCalendarRow as AppTaskCalendarRow, TaskCategoryOption,
+    TaskEditForm, TaskTypeAdminRow, TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption,
+    VarietyProfileKind, VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{LocationId, PlantingId, PruningSeason, RecurrenceUnit, VarietyId};
 use rust_decimal::Decimal;
@@ -54,10 +54,11 @@ use generated::{
     CropMapBarItem as SlintCropMapBar, CropMapLaneItem as SlintCropMapLane,
     CropMapLocationOption as SlintCropMapLocationOption, CropRow as SlintCropRow,
     DetailLine as SlintDetailLine, GanttBar as SlintGanttBar, LocationItem as SlintLocationItem,
-    MainWindow, PlantingRow as SlintPlantingRow, StrataItem as SlintStrataItem,
-    TaskCalendarDay as SlintTaskCalendarDay, TaskCategoryChip as SlintTaskCategoryChip,
-    TaskRow as SlintTaskRow, TaskTypeAdminItem as SlintTaskTypeAdminItem,
-    VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
+    MainWindow, PlantingRow as SlintPlantingRow, PlantingTaskRow as SlintPlantingTaskRow,
+    StrataItem as SlintStrataItem, TaskCalendarDay as SlintTaskCalendarDay,
+    TaskCategoryChip as SlintTaskCategoryChip, TaskRow as SlintTaskRow,
+    TaskTypeAdminItem as SlintTaskTypeAdminItem, VarietyRow as SlintVarietyRow,
+    YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -1047,6 +1048,22 @@ fn main() -> Result<()> {
             }
         });
     }
+    // Click on a task row in the planting-detail task list → open the same
+    // edit form, but remember to route back to the detail page on save/cancel.
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_detail_task_clicked(move |task_id_str| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            "planting-detail".clone_into(&mut s.task_form_previous_page);
+            if let Err(e) = open_task_form_for_edit(&window, &mut s, &task_id_str) {
+                tracing::error!(error = %e, "failed to open task form from planting detail");
+            }
+        });
+    }
     // Click on "+ Nouvelle tâche" header button → reset the form and
     // switch to the task-form page in create mode.
     {
@@ -1075,10 +1092,8 @@ fn main() -> Result<()> {
             match try_save_task_form(&window, &mut s) {
                 Ok(()) => {
                     let prev = s.task_form_previous_page.clone();
-                    window.set_current_page(SharedString::from(prev));
-                    if let Err(e) = refresh_task_calendar(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh task calendar after save");
-                    }
+                    window.set_current_page(SharedString::from(prev.clone()));
+                    refresh_after_task_form(&window, &mut s, &prev);
                 }
                 Err(e) => {
                     let (text, is_err) = render_task_form_error(s.app.i18n(), e);
@@ -1120,10 +1135,8 @@ fn main() -> Result<()> {
             match result {
                 Ok(()) => {
                     let prev = s.task_form_previous_page.clone();
-                    window.set_current_page(SharedString::from(prev));
-                    if let Err(e) = refresh_task_calendar(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh task calendar after delete");
-                    }
+                    window.set_current_page(SharedString::from(prev.clone()));
+                    refresh_after_task_form(&window, &mut s, &prev);
                 }
                 Err(e) => {
                     let (text, is_err) =
@@ -1650,6 +1663,12 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_detail_name_label(SharedString::from(i18n.t("label-planting-name")));
     window.set_detail_notes_label(SharedString::from(i18n.t("label-planting-notes")));
     window.set_detail_empty_state_text(SharedString::from(i18n.t("empty-planting-detail")));
+
+    // Tasks section labels — content rows come from refresh_planting_detail.
+    window.set_detail_tasks_section_text(SharedString::from(i18n.t("section-planting-tasks")));
+    window.set_detail_tasks_empty_text(SharedString::from(i18n.t("empty-planting-tasks")));
+    window.set_detail_tasks_overdue_badge(SharedString::from(i18n.t("task-badge-overdue")));
+    window.set_detail_tasks_done_badge(SharedString::from(i18n.t("task-badge-done")));
 
     // Yearly-harvest section labels — content rows come from refresh_planting_detail.
     window.set_harvest_section_title(SharedString::from(i18n.t("section-yearly-harvest")));
@@ -2776,20 +2795,42 @@ fn parse_i32(s: &str, field: &'static str) -> Result<i32, AppError> {
         .map_err(|e| AppError::Inconsistent(format!("invalid {field} '{s}': {e}")))
 }
 
+/// After the task form routes back, refresh whichever page we returned to so
+/// the change (create / edit / delete) shows up without a manual reload. The
+/// form is reachable both from the Task Calendar and from a planting's task
+/// list; `prev` says which one to repaint.
+fn refresh_after_task_form(window: &MainWindow, state: &mut UiState, prev: &str) {
+    let result = if prev == "planting-detail" {
+        let pid = state.detail_planting_id.clone();
+        refresh_planting_detail(window, state, &pid)
+    } else {
+        refresh_task_calendar(window, state)
+    };
+    if let Err(e) = result {
+        tracing::error!(error = %e, prev, "failed to refresh after task form");
+    }
+}
+
 fn refresh_planting_detail(
     window: &MainWindow,
     state: &mut UiState,
     planting_id: &str,
 ) -> Result<()> {
-    let snapshot: Result<(AppPlantingDetail, Vec<AppYearlyHarvestRow>), AppError> =
-        state.runtime.block_on(async {
-            let detail = get_planting_detail(state.app.repo(), planting_id).await?;
-            // The yearly-harvest table is empty for annuals; querying it
-            // anyway keeps the code path uniform and the SQL is a no-op.
-            let harvests = list_yearly_harvests_for_planting(state.app.repo(), planting_id).await?;
-            Ok((detail, harvests))
-        });
-    let (detail, harvests) = snapshot.context("failed to load planting detail")?;
+    type DetailSnapshot = (
+        AppPlantingDetail,
+        Vec<AppYearlyHarvestRow>,
+        Vec<AppPlantingTaskRow>,
+    );
+    let today = Local::now().date_naive();
+    let snapshot: Result<DetailSnapshot, AppError> = state.runtime.block_on(async {
+        let detail = get_planting_detail(state.app.repo(), planting_id).await?;
+        // The yearly-harvest table is empty for annuals; querying it
+        // anyway keeps the code path uniform and the SQL is a no-op.
+        let harvests = list_yearly_harvests_for_planting(state.app.repo(), planting_id).await?;
+        let tasks = list_planting_tasks(state.app.repo(), planting_id, today).await?;
+        Ok((detail, harvests, tasks))
+    });
+    let (detail, harvests, tasks) = snapshot.context("failed to load planting detail")?;
 
     planting_id.clone_into(&mut state.detail_planting_id);
 
@@ -2819,7 +2860,21 @@ fn refresh_planting_detail(
     window.set_detail_plants_count(usize_to_i32(detail.plants_count as usize));
     window.set_detail_name_value(SharedString::from(detail.name.unwrap_or_default()));
     window.set_detail_notes_value(SharedString::from(detail.notes.unwrap_or_default()));
+    let task_rows: Vec<SlintPlantingTaskRow> = tasks
+        .into_iter()
+        .map(|t| SlintPlantingTaskRow {
+            task_id: SharedString::from(t.task_id),
+            planned_on: SharedString::from(t.planned_on),
+            type_name: SharedString::from(t.type_name),
+            color: parse_hex_color(&t.color),
+            completed: t.completed,
+            overdue: t.overdue,
+            notes: SharedString::from(t.notes),
+        })
+        .collect();
+
     window.set_detail_schedule_lines(ModelRc::new(VecModel::from(lines)));
+    window.set_detail_task_rows(ModelRc::new(VecModel::from(task_rows)));
     window.set_detail_has_detail(true);
     window.set_detail_is_perennial(detail.is_perennial);
     window.set_harvest_rows(ModelRc::new(VecModel::from(harvest_rows)));
