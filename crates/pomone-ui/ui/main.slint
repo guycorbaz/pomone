@@ -17,7 +17,7 @@ import { TaskCalendarPage, TaskCalendarDay, TaskRow, TaskCategoryChip } from "ta
 import { TaskFormPage } from "task_form.slint";
 import { TaskTypesPage, TaskTypeAdminItem } from "task_types.slint";
 import { CropMapPage, CropMapLaneItem, CropMapBarItem, CropMapLocationOption } from "crop_map.slint";
-import { PlantingDetailPage, DetailLine, YearlyHarvestRow } from "planting_detail.slint";
+import { PlantingDetailPage, DetailLine, YearlyHarvestRow, PlantingTaskRow } from "planting_detail.slint";
 import { StrataPage, StrataItem } from "strata.slint";
 import { SettingsPage } from "settings.slint";
 
@@ -258,6 +258,14 @@ export component MainWindow inherits Window {
     in property <bool> detail-has-detail;
     in property <[DetailLine]> detail-schedule-lines;
     callback detail-go-back();
+
+    // ------- Tasks attached to the planting (detail page) -------
+    in property <string> detail-tasks-section-text;
+    in property <string> detail-tasks-empty-text;
+    in property <string> detail-tasks-overdue-badge;
+    in property <string> detail-tasks-done-badge;
+    in property <[PlantingTaskRow]> detail-task-rows;
+    callback detail-task-clicked(string);
 
     // ------- Yearly harvest section (perennials only) -------
     in property <bool> detail-is-perennial;
@@ -827,6 +835,12 @@ export component MainWindow inherits Window {
                 empty-state-text: detail-empty-state-text;
                 has-detail: detail-has-detail;
                 schedule-lines: detail-schedule-lines;
+                tasks-section-text: detail-tasks-section-text;
+                tasks-empty-text: detail-tasks-empty-text;
+                tasks-overdue-badge: detail-tasks-overdue-badge;
+                tasks-done-badge: detail-tasks-done-badge;
+                task-rows: detail-task-rows;
+                task-clicked(id) => { detail-task-clicked(id); }
                 is-perennial: detail-is-perennial;
                 harvest-section-title: harvest-section-title;
                 harvest-empty-text: harvest-empty-text;
