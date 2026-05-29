@@ -1,0 +1,170 @@
+// Pomone — Agenda (what-needs-doing) page.
+//
+// A global, urgency-first view of tasks split into three cards: Overdue,
+// Today, and Upcoming (the coming days). Rows come pre-bucketed and
+// pre-sorted from Rust (`list_agenda`); each row is clickable and opens the
+// shared task edit form. Mirrors the planting-detail task list's row style.
+
+import { Palette, Theme, Card, SectionHeader } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+export struct AgendaRow {
+    task-id: string,
+    planned-on: string,
+    label: string,
+    color: color,
+    completed: bool,
+}
+
+// One clickable task row: colored type dot, label, planned date. `accent` is
+// the date color (red for overdue, muted otherwise); `dim` greys out the
+// label for completed tasks.
+component AgendaTaskRow inherits Rectangle {
+    in property <AgendaRow> task;
+    in property <brush> accent;
+    in property <bool> dim;
+    callback clicked(string);
+
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover ? Palette.surface-alt : transparent;
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(root.task.task-id); }
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-sm;
+        padding-right: Theme.space-sm;
+        padding-top: Theme.space-xs;
+        padding-bottom: Theme.space-xs;
+        spacing: Theme.space-md;
+
+        Rectangle {
+            width: 12px;
+            height: 12px;
+            border-radius: 6px;
+            background: root.task.color;
+            y: (parent.height - self.height) / 2;
+        }
+
+        Text {
+            text: root.task.label;
+            color: root.dim ? Palette.text-muted : Palette.text-primary;
+            font-size: Theme.font-size-body;
+            font-weight: Theme.font-weight-semibold;
+            horizontal-stretch: 1;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Text {
+            text: root.task.planned-on;
+            color: root.accent;
+            font-size: Theme.font-size-label;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// One section card: a header with a count badge, an empty placeholder, and
+// the list of rows. `accent` tints both the count and each row's date.
+component AgendaSection inherits Card {
+    in property <string> title;
+    in property <string> empty-text;
+    in property <[AgendaRow]> rows;
+    in property <brush> accent;
+    in property <bool> dim-rows;
+    callback row-clicked(string);
+
+    VerticalLayout {
+        padding: Theme.space-xl;
+        spacing: Theme.space-sm;
+
+        HorizontalLayout {
+            spacing: Theme.space-sm;
+            SectionHeader { text: root.title; }
+            Text {
+                text: "(\{root.rows.length})";
+                color: root.accent;
+                font-size: Theme.font-size-body;
+                font-weight: Theme.font-weight-semibold;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+        }
+
+        if root.rows.length == 0: Text {
+            text: root.empty-text;
+            color: Palette.text-muted;
+            font-size: Theme.font-size-body;
+        }
+
+        for row in root.rows: AgendaTaskRow {
+            task: row;
+            accent: root.accent;
+            dim: root.dim-rows;
+            clicked(id) => { root.row-clicked(id); }
+        }
+    }
+}
+
+export component AgendaPage inherits Rectangle {
+    background: Palette.background;
+
+    in property <string> title-text;
+    in property <string> overdue-title;
+    in property <string> today-title;
+    in property <string> upcoming-title;
+    in property <string> overdue-empty;
+    in property <string> today-empty;
+    in property <string> upcoming-empty;
+    in property <[AgendaRow]> overdue-rows;
+    in property <[AgendaRow]> today-rows;
+    in property <[AgendaRow]> upcoming-rows;
+
+    callback task-clicked(string);
+
+    ScrollView {
+        VerticalLayout {
+            padding: Theme.space-2xl;
+            spacing: Theme.space-xl;
+
+            Text {
+                text: root.title-text;
+                color: Palette.primary;
+                font-size: Theme.font-size-h1;
+                font-weight: Theme.font-weight-bold;
+            }
+
+            AgendaSection {
+                title: root.overdue-title;
+                empty-text: root.overdue-empty;
+                rows: root.overdue-rows;
+                accent: Palette.danger;
+                dim-rows: false;
+                row-clicked(id) => { root.task-clicked(id); }
+            }
+
+            AgendaSection {
+                title: root.today-title;
+                empty-text: root.today-empty;
+                rows: root.today-rows;
+                accent: Palette.primary;
+                dim-rows: false;
+                row-clicked(id) => { root.task-clicked(id); }
+            }
+
+            AgendaSection {
+                title: root.upcoming-title;
+                empty-text: root.upcoming-empty;
+                rows: root.upcoming-rows;
+                accent: Palette.text-secondary;
+                dim-rows: false;
+                row-clicked(id) => { root.task-clicked(id); }
+            }
+
+            Rectangle { vertical-stretch: 1; }
+        }
+    }
+}

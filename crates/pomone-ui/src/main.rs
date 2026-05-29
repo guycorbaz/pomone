@@ -16,22 +16,23 @@ use pomone_app::{
     create_crop, create_location, create_recurring_task, create_strata, create_task,
     create_task_type, create_variety, delete_strata, delete_task, delete_task_type,
     extend_series_if_needed, get_planting_detail, get_task_for_edit, get_task_type_for_edit,
-    list_crop_map_lanes, list_crops, list_events_in_range, list_family_options,
+    list_agenda, list_crop_map_lanes, list_crops, list_events_in_range, list_family_options,
     list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
     list_planting_choices, list_planting_tasks, list_plantings, list_strata_options,
     list_strata_rows, list_task_calendar_rows, list_task_category_options, list_task_type_options,
     list_task_types_admin, list_varieties_for_crop, list_variety_options,
     list_yearly_harvests_for_planting, move_planting_to_location, parse_id, recurrence_unit_str,
-    services, split_planting, test_backend, update_task, update_task_type, App, AppConfig,
-    AppError, BackendConfig, CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput,
-    CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates,
-    FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption, LocationListItem,
-    LocationOption, MigrationReport, ParentLocationOption, PlantingChoice,
-    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
-    PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
-    StrataRow as AppStrataRow, TaskCalendarRow as AppTaskCalendarRow, TaskCategoryOption,
-    TaskEditForm, TaskTypeAdminRow, TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption,
-    VarietyProfileKind, VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
+    services, split_planting, test_backend, update_task, update_task_type, Agenda as AppAgenda,
+    AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
+    CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput, CropMapBar as AppCropMapBar,
+    CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyOption, Lang,
+    LifespanKind, LocationInput, LocationKindOption, LocationListItem, LocationOption,
+    MigrationReport, ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
+    PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput,
+    StrataOption, StrataRow as AppStrataRow, TaskCalendarRow as AppTaskCalendarRow,
+    TaskCategoryOption, TaskEditForm, TaskTypeAdminRow, TaskTypeEditForm, TaskTypeOption,
+    VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
+    YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{LocationId, PlantingId, PruningSeason, RecurrenceUnit, VarietyId};
 use rust_decimal::Decimal;
@@ -50,15 +51,15 @@ mod generated {
     slint::include_modules!();
 }
 use generated::{
-    CalendarDay as SlintCalendarDay, CalendarEvent as SlintCalendarEvent,
-    CropMapBarItem as SlintCropMapBar, CropMapLaneItem as SlintCropMapLane,
-    CropMapLocationOption as SlintCropMapLocationOption, CropRow as SlintCropRow,
-    DetailLine as SlintDetailLine, GanttBar as SlintGanttBar, LocationItem as SlintLocationItem,
-    MainWindow, PlantingRow as SlintPlantingRow, PlantingTaskRow as SlintPlantingTaskRow,
-    StrataItem as SlintStrataItem, TaskCalendarDay as SlintTaskCalendarDay,
-    TaskCategoryChip as SlintTaskCategoryChip, TaskRow as SlintTaskRow,
-    TaskTypeAdminItem as SlintTaskTypeAdminItem, VarietyRow as SlintVarietyRow,
-    YearlyHarvestRow as SlintYearlyHarvestRow,
+    AgendaRow as SlintAgendaRow, CalendarDay as SlintCalendarDay,
+    CalendarEvent as SlintCalendarEvent, CropMapBarItem as SlintCropMapBar,
+    CropMapLaneItem as SlintCropMapLane, CropMapLocationOption as SlintCropMapLocationOption,
+    CropRow as SlintCropRow, DetailLine as SlintDetailLine, GanttBar as SlintGanttBar,
+    LocationItem as SlintLocationItem, MainWindow, PlantingRow as SlintPlantingRow,
+    PlantingTaskRow as SlintPlantingTaskRow, StrataItem as SlintStrataItem,
+    TaskCalendarDay as SlintTaskCalendarDay, TaskCategoryChip as SlintTaskCategoryChip,
+    TaskRow as SlintTaskRow, TaskTypeAdminItem as SlintTaskTypeAdminItem,
+    VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -943,6 +944,51 @@ fn main() -> Result<()> {
             window.set_status_is_error(false);
         });
     }
+
+    // --- Agenda navigation + row click ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_navigate_agenda(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            {
+                // Top up open-ended recurring series so the agenda's upcoming
+                // window doesn't miss occurrences that haven't been materialized.
+                let s = state.borrow();
+                let today = Local::now().date_naive();
+                if let Err(e) = s
+                    .runtime
+                    .block_on(async { extend_series_if_needed(s.app.repo(), today).await })
+                {
+                    tracing::warn!(error = %e, "failed to extend recurring task series");
+                }
+            }
+            if let Err(e) = refresh_agenda(&window, &mut state.borrow_mut()) {
+                tracing::error!(error = %e, "failed to refresh agenda");
+            }
+            window.set_current_page(SharedString::from("agenda"));
+            window.set_status_text(SharedString::from(""));
+            window.set_status_is_error(false);
+        });
+    }
+    // Click on an agenda row → open the shared task edit form, routing back
+    // to the agenda on save/cancel/delete.
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_agenda_task_clicked(move |task_id_str| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            "agenda".clone_into(&mut s.task_form_previous_page);
+            if let Err(e) = open_task_form_for_edit(&window, &mut s, &task_id_str) {
+                tracing::error!(error = %e, "failed to open task form from agenda");
+            }
+        });
+    }
     {
         let state = Rc::clone(&state);
         let weak = window.as_weak();
@@ -1468,6 +1514,18 @@ fn apply_translations(window: &MainWindow, app: &App) {
     // on every refresh by `refresh_task_calendar`. Re-use the harvest
     // calendar's prev/next/today and weekday labels.
     window.set_nav_tasks_text(SharedString::from(i18n.t("nav-tasks")));
+
+    // Agenda page — static labels; the three row lists are pushed by
+    // `refresh_agenda` on navigation and after any task edit.
+    window.set_nav_agenda_text(SharedString::from(i18n.t("nav-agenda")));
+    window.set_agenda_title_text(SharedString::from(i18n.t("title-agenda")));
+    window.set_agenda_overdue_title(SharedString::from(i18n.t("agenda-overdue-title")));
+    window.set_agenda_today_title(SharedString::from(i18n.t("agenda-today-title")));
+    window.set_agenda_upcoming_title(SharedString::from(i18n.t("agenda-upcoming-title")));
+    window.set_agenda_overdue_empty(SharedString::from(i18n.t("agenda-overdue-empty")));
+    window.set_agenda_today_empty(SharedString::from(i18n.t("agenda-today-empty")));
+    window.set_agenda_upcoming_empty(SharedString::from(i18n.t("agenda-upcoming-empty")));
+
     window.set_task_calendar_title_text(SharedString::from(i18n.t("title-task-calendar")));
     window.set_task_calendar_prev_button_text(SharedString::from(i18n.t("calendar-prev")));
     window.set_task_calendar_next_button_text(SharedString::from(i18n.t("calendar-next")));
@@ -2800,15 +2858,51 @@ fn parse_i32(s: &str, field: &'static str) -> Result<i32, AppError> {
 /// form is reachable both from the Task Calendar and from a planting's task
 /// list; `prev` says which one to repaint.
 fn refresh_after_task_form(window: &MainWindow, state: &mut UiState, prev: &str) {
-    let result = if prev == "planting-detail" {
-        let pid = state.detail_planting_id.clone();
-        refresh_planting_detail(window, state, &pid)
-    } else {
-        refresh_task_calendar(window, state)
+    let result = match prev {
+        "planting-detail" => {
+            let pid = state.detail_planting_id.clone();
+            refresh_planting_detail(window, state, &pid)
+        }
+        "agenda" => refresh_agenda(window, state),
+        _ => refresh_task_calendar(window, state),
     };
     if let Err(e) = result {
         tracing::error!(error = %e, prev, "failed to refresh after task form");
     }
+}
+
+/// Look-ahead horizon (days) for the agenda's "upcoming" bucket — the coming
+/// week of pending work.
+const AGENDA_UPCOMING_DAYS: i64 = 7;
+
+/// Load the agenda buckets relative to today and push them to the window.
+fn refresh_agenda(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let today = Local::now().date_naive();
+    let agenda: AppAgenda = state
+        .runtime
+        .block_on(async { list_agenda(state.app.repo(), today, AGENDA_UPCOMING_DAYS).await })
+        .context("failed to load agenda")?;
+
+    window.set_agenda_overdue_rows(agenda_rows_model(agenda.overdue));
+    window.set_agenda_today_rows(agenda_rows_model(agenda.today));
+    window.set_agenda_upcoming_rows(agenda_rows_model(agenda.upcoming));
+    Ok(())
+}
+
+/// Map a bucket of app-level agenda rows into a Slint model, resolving the
+/// hex color into a brush on the way.
+fn agenda_rows_model(rows: Vec<AppAgendaRow>) -> ModelRc<SlintAgendaRow> {
+    let mapped: Vec<SlintAgendaRow> = rows
+        .into_iter()
+        .map(|r| SlintAgendaRow {
+            task_id: SharedString::from(r.task_id),
+            planned_on: SharedString::from(r.planned_on),
+            label: SharedString::from(r.label),
+            color: parse_hex_color(&r.color),
+            completed: r.completed,
+        })
+        .collect();
+    ModelRc::new(VecModel::from(mapped))
 }
 
 fn refresh_planting_detail(

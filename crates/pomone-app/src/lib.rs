@@ -5,6 +5,7 @@
 //! `pomone-db`. The repository implementation is selected by [`AppConfig`]
 //! at runtime.
 
+pub mod agenda_view;
 pub mod app;
 pub mod calendar_view;
 pub mod config;
@@ -28,6 +29,7 @@ pub mod tasks_view;
 #[cfg(test)]
 mod test_helpers;
 
+pub use agenda_view::{list_agenda, Agenda, AgendaRow};
 pub use app::{test_backend, App};
 pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
 pub use config::{default_config_path, AppConfig, BackendConfig};

@@ -14,6 +14,7 @@ import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
 import { LocationsPage, LocationItem } from "locations.slint";
 import { CalendarPage, CalendarDay, CalendarEvent } from "calendar.slint";
 import { TaskCalendarPage, TaskCalendarDay, TaskRow, TaskCategoryChip } from "task_calendar.slint";
+import { AgendaPage, AgendaRow } from "agenda.slint";
 import { TaskFormPage } from "task_form.slint";
 import { TaskTypesPage, TaskTypeAdminItem } from "task_types.slint";
 import { CropMapPage, CropMapLaneItem, CropMapBarItem, CropMapLocationOption } from "crop_map.slint";
@@ -64,6 +65,7 @@ export component MainWindow inherits Window {
     in property <string> nav-home-text;
     in property <string> nav-plantings-text;
     in property <string> nav-tasks-text;
+    in property <string> nav-agenda-text;
     in property <string> nav-cultures-text;
     in property <string> nav-locations-text;
     in property <string> nav-calendar-text;
@@ -76,6 +78,7 @@ export component MainWindow inherits Window {
     callback navigate-home();
     callback navigate-plantings();
     callback navigate-tasks();
+    callback navigate-agenda();
     callback navigate-cultures();
     callback navigate-locations();
     callback navigate-calendar();
@@ -266,6 +269,19 @@ export component MainWindow inherits Window {
     in property <string> detail-tasks-done-badge;
     in property <[PlantingTaskRow]> detail-task-rows;
     callback detail-task-clicked(string);
+
+    // ------- Agenda page (overdue / today / upcoming) -------
+    in property <string> agenda-title-text;
+    in property <string> agenda-overdue-title;
+    in property <string> agenda-today-title;
+    in property <string> agenda-upcoming-title;
+    in property <string> agenda-overdue-empty;
+    in property <string> agenda-today-empty;
+    in property <string> agenda-upcoming-empty;
+    in property <[AgendaRow]> agenda-overdue-rows;
+    in property <[AgendaRow]> agenda-today-rows;
+    in property <[AgendaRow]> agenda-upcoming-rows;
+    callback agenda-task-clicked(string);
 
     // ------- Yearly harvest section (perennials only) -------
     in property <bool> detail-is-perennial;
@@ -517,7 +533,7 @@ export component MainWindow inherits Window {
 
     shortcuts := FocusScope {
         key-pressed(event) => {
-            // Sidebar shortcuts: Ctrl+1..8 mirror the sidebar order.
+            // Sidebar shortcuts: Ctrl+1..9 then Ctrl+0 mirror the sidebar order.
             if (event.modifiers.control) {
                 if (event.text == "1") {
                     root.current-page = "home";
@@ -535,31 +551,36 @@ export component MainWindow inherits Window {
                     return accept;
                 }
                 if (event.text == "4") {
+                    root.current-page = "agenda";
+                    root.navigate-agenda();
+                    return accept;
+                }
+                if (event.text == "5") {
                     root.current-page = "cultures";
                     root.navigate-cultures();
                     return accept;
                 }
-                if (event.text == "5") {
+                if (event.text == "6") {
                     root.current-page = "locations";
                     root.navigate-locations();
                     return accept;
                 }
-                if (event.text == "6") {
+                if (event.text == "7") {
                     root.current-page = "calendar";
                     root.navigate-calendar();
                     return accept;
                 }
-                if (event.text == "7") {
+                if (event.text == "8") {
                     root.current-page = "strata";
                     root.navigate-strata();
                     return accept;
                 }
-                if (event.text == "8") {
+                if (event.text == "9") {
                     root.current-page = "settings";
                     root.navigate-settings();
                     return accept;
                 }
-                if (event.text == "9") {
+                if (event.text == "0") {
                     root.current-page = "crop-map";
                     root.navigate-crop-map();
                     return accept;
@@ -691,6 +712,11 @@ export component MainWindow inherits Window {
                     text: nav-tasks-text;
                     selected: current-page == "tasks";
                     clicked => { current-page = "tasks"; navigate-tasks(); }
+                }
+                NavButton {
+                    text: nav-agenda-text;
+                    selected: current-page == "agenda";
+                    clicked => { current-page = "agenda"; navigate-agenda(); }
                 }
                 NavButton {
                     text: nav-cultures-text;
@@ -1063,6 +1089,21 @@ export component MainWindow inherits Window {
                 task-clicked(tid) => { task-edit-requested(tid); }
                 new-task-clicked => { task-new-requested(); }
                 manage-types-clicked => { navigate-task-types(); }
+            }
+
+            // ------- Agenda (overdue / today / upcoming) -------
+            if current-page == "agenda": AgendaPage {
+                title-text: agenda-title-text;
+                overdue-title: agenda-overdue-title;
+                today-title: agenda-today-title;
+                upcoming-title: agenda-upcoming-title;
+                overdue-empty: agenda-overdue-empty;
+                today-empty: agenda-today-empty;
+                upcoming-empty: agenda-upcoming-empty;
+                overdue-rows: agenda-overdue-rows;
+                today-rows: agenda-today-rows;
+                upcoming-rows: agenda-upcoming-rows;
+                task-clicked(tid) => { agenda-task-clicked(tid); }
             }
 
             // ------- Task types catalog (create / edit / delete) -------

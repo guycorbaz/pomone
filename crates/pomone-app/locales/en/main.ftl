@@ -267,6 +267,16 @@ status-manual-opened = Manual opened in your system viewer.
 status-manual-not-found = Manual not found. Reinstall Pomone or read the PDF online.
 status-manual-open-failed = Couldn't open the manual: { $message }
 
+## Agenda
+nav-agenda = Agenda
+title-agenda = Agenda
+agenda-overdue-title = Overdue
+agenda-today-title = Today
+agenda-upcoming-title = Upcoming
+agenda-overdue-empty = No overdue task.
+agenda-today-empty = Nothing planned for today.
+agenda-upcoming-empty = Nothing planned in the coming days.
+
 ## Task Calendar
 nav-tasks = Tasks
 title-task-calendar = Task calendar
