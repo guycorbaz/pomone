@@ -267,9 +267,22 @@ status-manual-opened = Manual opened in your system viewer.
 status-manual-not-found = Manual not found. Reinstall Pomone or read the PDF online.
 status-manual-open-failed = Couldn't open the manual: { $message }
 
-## Task Calendar
-nav-tasks = Tasks
-title-task-calendar = Task calendar
+# Prioritized to-do list (overdue / today / upcoming). Internally still the
+# "agenda" view, but surfaced to users as "Tasks" — the dated month grid
+# below carries the "Agenda" label instead (closer to its calendar nature).
+## Agenda (shown as "Tasks")
+nav-agenda = Tasks
+title-agenda = Tasks
+agenda-overdue-title = Overdue
+agenda-today-title = Today
+agenda-upcoming-title = Upcoming
+agenda-overdue-empty = No overdue task.
+agenda-today-empty = Nothing planned for today.
+agenda-upcoming-empty = Nothing planned in the coming days.
+
+## Task Calendar (shown as "Agenda")
+nav-tasks = Agenda
+title-task-calendar = Agenda
 task-calendar-empty = No tasks planned this month.
 task-calendar-hint = Click a task to edit it (date, type, state, deletion).
 task-calendar-new-task = + New task
