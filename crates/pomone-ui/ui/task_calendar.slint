@@ -47,10 +47,32 @@ export struct TaskCalendarDay {
     tasks: [TaskRow],
 }
 
-// A clickable task pill. Click toggles completion via the host.
+// A clickable, draggable task pill.
+//
+// A short press-release (no movement past the threshold) is a *click* —
+// opens the task in the edit form, as before. A press-and-drag instead
+// starts a reschedule gesture: the host renders a floating ghost following
+// the cursor and, on release inside the grid, drops the task on the day
+// under the pointer. Coordinates are reported in absolute (window) space so
+// the page can hit-test against the day grid regardless of nesting.
 component TaskPill inherits Rectangle {
     in property <TaskRow> task;
     callback clicked(string);
+    // Emitted once the pointer has moved past the drag threshold while
+    // pressed. Carries the task id + its label/color so the page can paint
+    // the ghost, plus the absolute pointer position.
+    callback drag-started(string, string, color, length, length);
+    // Pointer moved while dragging — absolute position.
+    callback drag-moved(length, length);
+    // Pointer released while dragging — absolute position.
+    callback drag-ended(length, length);
+
+    // Press / drag bookkeeping. `press-x/y` are relative to the pill so the
+    // threshold check is local; everything reported upward is absolute.
+    property <bool> pressed: false;
+    property <bool> did-drag: false;
+    property <length> press-x;
+    property <length> press-y;
 
     height: 18px;
     min-width: 0;
@@ -58,12 +80,53 @@ component TaskPill inherits Rectangle {
     clip: true;
     background: task.color;
     // Completed = dimmed so done items stay visible but visually retreat.
-    opacity: task.completed ? 0.45 : (touch.has-hover ? 0.85 : 1.0);
+    // The dragged pill itself fades to a placeholder while the ghost flies.
+    opacity: root.did-drag ? 0.3
+           : task.completed ? 0.45
+           : (touch.has-hover ? 0.85 : 1.0);
     animate opacity { duration: Theme.transition-fast; }
 
     touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(task.task-id); }
+        mouse-cursor: root.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+
+        pointer-event(ev) => {
+            if (ev.button != PointerEventButton.left) {
+                return;
+            }
+            if (ev.kind == PointerEventKind.down) {
+                root.pressed = true;
+                root.did-drag = false;
+                root.press-x = self.mouse-x;
+                root.press-y = self.mouse-y;
+            } else if (ev.kind == PointerEventKind.up) {
+                if (root.did-drag) {
+                    root.drag-ended(self.absolute-position.x + self.mouse-x,
+                                    self.absolute-position.y + self.mouse-y);
+                } else {
+                    root.clicked(task.task-id);
+                }
+                root.pressed = false;
+                root.did-drag = false;
+            }
+        }
+
+        moved => {
+            if (!root.pressed) {
+                return;
+            }
+            if (!root.did-drag
+                && ((self.mouse-x - root.press-x).abs() > 4px
+                    || (self.mouse-y - root.press-y).abs() > 4px)) {
+                root.did-drag = true;
+                root.drag-started(task.task-id, task.label, task.color,
+                                  self.absolute-position.x + self.mouse-x,
+                                  self.absolute-position.y + self.mouse-y);
+            }
+            if (root.did-drag) {
+                root.drag-moved(self.absolute-position.x + self.mouse-x,
+                                self.absolute-position.y + self.mouse-y);
+            }
+        }
 
         HorizontalLayout {
             padding-left: 6px;
@@ -128,6 +191,10 @@ component CategoryChipView inherits Rectangle {
 component DayCell inherits Rectangle {
     in property <TaskCalendarDay> day;
     callback task-clicked(string);
+    // Forwarded straight up from the pills so the page owns all drag state.
+    callback task-drag-started(string, string, color, length, length);
+    callback task-drag-moved(length, length);
+    callback task-drag-ended(length, length);
 
     min-width: 0;
     clip: true;
@@ -161,6 +228,9 @@ component DayCell inherits Rectangle {
                 width: parent.width;
                 height: 18px;
                 clicked(tid) => { root.task-clicked(tid); }
+                drag-started(id, lbl, col, x, y) => { root.task-drag-started(id, lbl, col, x, y); }
+                drag-moved(x, y) => { root.task-drag-moved(x, y); }
+                drag-ended(x, y) => { root.task-drag-ended(x, y); }
             }
         }
         if day.tasks.length > 3: Text {
@@ -201,6 +271,50 @@ export component TaskCalendarPage inherits Rectangle {
     callback manage-types-clicked();
     callback toggle-category(string);
     callback select-all-categories();
+    // A task pill was dropped on the day grid. Carries the task id and the
+    // pointer's release position relative to the grid plus the per-cell
+    // pitch (cell size + spacing) on each axis, so the host resolves which
+    // of the 42 cells received the drop without duplicating grid geometry.
+    callback task-dropped(string, length, length, length, length);
+
+    // --- Drag state (owned here; pills only report pointer events) ---
+    property <bool> dragging: false;
+    property <string> drag-task-id;
+    property <string> drag-label;
+    property <color> drag-color;
+    // Pointer position expressed relative to the day-grid's top-left.
+    property <length> drag-x;
+    property <length> drag-y;
+
+    // Translate an absolute (window-space) pointer position into the day
+    // grid's local frame and update the ghost position.
+    function track-drag(ax: length, ay: length) {
+        root.drag-x = ax - grid-area.absolute-position.x;
+        root.drag-y = ay - grid-area.absolute-position.y;
+    }
+
+    // A pill crossed the drag threshold: arm the ghost.
+    function handle-drag-start(id: string, lbl: string, c: color, ax: length, ay: length) {
+        root.drag-task-id = id;
+        root.drag-label = lbl;
+        root.drag-color = c;
+        root.track-drag(ax, ay);
+        root.dragging = true;
+    }
+
+    // Pill released. If the drop landed inside the grid, hand the host the
+    // task id, the drop point, and the per-cell pitch on each axis so it can
+    // resolve the target day. Releasing outside the grid silently cancels.
+    function handle-drag-end(ax: length, ay: length) {
+        root.track-drag(ax, ay);
+        if (root.drag-x >= 0 && root.drag-x <= grid-area.width
+            && root.drag-y >= 0 && root.drag-y <= grid-area.height) {
+            root.task-dropped(root.drag-task-id, root.drag-x, root.drag-y,
+                              (grid-area.width + Theme.space-xs) / 7,
+                              (grid-area.height + Theme.space-xs) / 6);
+        }
+        root.dragging = false;
+    }
 
     ScrollView {
         VerticalLayout {
@@ -288,62 +402,99 @@ export component TaskCalendarPage inherits Rectangle {
                         }
                     }
 
+                    grid-area := Rectangle {
                     GridLayout {
                         spacing: Theme.space-xs;
                         Row {
-                            DayCell { day: days[0];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[1];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[2];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[3];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[4];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[5];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[6];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[0];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[1];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[2];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[3];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[4];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[5];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[6];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                         Row {
-                            DayCell { day: days[7];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[8];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[9];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[10]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[11]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[12]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[13]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[7];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[8];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[9];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[10]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[11]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[12]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[13]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                         Row {
-                            DayCell { day: days[14]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[15]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[16]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[17]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[18]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[19]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[20]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[14]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[15]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[16]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[17]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[18]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[19]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[20]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                         Row {
-                            DayCell { day: days[21]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[22]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[23]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[24]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[25]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[26]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[27]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[21]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[22]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[23]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[24]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[25]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[26]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[27]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                         Row {
-                            DayCell { day: days[28]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[29]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[30]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[31]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[32]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[33]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[34]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[28]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[29]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[30]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[31]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[32]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[33]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[34]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                         Row {
-                            DayCell { day: days[35]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[36]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[37]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[38]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[39]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[40]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
-                            DayCell { day: days[41]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } }
+                            DayCell { day: days[35]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[36]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[37]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[38]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[39]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[40]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[41]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
+                    }
+
+                    // Floating ghost that follows the cursor while a pill is
+                    // being dragged. Positioned in the day-grid's local frame
+                    // (drag-x/drag-y), nudged so the cursor sits inside it.
+                    // No TouchArea → it never intercepts the drag's pointer.
+                    if root.dragging: Rectangle {
+                        x: root.drag-x - 12px;
+                        y: root.drag-y - 9px;
+                        width: 130px;
+                        height: 18px;
+                        border-radius: Theme.radius-sm;
+                        background: root.drag-color;
+                        opacity: 0.9;
+                        clip: true;
+                        HorizontalLayout {
+                            padding-left: 6px;
+                            padding-right: 6px;
+                            spacing: 4px;
+                            Text {
+                                text: "•";
+                                color: Palette.text-on-primary;
+                                font-size: Theme.font-size-label;
+                                font-weight: Theme.font-weight-semibold;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: root.drag-label;
+                                color: Palette.text-on-primary;
+                                font-size: Theme.font-size-label;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                            }
+                        }
+                    }
                     }
                 }
             }

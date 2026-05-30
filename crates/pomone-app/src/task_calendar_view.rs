@@ -129,6 +129,32 @@ pub async fn toggle_task_completion(
     Ok(now_completed)
 }
 
+/// Move a task to `new_date` (drag-and-drop reschedule on the calendar).
+///
+/// Single-occurrence move: only this task's `planned_on` changes; if it
+/// belongs to a recurring series the series template and its other
+/// occurrences are left untouched. No-op write is avoided when the date
+/// is unchanged.
+pub async fn reschedule_task(
+    repo: &dyn Repository,
+    task_id: TaskId,
+    new_date: NaiveDate,
+) -> AppResult<()> {
+    let task = repo
+        .task_get(task_id)
+        .await?
+        .ok_or_else(|| crate::error::AppError::NotFound {
+            kind: "task",
+            id: task_id.to_string(),
+        })?;
+    if task.planned_on == new_date {
+        return Ok(());
+    }
+    let updated = task.reschedule(new_date);
+    repo.task_update(&updated).await?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,5 +322,43 @@ mod tests {
         assert!(!toggle_task_completion(&repo, task.id, now).await.unwrap());
         let got2 = repo.task_get(task.id).await.unwrap().unwrap();
         assert_eq!(got2.completed_on, None);
+    }
+
+    #[tokio::test]
+    async fn reschedule_moves_planned_date() {
+        use pomone_db::{TaskRepo, TaskTypeRepo};
+        use pomone_domain::Task;
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let tt = repo
+            .task_type_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        let task = Task::new(
+            None,
+            None,
+            tt.id,
+            None,
+            None,
+            NaiveDate::from_ymd_opt(2026, 5, 10).unwrap(),
+            None,
+            None,
+            None,
+            None,
+        );
+        repo.task_create(&task).await.unwrap();
+
+        let target = NaiveDate::from_ymd_opt(2026, 5, 18).unwrap();
+        reschedule_task(&repo, task.id, target).await.unwrap();
+        let got = repo.task_get(task.id).await.unwrap().unwrap();
+        assert_eq!(got.planned_on, target);
+
+        // Same-date reschedule is a harmless no-op.
+        reschedule_task(&repo, task.id, target).await.unwrap();
+        let got2 = repo.task_get(task.id).await.unwrap().unwrap();
+        assert_eq!(got2.planned_on, target);
     }
 }
