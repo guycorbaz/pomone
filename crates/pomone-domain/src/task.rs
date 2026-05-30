@@ -133,6 +133,15 @@ impl Task {
         }
     }
 
+    /// Move this task to a new planned date. Returns a new value (Task is
+    /// immutable). Used by the calendar's drag-and-drop reschedule. The
+    /// `series_id` is preserved untouched: dragging moves a single
+    /// materialized occurrence, it does not rewrite the recurring template.
+    #[must_use]
+    pub fn reschedule(self, planned_on: NaiveDate) -> Self {
+        Self { planned_on, ..self }
+    }
+
     /// True if the task has a `completed_on` date set.
     #[must_use]
     pub fn is_completed(&self) -> bool {
@@ -182,6 +191,19 @@ mod tests {
         let done = t.mark_completed(d(2026, 5, 3));
         assert!(done.is_completed());
         assert_eq!(done.completed_on, Some(d(2026, 5, 3)));
+    }
+
+    #[test]
+    fn reschedule_changes_only_the_planned_date() {
+        let t = fresh_task();
+        let id = t.id;
+        let moved = t.reschedule(d(2026, 6, 20));
+        assert_eq!(moved.planned_on, d(2026, 6, 20));
+        // Identity and every other field carry over untouched.
+        assert_eq!(moved.id, id);
+        assert_eq!(moved.duration_min, Some(30));
+        assert_eq!(moved.completed_on, None);
+        assert_eq!(moved.series_id, None);
     }
 
     #[test]

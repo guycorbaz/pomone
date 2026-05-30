@@ -22,8 +22,8 @@ use pomone_app::{
     list_strata_rows, list_task_calendar_rows, list_task_category_options, list_task_type_options,
     list_task_types_admin, list_varieties_for_crop, list_variety_options,
     list_yearly_harvests_for_planting, move_planting_to_location, parse_id, recurrence_unit_str,
-    services, split_planting, test_backend, update_task, update_task_type, Agenda as AppAgenda,
-    AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
+    reschedule_task, services, split_planting, test_backend, update_task, update_task_type,
+    Agenda as AppAgenda, AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
     CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput, CropMapBar as AppCropMapBar,
     CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyOption, Lang,
     LifespanKind, LocationInput, LocationKindOption, LocationListItem, LocationOption,
@@ -1091,6 +1091,60 @@ fn main() -> Result<()> {
             "tasks".clone_into(&mut s.task_form_previous_page);
             if let Err(e) = open_task_form_for_edit(&window, &mut s, &task_id_str) {
                 tracing::error!(error = %e, "failed to open task form for edit");
+            }
+        });
+    }
+    // Drag a task pill onto another day → reschedule it. The page hands us the
+    // drop point in the day-grid's local frame plus the per-cell pitch on each
+    // axis; we derive the 0..41 cell index and map it to that grid date (same
+    // grid_start math as `refresh_task_calendar`).
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_rescheduled(move |task_id_str, x, y, pitch_x, pitch_y| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            // Degenerate geometry (zero-size grid mid-layout) → ignore.
+            if !(pitch_x > 0.0 && pitch_y > 0.0) {
+                return;
+            }
+            // Clamp keeps each axis inside the 7×6 grid, so the floored
+            // values are tiny non-negative integers — the cast can't lose data.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let index = {
+                let col = (x / pitch_x).floor().clamp(0.0, 6.0) as i64;
+                let row = (y / pitch_y).floor().clamp(0.0, 5.0) as i64;
+                u64::try_from(row * 7 + col).unwrap_or(0)
+            };
+
+            let mut s = state.borrow_mut();
+            let task_id: pomone_domain::TaskId = match parse_id(&task_id_str) {
+                Ok(id) => id,
+                Err(e) => {
+                    tracing::error!(error = %e, "invalid task id on drop");
+                    return;
+                }
+            };
+            let first = first_of_month(s.task_calendar_year, s.task_calendar_month);
+            let lead = weekday_offset_mon(first);
+            let Some(grid_start) = first.checked_sub_days(Days::new(u64::from(lead))) else {
+                tracing::error!("task calendar grid underflow on drop");
+                return;
+            };
+            let Some(target) = grid_start.checked_add_days(Days::new(index)) else {
+                tracing::error!("task calendar grid overflow on drop");
+                return;
+            };
+            let result = s
+                .runtime
+                .block_on(async { reschedule_task(s.app.repo(), task_id, target).await });
+            if let Err(e) = result {
+                tracing::error!(error = %e, "failed to reschedule task");
+                return;
+            }
+            if let Err(e) = refresh_task_calendar(&window, &mut s) {
+                tracing::error!(error = %e, "failed to refresh task calendar after reschedule");
             }
         });
     }

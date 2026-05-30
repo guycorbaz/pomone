@@ -400,6 +400,11 @@ export component MainWindow inherits Window {
     /// Emitted when the user clicks an existing task pill on the calendar.
     /// Rust loads the task into the form and switches to the task-form page.
     callback task-edit-requested(string);
+    /// Emitted when a task pill is dragged and dropped on a calendar day.
+    /// Args: task id, drop point relative to the day grid (x, y), and the
+    /// per-cell pitch on each axis. Rust derives the target day index
+    /// (0..41) and reschedules the task to that grid date.
+    callback task-rescheduled(string, length, length, length, length);
     /// Emitted when the user clicks "+ Nouvelle tâche" in the calendar
     /// header. Rust resets the form fields and switches to the task-form
     /// page in creation mode.
@@ -1087,6 +1092,7 @@ export component MainWindow inherits Window {
                 next-month => { task-next-month(); }
                 go-today => { task-go-today(); }
                 task-clicked(tid) => { task-edit-requested(tid); }
+                task-dropped(tid, x, y, px, py) => { task-rescheduled(tid, x, y, px, py); }
                 new-task-clicked => { task-new-requested(); }
                 manage-types-clicked => { navigate-task-types(); }
             }
