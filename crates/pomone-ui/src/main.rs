@@ -1360,7 +1360,9 @@ fn apply_translations(window: &MainWindow, app: &App) {
     // here so a language toggle (rare but possible mid-session) also
     // re-snaps it; an app left open across midnight would still need a
     // separate timer, but that's a v1.x problem.
-    let today_doy = usize_to_i32(Local::now().date_naive().ordinal() as usize);
+    // Clamp to the 365-wide axis so a leap-year Dec 31 (ordinal 366) lands on
+    // the last column instead of overshooting (#67).
+    let today_doy = usize_to_i32(Local::now().date_naive().ordinal() as usize).min(AXIS_DAYS);
     window.set_gantt_today_day(today_doy);
 
     // Sidebar nav
@@ -1777,9 +1779,13 @@ fn refresh_bed_usage(window: &MainWindow, app: &App, runtime: &tokio::runtime::R
 /// vertical spike — which is why we work in pixels here.
 const PLOT_MONTH_WIDTH_PX: f64 = 80.0;
 const PLOT_HEIGHT_PX: f64 = 150.0;
+/// Width, in day-of-year columns, of the shared season axis used by the Gantt,
+/// its today-line, and the bed-usage curve. Fixed at 365 so the mapping is
+/// consistent; leap-year day 366 folds onto the last column (#67).
+const AXIS_DAYS: i32 = 365;
 /// Days mapped across the full 12-month width — matches the Gantt's axis so a
 /// week sits under the bars covering it.
-const PLOT_TOTAL_DAYS: f64 = 365.0;
+const PLOT_TOTAL_DAYS: f64 = AXIS_DAYS as f64;
 
 /// Build an SVG polyline ("M x y L x y …") for one weekly series, in the plot's
 /// pixel coordinate system. Each week is placed at its mid-point day-of-year
@@ -1909,8 +1915,10 @@ fn to_gantt_bar(row: &AppPlantingRow, today_year: i32) -> Option<SlintGanttBar> 
         use std::cmp::Ordering;
         match d.year().cmp(&today_year) {
             Ordering::Less => 1,
-            Ordering::Greater => 365,
-            Ordering::Equal => usize_to_i32(d.ordinal() as usize),
+            Ordering::Greater => AXIS_DAYS,
+            // Leap years run to ordinal 366; the axis is 365 wide, so fold the
+            // extra day onto the last column for a consistent mapping (#67).
+            Ordering::Equal => usize_to_i32(d.ordinal() as usize).min(AXIS_DAYS),
         }
     };
     Some(SlintGanttBar {
