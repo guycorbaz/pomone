@@ -1322,8 +1322,6 @@ fn apply_translations(window: &MainWindow, app: &App) {
         "v{}",
         env!("CARGO_PKG_VERSION")
     )));
-    window.set_section_bed_usage_text(SharedString::from(i18n.t("section-bed-usage")));
-    window.set_bed_usage_empty_text(SharedString::from(i18n.t("bed-usage-empty")));
     window.set_bed_usage_legend_open(SharedString::from(i18n.t("bed-usage-legend-open")));
     window.set_bed_usage_legend_sheltered(SharedString::from(i18n.t("bed-usage-legend-sheltered")));
     window.set_section_season_text(SharedString::from(i18n.t("section-season")));
@@ -1721,7 +1719,9 @@ fn apply_translations(window: &MainWindow, app: &App) {
 /// y flipped so 100% sits at the top. `has-data` drives the empty state;
 /// `has-sheltered` hides the sheltered curve on farms without any.
 fn refresh_bed_usage(window: &MainWindow, app: &App, runtime: &tokio::runtime::Runtime) {
-    let usage = match runtime.block_on(async { bed_usage_series(app.repo()).await }) {
+    // Same season the home Gantt shows: the current calendar year.
+    let season_year = Local::now().date_naive().year();
+    let usage = match runtime.block_on(async { bed_usage_series(app.repo(), season_year).await }) {
         Ok(u) => u,
         Err(e) => {
             tracing::error!(error = %e, "failed to compute bed usage");

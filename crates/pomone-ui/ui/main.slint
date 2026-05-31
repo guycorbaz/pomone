@@ -40,8 +40,6 @@ export component MainWindow inherits Window {
     in property <string> welcome-text;
     in property <string> version-text;
     // Home bed-usage curve (issue #51).
-    in property <string> section-bed-usage-text;
-    in property <string> bed-usage-empty-text;
     in property <string> bed-usage-legend-open;
     in property <string> bed-usage-legend-sheltered;
     in property <string> bed-usage-open-path;
@@ -760,8 +758,6 @@ export component MainWindow inherits Window {
             // ------- Home -------
             if current-page == "home": HomePage {
                 welcome-text: welcome-text;
-                section-bed-usage-text: section-bed-usage-text;
-                bed-usage-empty-text: bed-usage-empty-text;
                 bed-usage-legend-open: bed-usage-legend-open;
                 bed-usage-legend-sheltered: bed-usage-legend-sheltered;
                 bed-usage-open-path: bed-usage-open-path;

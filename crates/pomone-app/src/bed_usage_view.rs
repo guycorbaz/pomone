@@ -12,11 +12,12 @@
 //!   (planches, greenhouse beds); excluding perennial-bearing leaves drops
 //!   orchard rows and hedges, which aren't annual beds. Empty leaves still
 //!   count — an unused bed should show as under-utilised, not vanish.
-//! * **Occupied in month _m_** = the bed carries an annual `Cycle` planting
-//!   whose occupancy window — `min(sown, transplanted, first_harvest)` →
-//!   `last_harvest` — covers any day of month _m_. Windows are projected onto a
-//!   single representative 12-month axis by month-of-year, mirroring the Crop
-//!   Map's day-of-year model (so the year itself is ignored).
+//! * **Occupied in month _m_** = the bed carries an annual `Cycle` planting of
+//!   the **current season** (its first harvest falls in `season_year`, the same
+//!   filter the home Gantt uses) whose occupancy window —
+//!   `min(sown, transplanted, first_harvest)` → `last_harvest`, clamped to the
+//!   season year — covers any day of month _m_. Aligning the filter + clamp
+//!   with the Gantt keeps the curve consistent with the bars above it.
 //! * **Sheltered** = the bed's own kind is `covered`, or any ancestor
 //!   location's kind is (a planche inside a Serre is sheltered).
 //! * **Two disjoint groups** — sheltered beds and the *other* (open-field)
@@ -69,8 +70,9 @@ struct Bed {
     occupied_months: HashSet<u32>,
 }
 
-/// Build the 12-month bed-usage series (index 0 = January) with presence flags.
-pub async fn bed_usage_series(repo: &dyn Repository) -> AppResult<BedUsage> {
+/// Build the 12-month bed-usage series (index 0 = January) with presence flags
+/// for `season_year` — the same season the home Gantt shows.
+pub async fn bed_usage_series(repo: &dyn Repository, season_year: i32) -> AppResult<BedUsage> {
     let locations = repo.location_list().await?;
     let kinds = repo.location_kind_list().await?;
     let plantings = repo.planting_list().await?;
@@ -106,7 +108,10 @@ pub async fn bed_usage_series(repo: &dyn Repository) -> AppResult<BedUsage> {
         })
         .collect();
 
-    // Fold each annual planting's occupancy months onto its bed.
+    // Fold each in-season annual planting's occupancy months onto its bed.
+    // Same filter (first harvest in `season_year`) and clamp the Gantt uses.
+    let season_start = NaiveDate::from_ymd_opt(season_year, 1, 1).unwrap_or_default();
+    let season_end = NaiveDate::from_ymd_opt(season_year, 12, 31).unwrap_or_default();
     for p in &plantings {
         if let PlantingSchedule::Cycle {
             sown_on,
@@ -115,15 +120,22 @@ pub async fn bed_usage_series(repo: &dyn Repository) -> AppResult<BedUsage> {
             last_harvest_on,
         } = p.schedule
         {
+            if first_harvest_on.year() != season_year {
+                continue;
+            }
             let Some(bed) = beds.get_mut(&p.location_id) else {
                 continue; // planting on a non-bed location — ignore.
             };
-            let start = [sown_on, transplanted_on, Some(first_harvest_on)]
+            let raw_start = [sown_on, transplanted_on, Some(first_harvest_on)]
                 .into_iter()
                 .flatten()
                 .min()
                 .unwrap_or(first_harvest_on);
-            for m in months_between(start, last_harvest_on) {
+            // Clamp the window to the season year (winter-sow before Jan, or a
+            // harvest spilling past Dec) so months stay within 1..=12.
+            let start = raw_start.max(season_start);
+            let end = last_harvest_on.min(season_end);
+            for m in months_between(start, end) {
                 bed.occupied_months.insert(m);
             }
         }
@@ -253,7 +265,7 @@ mod tests {
     #[tokio::test]
     async fn empty_farm_is_all_zero() {
         let r = repo().await;
-        let u = bed_usage_series(&r).await.unwrap();
+        let u = bed_usage_series(&r, 2026).await.unwrap();
         assert_eq!(u.points.len(), 12);
         assert!(!u.has_open_beds && !u.has_sheltered_beds);
         assert!(u
@@ -322,7 +334,7 @@ mod tests {
         add_annual(&r, variety, open.id, d(2026, 5, 1), d(2026, 7, 31)).await;
         add_annual(&r, variety, inside.id, d(2026, 2, 1), d(2026, 3, 31)).await;
 
-        let u = bed_usage_series(&r).await.unwrap();
+        let u = bed_usage_series(&r, 2026).await.unwrap();
         assert!(u.has_open_beds && u.has_sheltered_beds);
         let s = u.points;
         let at = |m: u32| s.iter().find(|p| p.month == m).unwrap();
