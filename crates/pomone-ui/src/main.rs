@@ -2609,11 +2609,15 @@ fn try_swap_backend(
             refresh_settings(window, &s);
         }
         Err(e) => {
-            let mut args = FluentArgs::new();
-            args.set("message", e.to_string());
-            window.set_settings_status_text(SharedString::from(
-                s.app.i18n().t_args("status-planting-failed", &args),
-            ));
+            let i18n = s.app.i18n();
+            let text = if matches!(e, AppError::MigrationTargetNotEmpty) {
+                i18n.t("settings-migrate-target-not-empty")
+            } else {
+                let mut args = FluentArgs::new();
+                args.set("message", e.to_string());
+                i18n.t_args("status-planting-failed", &args)
+            };
+            window.set_settings_status_text(SharedString::from(text));
             window.set_settings_status_is_error(true);
         }
     }
