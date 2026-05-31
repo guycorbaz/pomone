@@ -385,6 +385,12 @@ crop-map-split-cancel = Annuler
 error-no-planting-selected = Aucune plantation sélectionnée.
 error-location-required = Le lieu de destination est requis.
 
+## Bed-usage curve (home)
+section-bed-usage = Occupation des planches
+bed-usage-empty = Aucune planche pour le moment. Créez des lieux depuis l'écran Lieux.
+bed-usage-legend-open = Plein champ
+bed-usage-legend-sheltered = Sous abri
+
 ## Gantt timeline
 section-season = Saison
 empty-season = Aucune plantation annuelle pour cette saison. Créez-en depuis l'écran Plantations.

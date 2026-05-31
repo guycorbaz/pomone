@@ -1,6 +1,6 @@
 //! Home-page bed-usage curve (issue #51, phase B).
 //!
-//! Produces a 12-point monthly series describing how much of the farm's bed
+//! Produces a 52-point weekly series describing how much of the farm's bed
 //! area is occupied by an annual crop, with a parallel series restricted to
 //! **sheltered** beds (under cover). The home page draws the two as curves so
 //! the grower sees open-field vs greenhouse utilisation at a glance.
@@ -12,47 +12,72 @@
 //!   (planches, greenhouse beds); excluding perennial-bearing leaves drops
 //!   orchard rows and hedges, which aren't annual beds. Empty leaves still
 //!   count — an unused bed should show as under-utilised, not vanish.
-//! * **Occupied in month _m_** = the bed carries an annual `Cycle` planting
-//!   whose occupancy window — `min(sown, transplanted, first_harvest)` →
-//!   `last_harvest` — covers any day of month _m_. Windows are projected onto a
-//!   single representative 12-month axis by month-of-year, mirroring the Crop
-//!   Map's day-of-year model (so the year itself is ignored).
+//! * **Occupied in week _w_** = the bed carries an annual `Cycle` planting of
+//!   the **current season** (its first harvest falls in `season_year`, the same
+//!   filter the home Gantt uses) whose occupancy window —
+//!   `min(sown, transplanted, first_harvest)` → `last_harvest`, clamped to the
+//!   season year — covers any day of week _w_ (7-day buckets of the year).
+//!   Aligning the filter + clamp with the Gantt keeps the curve consistent
+//!   with the bars above it.
 //! * **Sheltered** = the bed's own kind is `covered`, or any ancestor
 //!   location's kind is (a planche inside a Serre is sheltered).
-//! * **Metric** = occupied bed *area* ÷ total bed area, as a percentage. The
-//!   sheltered series normalises within the sheltered subset (0 when there are
-//!   no sheltered beds).
+//! * **Two disjoint groups** — sheltered beds and the *other* (open-field)
+//!   beds. Each curve is that group's own occupancy: occupied area ÷ that
+//!   group's total area, as a percentage (0 when the group is empty). So a
+//!   farm reads them as "greenhouses are 100% full, open field is 40% full",
+//!   not one nested inside the other.
 //!
 //! Perennials are out of scope (they'd span the whole axis and swamp the
 //! seasonal signal) — see issue #51.
 
 use crate::error::AppResult;
-use chrono::{Datelike, Months, NaiveDate};
+use chrono::{Datelike, NaiveDate};
 use pomone_db::Repository;
 use pomone_domain::{Location, LocationId, LocationKindId, PlantingSchedule};
 use rust_decimal::prelude::ToPrimitive;
 use std::collections::{HashMap, HashSet};
 
-/// One month of the bed-usage curve.
+/// The bed-usage curve plus presence flags. The flags let the UI tell "no
+/// beds at all" (empty state) from "beds present but unoccupied" (flat 0%
+/// curve), and hide a group's curve when that group has no beds.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BedUsage {
+    /// 52 weekly points, week 1 first.
+    pub points: Vec<BedUsagePoint>,
+    /// Whether the farm has any open-field (non-sheltered) bed.
+    pub has_open_beds: bool,
+    /// Whether the farm has any sheltered bed.
+    pub has_sheltered_beds: bool,
+}
+
+/// One week of the bed-usage curve. The two percentages cover **disjoint**
+/// groups of beds, each normalised within its own group.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BedUsagePoint {
-    /// 1..=12.
-    pub month: u32,
-    /// Percent of total bed area occupied that month (0.0..=100.0).
-    pub all_pct: f64,
-    /// Same, restricted to sheltered beds. `0.0` when there are none.
+    /// 1..=52 (7-day buckets of the season year; the last week absorbs the
+    /// 1–2 trailing days).
+    pub week: u32,
+    /// Percent of the **open-field** (non-sheltered) bed area occupied that
+    /// week (0.0..=100.0). `0.0` when there are no open-field beds.
+    pub open_pct: f64,
+    /// Percent of the **sheltered** bed area occupied that week. `0.0` when
+    /// there are no sheltered beds.
     pub sheltered_pct: f64,
 }
+
+/// Number of weekly buckets in the series.
+const WEEKS: u32 = 52;
 
 /// Internal per-bed accumulator.
 struct Bed {
     area: f64,
     sheltered: bool,
-    occupied_months: HashSet<u32>,
+    occupied_weeks: HashSet<u32>,
 }
 
-/// Build the 12-month bed-usage series (index 0 = January).
-pub async fn bed_usage_series(repo: &dyn Repository) -> AppResult<Vec<BedUsagePoint>> {
+/// Build the 52-week bed-usage series (week 1 first) with presence flags for
+/// `season_year` — the same season the home Gantt shows.
+pub async fn bed_usage_series(repo: &dyn Repository, season_year: i32) -> AppResult<BedUsage> {
     let locations = repo.location_list().await?;
     let kinds = repo.location_kind_list().await?;
     let plantings = repo.planting_list().await?;
@@ -82,13 +107,16 @@ pub async fn bed_usage_series(repo: &dyn Repository) -> AppResult<Vec<BedUsagePo
                 Bed {
                     area,
                     sheltered,
-                    occupied_months: HashSet::new(),
+                    occupied_weeks: HashSet::new(),
                 },
             )
         })
         .collect();
 
-    // Fold each annual planting's occupancy months onto its bed.
+    // Fold each in-season annual planting's occupancy months onto its bed.
+    // Same filter (first harvest in `season_year`) and clamp the Gantt uses.
+    let season_start = NaiveDate::from_ymd_opt(season_year, 1, 1).unwrap_or_default();
+    let season_end = NaiveDate::from_ymd_opt(season_year, 12, 31).unwrap_or_default();
     for p in &plantings {
         if let PlantingSchedule::Cycle {
             sown_on,
@@ -97,44 +125,56 @@ pub async fn bed_usage_series(repo: &dyn Repository) -> AppResult<Vec<BedUsagePo
             last_harvest_on,
         } = p.schedule
         {
+            if first_harvest_on.year() != season_year {
+                continue;
+            }
             let Some(bed) = beds.get_mut(&p.location_id) else {
                 continue; // planting on a non-bed location — ignore.
             };
-            let start = [sown_on, transplanted_on, Some(first_harvest_on)]
+            let raw_start = [sown_on, transplanted_on, Some(first_harvest_on)]
                 .into_iter()
                 .flatten()
                 .min()
                 .unwrap_or(first_harvest_on);
-            for m in months_between(start, last_harvest_on) {
-                bed.occupied_months.insert(m);
+            // Clamp the window to the season year (winter-sow before Jan, or a
+            // harvest spilling past Dec) so weeks stay within 1..=52.
+            let start = raw_start.max(season_start);
+            let end = last_harvest_on.min(season_end);
+            for w in week_of_doy(start.ordinal())..=week_of_doy(end.ordinal()) {
+                bed.occupied_weeks.insert(w);
             }
         }
     }
 
-    let total_all: f64 = beds.values().map(|b| b.area).sum();
+    // Two disjoint denominators: open-field beds and sheltered beds.
+    let total_open: f64 = beds.values().filter(|b| !b.sheltered).map(|b| b.area).sum();
     let total_sheltered: f64 = beds.values().filter(|b| b.sheltered).map(|b| b.area).sum();
 
-    let series = (1..=12)
-        .map(|month| {
-            let occ_all: f64 = beds
+    let points = (1..=WEEKS)
+        .map(|week| {
+            let occ_open: f64 = beds
                 .values()
-                .filter(|b| b.occupied_months.contains(&month))
+                .filter(|b| !b.sheltered && b.occupied_weeks.contains(&week))
                 .map(|b| b.area)
                 .sum();
             let occ_sheltered: f64 = beds
                 .values()
-                .filter(|b| b.sheltered && b.occupied_months.contains(&month))
+                .filter(|b| b.sheltered && b.occupied_weeks.contains(&week))
                 .map(|b| b.area)
                 .sum();
             BedUsagePoint {
-                month,
-                all_pct: pct(occ_all, total_all),
+                week,
+                open_pct: pct(occ_open, total_open),
                 sheltered_pct: pct(occ_sheltered, total_sheltered),
             }
         })
         .collect();
 
-    Ok(series)
+    Ok(BedUsage {
+        points,
+        has_open_beds: total_open > 0.0,
+        has_sheltered_beds: total_sheltered > 0.0,
+    })
 }
 
 /// `numerator / denominator * 100`, guarding the empty-farm case.
@@ -169,22 +209,11 @@ fn is_sheltered(
     false
 }
 
-/// Set of month-of-year values (1..=12) covered by the inclusive date range
-/// `[start, end]`. Caps at all twelve once the span reaches a full year.
-fn months_between(start: NaiveDate, end: NaiveDate) -> HashSet<u32> {
-    let mut months = HashSet::new();
-    // Walk month by month from the 1st of `start`'s month through `end`.
-    let mut cur = NaiveDate::from_ymd_opt(start.year(), start.month(), 1).unwrap_or(start);
-    let mut guard = 0;
-    while cur <= end && guard < 14 {
-        months.insert(cur.month());
-        let Some(next) = cur.checked_add_months(Months::new(1)) else {
-            break;
-        };
-        cur = next;
-        guard += 1;
-    }
-    months
+/// Week bucket (1..=[`WEEKS`]) for a 1-based day-of-year. Buckets are 7 days
+/// wide; the last bucket absorbs the 1–2 trailing days of the year so the
+/// series stays a fixed 52 points.
+fn week_of_doy(doy: u32) -> u32 {
+    (((doy.saturating_sub(1)) / 7) + 1).min(WEEKS)
 }
 
 #[cfg(test)]
@@ -215,24 +244,26 @@ mod tests {
         (r, v.id)
     }
 
-    #[tokio::test]
-    async fn months_between_spans_inclusive() {
-        let m = months_between(d(2026, 3, 10), d(2026, 6, 20));
-        assert_eq!(m, [3, 4, 5, 6].into_iter().collect());
-    }
-
-    #[tokio::test]
-    async fn months_between_wraps_year_end() {
-        let m = months_between(d(2025, 11, 5), d(2026, 2, 15));
-        assert_eq!(m, [11, 12, 1, 2].into_iter().collect());
+    #[test]
+    fn week_of_doy_buckets_and_caps() {
+        assert_eq!(week_of_doy(1), 1);
+        assert_eq!(week_of_doy(7), 1);
+        assert_eq!(week_of_doy(8), 2);
+        // Day 365/366 fall in the capped final bucket, not a 53rd.
+        assert_eq!(week_of_doy(365), WEEKS);
+        assert_eq!(week_of_doy(366), WEEKS);
     }
 
     #[tokio::test]
     async fn empty_farm_is_all_zero() {
         let r = repo().await;
-        let s = bed_usage_series(&r).await.unwrap();
-        assert_eq!(s.len(), 12);
-        assert!(s.iter().all(|p| p.all_pct == 0.0 && p.sheltered_pct == 0.0));
+        let u = bed_usage_series(&r, 2026).await.unwrap();
+        assert_eq!(u.points.len(), WEEKS as usize);
+        assert!(!u.has_open_beds && !u.has_sheltered_beds);
+        assert!(u
+            .points
+            .iter()
+            .all(|p| p.open_pct == 0.0 && p.sheltered_pct == 0.0));
     }
 
     /// A bed needs a kind; grab a seeded one by name.
@@ -270,7 +301,8 @@ mod tests {
     #[tokio::test]
     async fn occupancy_splits_open_field_and_sheltered() {
         // seed_test_data adds one open leaf bed "Planche A" (25 × 0.8 = 20 m²,
-        // empty). We add two 10 m² leaves → total bed area = 40 m².
+        // empty). We add a 10 m² open bed and a 10 m² sheltered bed.
+        // Open-field group = Planche A + open = 30 m²; sheltered group = 10 m².
         let (r, variety) = repo_with_variety().await;
         let planche = kind_id(&r, "Planche").await;
         let serre = kind_id(&r, "Serre").await; // covered
@@ -294,18 +326,21 @@ mod tests {
         add_annual(&r, variety, open.id, d(2026, 5, 1), d(2026, 7, 31)).await;
         add_annual(&r, variety, inside.id, d(2026, 2, 1), d(2026, 3, 31)).await;
 
-        let s = bed_usage_series(&r).await.unwrap();
-        let at = |m: u32| s.iter().find(|p| p.month == m).unwrap();
+        let u = bed_usage_series(&r, 2026).await.unwrap();
+        assert!(u.has_open_beds && u.has_sheltered_beds);
+        let s = u.points;
+        let week_for = |m: u32, day: u32| week_of_doy(d(2026, m, day).ordinal());
+        let at = |w: u32| s.iter().find(|p| p.week == w).unwrap();
 
-        // June: only the 10 m² open bed occupied → 10/40 = 25% of all beds,
-        // 0% of the sheltered subset.
-        assert!((at(6).all_pct - 25.0).abs() < 1e-6);
-        assert!((at(6).sheltered_pct - 0.0).abs() < 1e-6);
-        // February: only the 10 m² sheltered bed → 10/40 = 25% of all beds,
-        // and it is the only sheltered bed → 100% of the sheltered subset.
-        assert!((at(2).all_pct - 25.0).abs() < 1e-6);
-        assert!((at(2).sheltered_pct - 100.0).abs() < 1e-6);
-        // September: nothing growing.
-        assert!((at(9).all_pct - 0.0).abs() < 1e-6);
+        // Mid-June: the 10 m² open bed is occupied out of the 30 m² open-field
+        // group → 33.3%; sheltered group untouched → 0%.
+        assert!((at(week_for(6, 15)).open_pct - 100.0 / 3.0).abs() < 1e-6);
+        assert!((at(week_for(6, 15)).sheltered_pct - 0.0).abs() < 1e-6);
+        // Mid-February: only the sheltered bed is occupied → open-field 0%,
+        // sheltered 100% (it is the whole sheltered group).
+        assert!((at(week_for(2, 15)).open_pct - 0.0).abs() < 1e-6);
+        assert!((at(week_for(2, 15)).sheltered_pct - 100.0).abs() < 1e-6);
+        // Mid-September: nothing growing.
+        assert!((at(week_for(9, 15)).open_pct - 0.0).abs() < 1e-6);
     }
 }
