@@ -98,10 +98,12 @@ component BedUsageChart inherits Rectangle {
         if root.has-open: Path {
             width: 100%;
             height: 100%;
+            // Viewbox matches the element's pixel extents (1:1), so the
+            // pixel-coordinate polyline from Rust isn't aspect-scaled.
             viewbox-x: 0;
             viewbox-y: 0;
-            viewbox-width: 12;
-            viewbox-height: 100;
+            viewbox-width: 12 * root.month-width / 1px;
+            viewbox-height: root.plot-height / 1px;
             commands: root.open-path;
             stroke: Palette.primary;
             stroke-width: 2px;
@@ -111,10 +113,12 @@ component BedUsageChart inherits Rectangle {
         if root.has-sheltered: Path {
             width: 100%;
             height: 100%;
+            // Viewbox matches the element's pixel extents (1:1), so the
+            // pixel-coordinate polyline from Rust isn't aspect-scaled.
             viewbox-x: 0;
             viewbox-y: 0;
-            viewbox-width: 12;
-            viewbox-height: 100;
+            viewbox-width: 12 * root.month-width / 1px;
+            viewbox-height: root.plot-height / 1px;
             commands: root.sheltered-path;
             stroke: Palette.accent;
             stroke-width: 2px;

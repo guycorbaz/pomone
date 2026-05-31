@@ -1740,19 +1740,26 @@ fn refresh_bed_usage(window: &MainWindow, app: &App, runtime: &tokio::runtime::R
     window.set_bed_usage_has_sheltered(usage.has_sheltered_beds);
 }
 
-/// Build an SVG polyline ("M x y L x y …") for one series in a 12 × 100
-/// viewbox. Points sit at the center of each month column (x = i + 0.5) so
-/// they line up with the 12 centered month labels; y is flipped (100 − pct)
-/// so higher occupancy draws higher.
+/// Pixel size of the bed-usage plot. These MUST match the `BedUsageChart`
+/// `month-width` (80px) and `plot-height` (150px) in `home.slint`: the Slint
+/// `Path` viewbox is set to these exact pixel extents so the polyline maps 1:1
+/// to the element. A viewbox in abstract month/percent units would be scaled
+/// while *preserving aspect ratio*, squishing a wide-but-short curve into a
+/// thin vertical spike — which is why we work in pixels here.
+const PLOT_MONTH_WIDTH_PX: f64 = 80.0;
+const PLOT_HEIGHT_PX: f64 = 150.0;
+
+/// Build an SVG polyline ("M x y L x y …") for one series, in the plot's pixel
+/// coordinate system. Points sit at the center of each month column
+/// (x = (i + 0.5) × month-width) to line up with the Gantt's month columns; y
+/// is flipped so 100% draws at the top.
 fn polyline_path(series: &[AppBedUsagePoint], value: impl Fn(&AppBedUsagePoint) -> f64) -> String {
     use std::fmt::Write as _;
     let mut cmds = String::new();
     for (i, point) in series.iter().enumerate() {
         #[allow(clippy::cast_precision_loss)]
-        let x = i as f64 + 0.5;
-        let y = (100.0 - value(point)).clamp(0.0, 100.0);
-        // `M` starts the polyline, `L` extends it. One decimal is plenty for a
-        // 12 × 100 viewbox.
+        let x = (i as f64 + 0.5) * PLOT_MONTH_WIDTH_PX;
+        let y = (1.0 - value(point).clamp(0.0, 100.0) / 100.0) * PLOT_HEIGHT_PX;
         let cmd = if i == 0 { 'M' } else { 'L' };
         let _ = write!(cmds, " {cmd} {x:.1} {y:.1}");
     }
