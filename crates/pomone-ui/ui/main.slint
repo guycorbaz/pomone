@@ -405,6 +405,9 @@ export component MainWindow inherits Window {
     /// per-cell pitch on each axis. Rust derives the target day index
     /// (0..41) and reschedules the task to that grid date.
     callback task-rescheduled(string, length, length, length, length);
+    /// Emitted when a read-only milestone pill is clicked on the unified
+    /// calendar. Carries the planting id; Rust routes to that planting.
+    callback task-milestone-clicked(string);
     /// Emitted when the user clicks "+ Nouvelle tâche" in the calendar
     /// header. Rust resets the form fields and switches to the task-form
     /// page in creation mode.
@@ -1092,6 +1095,7 @@ export component MainWindow inherits Window {
                 next-month => { task-next-month(); }
                 go-today => { task-go-today(); }
                 task-clicked(tid) => { task-edit-requested(tid); }
+                milestone-clicked(pid) => { task-milestone-clicked(pid); }
                 task-dropped(tid, x, y, px, py) => { task-rescheduled(tid, x, y, px, py); }
                 new-task-clicked => { task-new-requested(); }
                 manage-types-clicked => { navigate-task-types(); }

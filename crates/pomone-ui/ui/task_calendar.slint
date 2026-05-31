@@ -12,12 +12,27 @@
 import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
 import { ScrollView } from "std-widgets.slint";
 
+// One entry on the unified calendar grid — either an editable task or a
+// read-only crop-cycle milestone (issue #47). Rust decides which by setting
+// `is-milestone`; the pill renders and behaves accordingly.
 export struct TaskRow {
-    // Stringified `TaskId` — emitted on click so Rust can toggle completion.
+    // Stringified `TaskId` — emitted on click for tasks. Empty for milestones.
     task-id: string,
+    // Stringified `PlantingId` — emitted on click for milestones so the host
+    // can route to the planting. Empty for tasks.
+    planting-id: string,
+    // `true` → read-only milestone (outline style, no drag, click → planting).
+    // `false` → editable task (filled style, draggable, click → edit form).
+    is-milestone: bool,
+    // 0..7 enum index of the milestone kind (sowing, harvest…); drives the
+    // outline color. Only meaningful when `is-milestone`.
+    milestone-kind: int,
+    // Single-glyph badge shown on milestones (e.g. "■" for end-of-harvest).
+    // Empty for tasks (which use •/✓).
+    glyph: string,
     // Short text shown inside the pill ("Tomate Marmande · Semis" etc.).
     label: string,
-    // Hex color of the task's TaskType (e.g. "#3C6E47").
+    // Hex color of the task's TaskType (e.g. "#3C6E47"). Ignored for milestones.
     color: color,
     // `true` once the task carries a completed_on date. Renders with reduced
     // opacity + a checkmark glyph so users see at a glance what's done.
@@ -47,20 +62,25 @@ export struct TaskCalendarDay {
     tasks: [TaskRow],
 }
 
-// A clickable, draggable task pill.
+// A clickable pill rendering one unified-calendar entry.
 //
-// A short press-release (no movement past the threshold) is a *click* —
-// opens the task in the edit form, as before. A press-and-drag instead
-// starts a reschedule gesture: the host renders a floating ghost following
-// the cursor and, on release inside the grid, drops the task on the day
-// under the pointer. Coordinates are reported in absolute (window) space so
-// the page can hit-test against the day grid regardless of nesting.
+// **Tasks** (`is-milestone == false`): filled with the TaskType color. A short
+// press-release opens the edit form; a press-and-drag starts a reschedule
+// gesture — the host paints a floating ghost and, on release inside the grid,
+// drops the task on the day under the pointer. Coordinates are reported in
+// absolute (window) space so the page can hit-test regardless of nesting.
+//
+// **Milestones** (`is-milestone == true`): read-only crop-cycle events, drawn
+// as an outline (transparent fill, colored border by kind) to set them apart
+// from actionable tasks. A click routes to the planting; no drag.
 component TaskPill inherits Rectangle {
     in property <TaskRow> task;
     callback clicked(string);
+    // Emitted when a read-only milestone is clicked — carries the planting id.
+    callback milestone-clicked(string);
     // Emitted once the pointer has moved past the drag threshold while
     // pressed. Carries the task id + its label/color so the page can paint
-    // the ghost, plus the absolute pointer position.
+    // the ghost, plus the absolute pointer position. Tasks only.
     callback drag-started(string, string, color, length, length);
     // Pointer moved while dragging — absolute position.
     callback drag-moved(length, length);
@@ -74,11 +94,26 @@ component TaskPill inherits Rectangle {
     property <length> press-x;
     property <length> press-y;
 
+    // Outline color for milestones, mirroring the standalone calendar's
+    // per-kind palette (kept in sync with `calendar.slint`).
+    property <color> kind-color:
+          task.milestone-kind == 0 ? Palette.primary           // Sowing
+        : task.milestone-kind == 1 ? Palette.primary-hover     // Transplanting
+        : task.milestone-kind == 2 ? Palette.accent            // HarvestStart
+        : task.milestone-kind == 3 ? Palette.accent-pressed    // HarvestEnd
+        : task.milestone-kind == 4 ? Palette.primary-pressed   // Establishment
+        : task.milestone-kind == 5 ? Palette.danger            // Removal
+        : task.milestone-kind == 6 ? Palette.warning           // BudBreak
+        :                            Palette.accent-hover;      // Flowering
+
     height: 18px;
     min-width: 0;
     border-radius: Theme.radius-sm;
     clip: true;
-    background: task.color;
+    // Milestones: outline (transparent fill + colored border). Tasks: filled.
+    background: task.is-milestone ? transparent : task.color;
+    border-width: task.is-milestone ? 1px : 0;
+    border-color: root.kind-color;
     // Completed = dimmed so done items stay visible but visually retreat.
     // The dragged pill itself fades to a placeholder while the ghost flies.
     opacity: root.did-drag ? 0.3
@@ -87,10 +122,19 @@ component TaskPill inherits Rectangle {
     animate opacity { duration: Theme.transition-fast; }
 
     touch := TouchArea {
-        mouse-cursor: root.pressed ? MouseCursor.grabbing : MouseCursor.grab;
+        mouse-cursor: task.is-milestone ? MouseCursor.pointer
+                    : root.pressed ? MouseCursor.grabbing : MouseCursor.grab;
 
         pointer-event(ev) => {
             if (ev.button != PointerEventButton.left) {
+                return;
+            }
+            // Milestones are read-only: a plain click routes to the planting,
+            // no drag bookkeeping.
+            if (task.is-milestone) {
+                if (ev.kind == PointerEventKind.up) {
+                    root.milestone-clicked(task.planting-id);
+                }
                 return;
             }
             if (ev.kind == PointerEventKind.down) {
@@ -111,7 +155,8 @@ component TaskPill inherits Rectangle {
         }
 
         moved => {
-            if (!root.pressed) {
+            // No drag for read-only milestones.
+            if (task.is-milestone || !root.pressed) {
                 return;
             }
             if (!root.did-drag
@@ -133,15 +178,15 @@ component TaskPill inherits Rectangle {
             padding-right: 6px;
             spacing: 4px;
             Text {
-                text: task.completed ? "✓" : "•";
-                color: Palette.text-on-primary;
+                text: task.is-milestone ? task.glyph : (task.completed ? "✓" : "•");
+                color: task.is-milestone ? root.kind-color : Palette.text-on-primary;
                 font-size: Theme.font-size-label;
                 font-weight: Theme.font-weight-semibold;
                 vertical-alignment: center;
             }
             Text {
                 text: task.label;
-                color: Palette.text-on-primary;
+                color: task.is-milestone ? root.kind-color : Palette.text-on-primary;
                 font-size: Theme.font-size-label;
                 vertical-alignment: center;
                 overflow: elide;
@@ -191,6 +236,8 @@ component CategoryChipView inherits Rectangle {
 component DayCell inherits Rectangle {
     in property <TaskCalendarDay> day;
     callback task-clicked(string);
+    // A read-only milestone pill was clicked — carries the planting id.
+    callback milestone-clicked(string);
     // Forwarded straight up from the pills so the page owns all drag state.
     callback task-drag-started(string, string, color, length, length);
     callback task-drag-moved(length, length);
@@ -228,6 +275,7 @@ component DayCell inherits Rectangle {
                 width: parent.width;
                 height: 18px;
                 clicked(tid) => { root.task-clicked(tid); }
+                milestone-clicked(pid) => { root.milestone-clicked(pid); }
                 drag-started(id, lbl, col, x, y) => { root.task-drag-started(id, lbl, col, x, y); }
                 drag-moved(x, y) => { root.task-drag-moved(x, y); }
                 drag-ended(x, y) => { root.task-drag-ended(x, y); }
@@ -267,6 +315,9 @@ export component TaskCalendarPage inherits Rectangle {
     callback next-month();
     callback go-today();
     callback task-clicked(string);
+    // A read-only milestone pill was clicked — carries the planting id so the
+    // host can route to that planting.
+    callback milestone-clicked(string);
     callback new-task-clicked();
     callback manage-types-clicked();
     callback toggle-category(string);
@@ -406,58 +457,58 @@ export component TaskCalendarPage inherits Rectangle {
                     GridLayout {
                         spacing: Theme.space-xs;
                         Row {
-                            DayCell { day: days[0];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[1];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[2];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[3];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[4];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[5];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[6];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[0];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[1];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[2];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[3];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[4];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[5];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[6];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                         Row {
-                            DayCell { day: days[7];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[8];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[9];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[10]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[11]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[12]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[13]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[7];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[8];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[9];  min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[10]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[11]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[12]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[13]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                         Row {
-                            DayCell { day: days[14]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[15]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[16]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[17]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[18]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[19]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[20]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[14]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[15]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[16]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[17]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[18]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[19]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[20]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                         Row {
-                            DayCell { day: days[21]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[22]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[23]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[24]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[25]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[26]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[27]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[21]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[22]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[23]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[24]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[25]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[26]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[27]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                         Row {
-                            DayCell { day: days[28]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[29]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[30]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[31]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[32]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[33]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[34]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[28]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[29]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[30]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[31]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[32]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[33]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[34]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                         Row {
-                            DayCell { day: days[35]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[36]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[37]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[38]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[39]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[40]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
-                            DayCell { day: days[41]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[35]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[36]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[37]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[38]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[39]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[40]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
+                            DayCell { day: days[41]; min-height: 110px; horizontal-stretch: 1; min-width: 0; preferred-width: 0; task-clicked(tid) => { root.task-clicked(tid); } milestone-clicked(pid) => { root.milestone-clicked(pid); } task-drag-started(id, lbl, c, x, y) => { root.handle-drag-start(id, lbl, c, x, y); } task-drag-moved(x, y) => { root.track-drag(x, y); } task-drag-ended(x, y) => { root.handle-drag-end(x, y); } }
                         }
                     }
 
