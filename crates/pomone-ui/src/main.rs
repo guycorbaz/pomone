@@ -4016,6 +4016,12 @@ fn try_confirm_split(window: &MainWindow, state: &mut UiState) -> Result<(), For
 /// falls back to mid-grey so a malformed seed never crashes the UI.
 fn parse_hex_color(s: &str) -> slint::Color {
     let hex = s.strip_prefix('#').unwrap_or(s);
+    // Byte-slicing below assumes one byte per char; bail on any non-ASCII input
+    // so a multi-byte UTF-8 char can't land us on a char boundary and panic.
+    // (The domain validates colors on write, so this is purely defensive.)
+    if !hex.is_ascii() {
+        return slint::Color::from_rgb_u8(128, 128, 128);
+    }
     let (r, g, b) = match hex.len() {
         3 => (
             u8::from_str_radix(&hex[0..1], 16).map(|v| v * 17),
