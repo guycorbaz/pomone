@@ -7,6 +7,7 @@
 
 pub mod agenda_view;
 pub mod app;
+pub mod bed_usage_view;
 pub mod calendar_view;
 pub mod config;
 pub mod crop_map_view;
@@ -32,6 +33,7 @@ mod test_helpers;
 
 pub use agenda_view::{list_agenda, Agenda, AgendaRow};
 pub use app::{test_backend, App};
+pub use bed_usage_view::{bed_usage_series, BedUsagePoint};
 pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
 pub use config::{default_config_path, AppConfig, BackendConfig};
 pub use crop_map_view::{
