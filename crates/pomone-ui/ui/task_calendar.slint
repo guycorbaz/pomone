@@ -233,6 +233,42 @@ component CategoryChipView inherits Rectangle {
     }
 }
 
+// A standalone on/off chip (used for the milestone master toggle). Mirrors
+// CategoryChipView's look but is driven by a plain bool + label.
+component ToggleChip inherits Rectangle {
+    in property <string> label;
+    in property <bool> selected;
+    in property <color> tint;
+    callback clicked();
+
+    height: 28px;
+    min-width: 0;
+    border-radius: Theme.radius-md;
+    border-width: selected ? 2px : Theme.border-width;
+    border-color: selected ? tint : Palette.border;
+    background: selected ? tint : Palette.surface;
+    opacity: selected ? 1.0 : (touch.has-hover ? 0.95 : 0.55);
+    animate opacity, background, border-color { duration: Theme.transition-fast; }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+
+        HorizontalLayout {
+            padding-left: Theme.space-sm;
+            padding-right: Theme.space-sm;
+            alignment: center;
+            Text {
+                text: root.label;
+                color: root.selected ? Palette.text-on-primary : Palette.text-secondary;
+                font-size: Theme.font-size-label;
+                font-weight: root.selected ? Theme.font-weight-semibold : Theme.font-weight-medium;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
 component DayCell inherits Rectangle {
     in property <TaskCalendarDay> day;
     callback task-clicked(string);
@@ -305,11 +341,13 @@ export component TaskCalendarPage inherits Rectangle {
     in property <string> manage-types-button-text;  // "Gérer les types"
     in property <string> filter-hint-text;         // "Filtrer par type :"
     in property <string> filter-all-button-text;   // "Tout afficher"
+    in property <string> milestone-filter-label;   // "Jalons de culture"
 
     in property <[string]> weekday-labels;
     in property <[TaskCalendarDay]> days;
     in property <[TaskCategoryChip]> filter-chips;
     in property <bool> any-tasks;
+    in property <bool> show-milestones;
 
     callback prev-month();
     callback next-month();
@@ -322,6 +360,8 @@ export component TaskCalendarPage inherits Rectangle {
     callback manage-types-clicked();
     callback toggle-category(string);
     callback select-all-categories();
+    // Master toggle for the crop-cycle milestone family (second filter group).
+    callback toggle-milestones();
     // A task pill was dropped on the day grid. Carries the task id and the
     // pointer's release position relative to the grid plus the per-cell
     // pitch (cell size + spacing) on each axis, so the host resolves which
@@ -418,6 +458,19 @@ export component TaskCalendarPage inherits Rectangle {
                         for chip in filter-chips: CategoryChipView {
                             chip: chip;
                             clicked(k) => { toggle-category(k); }
+                        }
+                    }
+
+                    // Second filter group: a master toggle for the crop-cycle
+                    // milestone family (independent of the task categories).
+                    HorizontalLayout {
+                        spacing: Theme.space-sm;
+                        alignment: start;
+                        ToggleChip {
+                            label: milestone-filter-label;
+                            selected: show-milestones;
+                            tint: Palette.accent;
+                            clicked => { toggle-milestones(); }
                         }
                     }
                 }

@@ -289,6 +289,7 @@ task-calendar-hint = Click a task to edit it (date, type, state, deletion), or d
 task-calendar-new-task = + New task
 task-calendar-filter-hint = Filter by type:
 task-calendar-filter-all = Show all
+task-calendar-filter-milestones = Crop milestones
 
 ## Task form (create / edit)
 task-form-title-new = New task
