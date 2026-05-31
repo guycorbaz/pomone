@@ -16,23 +16,23 @@ use pomone_app::{
     create_crop, create_location, create_recurring_task, create_strata, create_task,
     create_task_type, create_variety, delete_strata, delete_task, delete_task_type,
     extend_series_if_needed, get_planting_detail, get_task_for_edit, get_task_type_for_edit,
-    list_agenda, list_crop_map_lanes, list_crops, list_events_in_range, list_family_options,
-    list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
-    list_planting_choices, list_planting_tasks, list_plantings, list_strata_options,
-    list_strata_rows, list_task_calendar_rows, list_task_category_options, list_task_type_options,
+    list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops, list_events_in_range,
+    list_family_options, list_location_kind_options, list_location_options, list_locations_tree,
+    list_parent_options, list_planting_choices, list_planting_tasks, list_plantings,
+    list_strata_options, list_strata_rows, list_task_category_options, list_task_type_options,
     list_task_types_admin, list_varieties_for_crop, list_variety_options,
     list_yearly_harvests_for_planting, move_planting_to_location, parse_id, recurrence_unit_str,
     reschedule_task, services, split_planting, test_backend, update_task, update_task_type,
     Agenda as AppAgenda, AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
-    CalendarEvent as AppCalendarEvent, CalendarEventKind, CropInput, CropMapBar as AppCropMapBar,
-    CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyOption, Lang,
-    LifespanKind, LocationInput, LocationKindOption, LocationListItem, LocationOption,
-    MigrationReport, ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
-    PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput,
-    StrataOption, StrataRow as AppStrataRow, TaskCalendarRow as AppTaskCalendarRow,
-    TaskCategoryOption, TaskEditForm, TaskTypeAdminRow, TaskTypeEditForm, TaskTypeOption,
-    VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow,
-    YearlyHarvestRow as AppYearlyHarvestRow,
+    CalendarEntry as AppCalendarEntry, CalendarEntryKind, CalendarEvent as AppCalendarEvent,
+    CalendarEventKind, CropInput, CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane,
+    CropRow as AppCropRow, CycleDates, FamilyOption, Lang, LifespanKind, LocationInput,
+    LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
+    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
+    PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
+    StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
+    TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption, VarietyProfileKind,
+    VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{LocationId, PlantingId, PruningSeason, RecurrenceUnit, VarietyId};
 use rust_decimal::Decimal;
@@ -1146,6 +1146,18 @@ fn main() -> Result<()> {
             if let Err(e) = refresh_task_calendar(&window, &mut s) {
                 tracing::error!(error = %e, "failed to refresh task calendar after reschedule");
             }
+        });
+    }
+    // Click on a read-only milestone pill → route to its planting (the
+    // milestone is derived from the planting's schedule, not editable here).
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_milestone_clicked(move |planting_id_str| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            open_planting_detail(&window, &mut state.borrow_mut(), &planting_id_str, "tasks");
         });
     }
     // Click on a task row in the planting-detail task list → open the same
@@ -3208,17 +3220,49 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
         Some(&filter_set)
     };
 
-    let rows: Vec<AppTaskCalendarRow> = state
+    // Unified entries = operational tasks + curated crop-cycle milestones,
+    // de-duplicated at the source (#47). The category filter applies to tasks
+    // only; milestones always show.
+    let entries: Vec<AppCalendarEntry> = state
         .runtime
         .block_on(async {
-            list_task_calendar_rows(state.app.repo(), grid_start, grid_end, filter_arg).await
+            list_calendar_entries(state.app.repo(), grid_start, grid_end, filter_arg).await
         })
-        .context("failed to load task calendar rows")?;
+        .context("failed to load unified calendar entries")?;
 
-    let mut by_date: std::collections::HashMap<NaiveDate, Vec<&AppTaskCalendarRow>> =
+    let i18n_glyphs = state.app.i18n();
+    let mut by_date: std::collections::HashMap<NaiveDate, Vec<SlintTaskRow>> =
         std::collections::HashMap::new();
-    for r in &rows {
-        by_date.entry(r.planted_on).or_default().push(r);
+    for e in &entries {
+        let row = match e.kind {
+            CalendarEntryKind::Task => SlintTaskRow {
+                task_id: SharedString::from(e.task_id.map(|id| id.to_string()).unwrap_or_default()),
+                planting_id: SharedString::from(""),
+                is_milestone: false,
+                milestone_kind: 0,
+                glyph: SharedString::from(""),
+                label: SharedString::from(e.label.clone()),
+                color: e
+                    .task_color
+                    .as_deref()
+                    .map_or_else(|| parse_hex_color("#3C6E47"), parse_hex_color),
+                completed: e.completed,
+            },
+            CalendarEntryKind::Milestone => {
+                let kind = e.milestone_kind.unwrap_or(CalendarEventKind::Sowing);
+                SlintTaskRow {
+                    task_id: SharedString::from(""),
+                    planting_id: SharedString::from(e.planting_id.clone().unwrap_or_default()),
+                    is_milestone: true,
+                    milestone_kind: kind_to_int(kind),
+                    glyph: SharedString::from(i18n_glyphs.t(kind_glyph_key(kind))),
+                    label: SharedString::from(e.label.clone()),
+                    color: parse_hex_color("#3C6E47"), // unused for milestones
+                    completed: false,
+                }
+            }
+        };
+        by_date.entry(e.date).or_default().push(row);
     }
 
     let today = Local::now().date_naive();
@@ -3234,19 +3278,7 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
         } else {
             0
         };
-        let cell_tasks: Vec<SlintTaskRow> = by_date
-            .get(&date)
-            .map(|v| {
-                v.iter()
-                    .map(|r| SlintTaskRow {
-                        task_id: SharedString::from(r.task_id.to_string()),
-                        label: SharedString::from(r.label.clone()),
-                        color: parse_hex_color(&r.color),
-                        completed: r.completed,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
+        let cell_tasks: Vec<SlintTaskRow> = by_date.remove(&date).unwrap_or_default();
         days.push(SlintTaskCalendarDay {
             day_number,
             in_current_month,
@@ -3255,7 +3287,7 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
         });
     }
     window.set_task_calendar_days(ModelRc::new(VecModel::from(days)));
-    window.set_task_calendar_any_tasks(!rows.is_empty());
+    window.set_task_calendar_any_tasks(!entries.is_empty());
 
     let i18n = state.app.i18n();
     let month_key = format!("month-{month}");
