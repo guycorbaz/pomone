@@ -39,13 +39,16 @@ export component MainWindow inherits Window {
     in property <string> title-text;
     in property <string> welcome-text;
     in property <string> version-text;
-    in property <string> section-overview-text;
-    in property <string> label-strata;
-    in property <string> label-families;
-    in property <string> label-location-kinds;
-    in property <int> count-strata;
-    in property <int> count-families;
-    in property <int> count-location-kinds;
+    // Home bed-usage curve (issue #51).
+    in property <string> section-bed-usage-text;
+    in property <string> bed-usage-empty-text;
+    in property <string> bed-usage-legend-open;
+    in property <string> bed-usage-legend-sheltered;
+    in property <string> bed-usage-open-path;
+    in property <string> bed-usage-sheltered-path;
+    in property <bool> bed-usage-has-data;
+    in property <bool> bed-usage-has-open;
+    in property <bool> bed-usage-has-sheltered;
     in property <string> language-button-text;
     in property <string> current-language-tag;
 
@@ -757,13 +760,15 @@ export component MainWindow inherits Window {
             // ------- Home -------
             if current-page == "home": HomePage {
                 welcome-text: welcome-text;
-                section-overview-text: section-overview-text;
-                label-strata: label-strata;
-                label-families: label-families;
-                label-location-kinds: label-location-kinds;
-                count-strata: count-strata;
-                count-families: count-families;
-                count-location-kinds: count-location-kinds;
+                section-bed-usage-text: section-bed-usage-text;
+                bed-usage-empty-text: bed-usage-empty-text;
+                bed-usage-legend-open: bed-usage-legend-open;
+                bed-usage-legend-sheltered: bed-usage-legend-sheltered;
+                bed-usage-open-path: bed-usage-open-path;
+                bed-usage-sheltered-path: bed-usage-sheltered-path;
+                bed-usage-has-data: bed-usage-has-data;
+                bed-usage-has-open: bed-usage-has-open;
+                bed-usage-has-sheltered: bed-usage-has-sheltered;
                 section-season-text: section-season-text;
                 empty-season-text: empty-season-text;
                 gantt-bars: gantt-bars;

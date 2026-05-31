@@ -13,8 +13,8 @@ use anyhow::{Context, Result};
 use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use fluent::FluentArgs;
 use pomone_app::{
-    create_crop, create_location, create_recurring_task, create_strata, create_task,
-    create_task_type, create_variety, delete_strata, delete_task, delete_task_type,
+    bed_usage_series, create_crop, create_location, create_recurring_task, create_strata,
+    create_task, create_task_type, create_variety, delete_strata, delete_task, delete_task_type,
     extend_series_if_needed, get_planting_detail, get_task_for_edit, get_task_type_for_edit,
     list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops, list_family_options,
     list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
@@ -24,11 +24,11 @@ use pomone_app::{
     move_planting_to_location, parse_id, recurrence_unit_str, reschedule_task, services,
     split_planting, test_backend, update_task, update_task_type, Agenda as AppAgenda,
     AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
-    CalendarEntry as AppCalendarEntry, CalendarEntryKind, CalendarEventKind, CropInput,
-    CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates,
-    FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption, LocationListItem,
-    LocationOption, MigrationReport, ParentLocationOption, PlantingChoice,
-    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
+    BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry, CalendarEntryKind,
+    CalendarEventKind, CropInput, CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane,
+    CropRow as AppCropRow, CycleDates, FamilyOption, Lang, LifespanKind, LocationInput,
+    LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
+    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
     PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
     StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
     TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption, VarietyProfileKind,
@@ -234,7 +234,7 @@ fn main() -> Result<()> {
     window.set_established_on_text(SharedString::from(today));
 
     apply_translations(&window, &state.borrow().app);
-    refresh_counts(&window, &state.borrow().app, &state.borrow().runtime);
+    refresh_bed_usage(&window, &state.borrow().app, &state.borrow().runtime);
     refresh_plantings(&window, &mut state.borrow_mut())?;
     refresh_cultures(&window, &mut state.borrow_mut())?;
     refresh_locations(&window, &mut state.borrow_mut())?;
@@ -262,7 +262,7 @@ fn main() -> Result<()> {
                 return;
             };
             let s = state.borrow();
-            refresh_counts(&window, &s.app, &s.runtime);
+            refresh_bed_usage(&window, &s.app, &s.runtime);
         });
     }
     {
@@ -497,7 +497,7 @@ fn main() -> Result<()> {
                         tracing::error!(error = %e, "failed to refresh strata after create");
                     }
                     // Counts on the home page include strata; refresh too.
-                    refresh_counts(&window, &s.app, &s.runtime);
+                    refresh_bed_usage(&window, &s.app, &s.runtime);
                 }
                 Err(e) => {
                     let (text, is_err) = render_form_error(s.app.i18n(), e);
@@ -528,7 +528,7 @@ fn main() -> Result<()> {
                     if let Err(e) = refresh_strata(&window, &mut s) {
                         tracing::error!(error = %e, "failed to refresh strata after delete");
                     }
-                    refresh_counts(&window, &s.app, &s.runtime);
+                    refresh_bed_usage(&window, &s.app, &s.runtime);
                 }
                 Err(e) => {
                     let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
@@ -1322,10 +1322,10 @@ fn apply_translations(window: &MainWindow, app: &App) {
         "v{}",
         env!("CARGO_PKG_VERSION")
     )));
-    window.set_label_strata(SharedString::from(i18n.t("label-strata-count")));
-    window.set_label_families(SharedString::from(i18n.t("label-families-count")));
-    window.set_label_location_kinds(SharedString::from(i18n.t("label-location-kinds-count")));
-    window.set_section_overview_text(SharedString::from(i18n.t("section-overview")));
+    window.set_section_bed_usage_text(SharedString::from(i18n.t("section-bed-usage")));
+    window.set_bed_usage_empty_text(SharedString::from(i18n.t("bed-usage-empty")));
+    window.set_bed_usage_legend_open(SharedString::from(i18n.t("bed-usage-legend-open")));
+    window.set_bed_usage_legend_sheltered(SharedString::from(i18n.t("bed-usage-legend-sheltered")));
     window.set_section_season_text(SharedString::from(i18n.t("section-season")));
     window.set_empty_season_text(SharedString::from(i18n.t("empty-season")));
     window.set_section_gantt_text(SharedString::from(i18n.t("section-gantt")));
@@ -1716,24 +1716,47 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_create_loc_button_text(SharedString::from(i18n.t("button-create-location")));
 }
 
-fn refresh_counts(window: &MainWindow, app: &App, runtime: &tokio::runtime::Runtime) {
-    let repo = app.repo();
-    let result = runtime.block_on(async {
-        let strata = repo.strata_list().await?;
-        let families = repo.family_list().await?;
-        let kinds = repo.location_kind_list().await?;
-        Ok::<_, pomone_db::DbError>((strata.len(), families.len(), kinds.len()))
-    });
-    match result {
-        Ok((strata, families, kinds)) => {
-            window.set_count_strata(usize_to_i32(strata));
-            window.set_count_families(usize_to_i32(families));
-            window.set_count_location_kinds(usize_to_i32(kinds));
-        }
+/// Rebuild the home page's bed-usage curve: a 12-month series turned into two
+/// SVG polyline strings (open-field + sheltered) in a 12 × 100 viewbox, with
+/// y flipped so 100% sits at the top. `has-data` drives the empty state;
+/// `has-sheltered` hides the sheltered curve on farms without any.
+fn refresh_bed_usage(window: &MainWindow, app: &App, runtime: &tokio::runtime::Runtime) {
+    let usage = match runtime.block_on(async { bed_usage_series(app.repo()).await }) {
+        Ok(u) => u,
         Err(e) => {
-            tracing::error!(error = %e, "failed to refresh counts");
+            tracing::error!(error = %e, "failed to compute bed usage");
+            return;
         }
+    };
+
+    window.set_bed_usage_open_path(SharedString::from(polyline_path(&usage.points, |p| {
+        p.open_pct
+    })));
+    window.set_bed_usage_sheltered_path(SharedString::from(polyline_path(&usage.points, |p| {
+        p.sheltered_pct
+    })));
+    window.set_bed_usage_has_data(usage.has_open_beds || usage.has_sheltered_beds);
+    window.set_bed_usage_has_open(usage.has_open_beds);
+    window.set_bed_usage_has_sheltered(usage.has_sheltered_beds);
+}
+
+/// Build an SVG polyline ("M x y L x y …") for one series in a 12 × 100
+/// viewbox. Points sit at the center of each month column (x = i + 0.5) so
+/// they line up with the 12 centered month labels; y is flipped (100 − pct)
+/// so higher occupancy draws higher.
+fn polyline_path(series: &[AppBedUsagePoint], value: impl Fn(&AppBedUsagePoint) -> f64) -> String {
+    use std::fmt::Write as _;
+    let mut cmds = String::new();
+    for (i, point) in series.iter().enumerate() {
+        #[allow(clippy::cast_precision_loss)]
+        let x = i as f64 + 0.5;
+        let y = (100.0 - value(point)).clamp(0.0, 100.0);
+        // `M` starts the polyline, `L` extends it. One decimal is plenty for a
+        // 12 × 100 viewbox.
+        let cmd = if i == 0 { 'M' } else { 'L' };
+        let _ = write!(cmds, " {cmd} {x:.1} {y:.1}");
     }
+    cmds
 }
 
 /// Snapshot of everything the Plantings screen needs on every refresh.
@@ -2541,7 +2564,7 @@ fn try_swap_backend(
             window.set_settings_status_is_error(false);
 
             // Every list-based screen now points at a different repo; reload them all.
-            refresh_counts(window, &s.app, &s.runtime);
+            refresh_bed_usage(window, &s.app, &s.runtime);
             let _ = refresh_plantings(window, &mut s);
             let _ = refresh_cultures(window, &mut s);
             let _ = refresh_locations(window, &mut s);

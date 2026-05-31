@@ -19,9 +19,11 @@
 //!   Map's day-of-year model (so the year itself is ignored).
 //! * **Sheltered** = the bed's own kind is `covered`, or any ancestor
 //!   location's kind is (a planche inside a Serre is sheltered).
-//! * **Metric** = occupied bed *area* ÷ total bed area, as a percentage. The
-//!   sheltered series normalises within the sheltered subset (0 when there are
-//!   no sheltered beds).
+//! * **Two disjoint groups** — sheltered beds and the *other* (open-field)
+//!   beds. Each curve is that group's own occupancy: occupied area ÷ that
+//!   group's total area, as a percentage (0 when the group is empty). So a
+//!   farm reads them as "greenhouses are 100% full, open field is 40% full",
+//!   not one nested inside the other.
 //!
 //! Perennials are out of scope (they'd span the whole axis and swamp the
 //! seasonal signal) — see issue #51.
@@ -33,14 +35,30 @@ use pomone_domain::{Location, LocationId, LocationKindId, PlantingSchedule};
 use rust_decimal::prelude::ToPrimitive;
 use std::collections::{HashMap, HashSet};
 
-/// One month of the bed-usage curve.
+/// The bed-usage curve plus presence flags. The flags let the UI tell "no
+/// beds at all" (empty state) from "beds present but unoccupied" (flat 0%
+/// curve), and hide a group's curve when that group has no beds.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BedUsage {
+    /// 12 monthly points, January first.
+    pub points: Vec<BedUsagePoint>,
+    /// Whether the farm has any open-field (non-sheltered) bed.
+    pub has_open_beds: bool,
+    /// Whether the farm has any sheltered bed.
+    pub has_sheltered_beds: bool,
+}
+
+/// One month of the bed-usage curve. The two percentages cover **disjoint**
+/// groups of beds, each normalised within its own group.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BedUsagePoint {
     /// 1..=12.
     pub month: u32,
-    /// Percent of total bed area occupied that month (0.0..=100.0).
-    pub all_pct: f64,
-    /// Same, restricted to sheltered beds. `0.0` when there are none.
+    /// Percent of the **open-field** (non-sheltered) bed area occupied that
+    /// month (0.0..=100.0). `0.0` when there are no open-field beds.
+    pub open_pct: f64,
+    /// Percent of the **sheltered** bed area occupied that month. `0.0` when
+    /// there are no sheltered beds.
     pub sheltered_pct: f64,
 }
 
@@ -51,8 +69,8 @@ struct Bed {
     occupied_months: HashSet<u32>,
 }
 
-/// Build the 12-month bed-usage series (index 0 = January).
-pub async fn bed_usage_series(repo: &dyn Repository) -> AppResult<Vec<BedUsagePoint>> {
+/// Build the 12-month bed-usage series (index 0 = January) with presence flags.
+pub async fn bed_usage_series(repo: &dyn Repository) -> AppResult<BedUsage> {
     let locations = repo.location_list().await?;
     let kinds = repo.location_kind_list().await?;
     let plantings = repo.planting_list().await?;
@@ -111,14 +129,15 @@ pub async fn bed_usage_series(repo: &dyn Repository) -> AppResult<Vec<BedUsagePo
         }
     }
 
-    let total_all: f64 = beds.values().map(|b| b.area).sum();
+    // Two disjoint denominators: open-field beds and sheltered beds.
+    let total_open: f64 = beds.values().filter(|b| !b.sheltered).map(|b| b.area).sum();
     let total_sheltered: f64 = beds.values().filter(|b| b.sheltered).map(|b| b.area).sum();
 
-    let series = (1..=12)
+    let points = (1..=12)
         .map(|month| {
-            let occ_all: f64 = beds
+            let occ_open: f64 = beds
                 .values()
-                .filter(|b| b.occupied_months.contains(&month))
+                .filter(|b| !b.sheltered && b.occupied_months.contains(&month))
                 .map(|b| b.area)
                 .sum();
             let occ_sheltered: f64 = beds
@@ -128,13 +147,17 @@ pub async fn bed_usage_series(repo: &dyn Repository) -> AppResult<Vec<BedUsagePo
                 .sum();
             BedUsagePoint {
                 month,
-                all_pct: pct(occ_all, total_all),
+                open_pct: pct(occ_open, total_open),
                 sheltered_pct: pct(occ_sheltered, total_sheltered),
             }
         })
         .collect();
 
-    Ok(series)
+    Ok(BedUsage {
+        points,
+        has_open_beds: total_open > 0.0,
+        has_sheltered_beds: total_sheltered > 0.0,
+    })
 }
 
 /// `numerator / denominator * 100`, guarding the empty-farm case.
@@ -230,9 +253,13 @@ mod tests {
     #[tokio::test]
     async fn empty_farm_is_all_zero() {
         let r = repo().await;
-        let s = bed_usage_series(&r).await.unwrap();
-        assert_eq!(s.len(), 12);
-        assert!(s.iter().all(|p| p.all_pct == 0.0 && p.sheltered_pct == 0.0));
+        let u = bed_usage_series(&r).await.unwrap();
+        assert_eq!(u.points.len(), 12);
+        assert!(!u.has_open_beds && !u.has_sheltered_beds);
+        assert!(u
+            .points
+            .iter()
+            .all(|p| p.open_pct == 0.0 && p.sheltered_pct == 0.0));
     }
 
     /// A bed needs a kind; grab a seeded one by name.
@@ -270,7 +297,8 @@ mod tests {
     #[tokio::test]
     async fn occupancy_splits_open_field_and_sheltered() {
         // seed_test_data adds one open leaf bed "Planche A" (25 × 0.8 = 20 m²,
-        // empty). We add two 10 m² leaves → total bed area = 40 m².
+        // empty). We add a 10 m² open bed and a 10 m² sheltered bed.
+        // Open-field group = Planche A + open = 30 m²; sheltered group = 10 m².
         let (r, variety) = repo_with_variety().await;
         let planche = kind_id(&r, "Planche").await;
         let serre = kind_id(&r, "Serre").await; // covered
@@ -294,18 +322,20 @@ mod tests {
         add_annual(&r, variety, open.id, d(2026, 5, 1), d(2026, 7, 31)).await;
         add_annual(&r, variety, inside.id, d(2026, 2, 1), d(2026, 3, 31)).await;
 
-        let s = bed_usage_series(&r).await.unwrap();
+        let u = bed_usage_series(&r).await.unwrap();
+        assert!(u.has_open_beds && u.has_sheltered_beds);
+        let s = u.points;
         let at = |m: u32| s.iter().find(|p| p.month == m).unwrap();
 
-        // June: only the 10 m² open bed occupied → 10/40 = 25% of all beds,
-        // 0% of the sheltered subset.
-        assert!((at(6).all_pct - 25.0).abs() < 1e-6);
+        // June: the 10 m² open bed is occupied out of the 30 m² open-field
+        // group → 33.3%; sheltered group untouched → 0%.
+        assert!((at(6).open_pct - 100.0 / 3.0).abs() < 1e-6);
         assert!((at(6).sheltered_pct - 0.0).abs() < 1e-6);
-        // February: only the 10 m² sheltered bed → 10/40 = 25% of all beds,
-        // and it is the only sheltered bed → 100% of the sheltered subset.
-        assert!((at(2).all_pct - 25.0).abs() < 1e-6);
+        // February: only the sheltered bed is occupied → open-field 0%,
+        // sheltered 100% (it is the whole sheltered group).
+        assert!((at(2).open_pct - 0.0).abs() < 1e-6);
         assert!((at(2).sheltered_pct - 100.0).abs() < 1e-6);
         // September: nothing growing.
-        assert!((at(9).all_pct - 0.0).abs() < 1e-6);
+        assert!((at(9).open_pct - 0.0).abs() < 1e-6);
     }
 }

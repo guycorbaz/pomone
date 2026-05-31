@@ -1,54 +1,173 @@
 // Pomone — Home (overview) page.
 //
-// Welcome blurb, a stats card (strata / families / location-kinds counts),
-// and a compact Gantt timeline of the season's annual plantings. Perennial
-// plantings are intentionally omitted from the Gantt — their multi-year
-// span doesn't fit the single-season axis (their data lives on the detail
-// page's Yearly Harvests section). Counts are pushed from Rust at startup
-// and after every persistence event.
+// Welcome blurb, a bed-usage curve over the 12-month season, and a compact
+// Gantt timeline of the season's annual plantings. The bed-usage chart draws
+// two curves — open-field vs sheltered beds — from SVG path strings the Rust
+// side computes (issue #51). Perennial plantings are intentionally omitted
+// from the Gantt; their multi-year span doesn't fit the single-season axis.
 
 import { Palette, Theme, Card, SectionHeader } from "theme.slint";
 import { Timeline, GanttBar } from "components/timeline.slint";
 
-// One row of the stats card: text label on the left, integer count on the right.
-component StatRow inherits Rectangle {
+// A small legend entry: a colored line swatch + its label.
+component LegendEntry inherits HorizontalLayout {
     in property <string> label;
-    in property <int> value;
-    height: 48px;
+    in property <color> swatch-color;
+    spacing: Theme.space-xs;
+    Rectangle {
+        width: 18px;
+        height: 3px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 1.5px;
+        background: root.swatch-color;
+    }
+    Text {
+        text: root.label;
+        color: Palette.text-secondary;
+        font-size: Theme.font-size-label;
+        vertical-alignment: center;
+    }
+}
+
+// Two-curve line chart of monthly bed occupancy. Curves arrive as SVG path
+// strings in a 12 (months) × 100 (percent) viewbox, y already flipped by Rust
+// so 100% is at the top.
+component BedUsageChart inherits VerticalLayout {
+    in property <string> open-path;
+    in property <string> sheltered-path;
+    in property <bool> has-open;
+    in property <bool> has-sheltered;
+    in property <[string]> month-labels;
+    in property <string> legend-open;
+    in property <string> legend-sheltered;
+
+    spacing: Theme.space-sm;
+
+    // Legend.
     HorizontalLayout {
-        spacing: Theme.space-md;
-        Text {
-            text: root.label;
-            color: Palette.text-primary;
-            font-size: Theme.font-size-body;
-            vertical-alignment: center;
-            horizontal-stretch: 1;
+        spacing: Theme.space-xl;
+        alignment: start;
+        if root.has-open: LegendEntry { label: root.legend-open; swatch-color: Palette.primary; }
+        if root.has-sheltered: LegendEntry {
+            label: root.legend-sheltered;
+            swatch-color: Palette.accent;
         }
-        Text {
-            text: root.value;
-            color: Palette.primary;
-            font-size: Theme.font-size-numeric;
-            font-weight: Theme.font-weight-semibold;
-            vertical-alignment: center;
-            horizontal-alignment: right;
+    }
+
+    // Plot area with a percent axis on the left.
+    HorizontalLayout {
+        spacing: Theme.space-xs;
+
+        VerticalLayout {
+            width: 32px;
+            Text {
+                text: "100%";
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+                horizontal-alignment: right;
+            }
+            Rectangle { vertical-stretch: 1; }
+            Text {
+                text: "50%";
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+                horizontal-alignment: right;
+            }
+            Rectangle { vertical-stretch: 1; }
+            Text {
+                text: "0%";
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+                horizontal-alignment: right;
+            }
+        }
+
+        plot := Rectangle {
+            height: 180px;
+            horizontal-stretch: 1;
+            background: Palette.surface-alt;
+            border-width: Theme.border-width;
+            border-color: Palette.border;
+            border-radius: Theme.radius-sm;
+            clip: true;
+
+            // Gridlines at 100 / 50 / 0 %.
+            Rectangle { y: 0; height: 1px; width: parent.width; background: Palette.border; }
+            Rectangle {
+                y: (parent.height - 1px) / 2;
+                height: 1px;
+                width: parent.width;
+                background: Palette.border;
+                opacity: 0.5;
+            }
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                width: parent.width;
+                background: Palette.border;
+            }
+
+            // Open-field curve.
+            if root.has-open: Path {
+                width: 100%;
+                height: 100%;
+                viewbox-x: 0;
+                viewbox-y: 0;
+                viewbox-width: 12;
+                viewbox-height: 100;
+                commands: root.open-path;
+                stroke: Palette.primary;
+                stroke-width: 2px;
+                fill: transparent;
+            }
+            // Sheltered curve (only when the farm has sheltered beds).
+            if root.has-sheltered: Path {
+                width: 100%;
+                height: 100%;
+                viewbox-x: 0;
+                viewbox-y: 0;
+                viewbox-width: 12;
+                viewbox-height: 100;
+                commands: root.sheltered-path;
+                stroke: Palette.accent;
+                stroke-width: 2px;
+                fill: transparent;
+            }
+        }
+    }
+
+    // Month axis, indented to line up with the plot area.
+    HorizontalLayout {
+        spacing: Theme.space-xs;
+        Rectangle { width: 32px; }
+        HorizontalLayout {
+            horizontal-stretch: 1;
+            for m in root.month-labels: Text {
+                text: m;
+                horizontal-stretch: 1;
+                min-width: 0;
+                horizontal-alignment: center;
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+            }
         }
     }
 }
 
-component Divider inherits Rectangle {
-    height: 1px;
-    background: Palette.border;
-}
-
 export component HomePage inherits VerticalLayout {
     in property <string> welcome-text;
-    in property <string> section-overview-text;
-    in property <string> label-strata;
-    in property <string> label-families;
-    in property <string> label-location-kinds;
-    in property <int> count-strata;
-    in property <int> count-families;
-    in property <int> count-location-kinds;
+
+    // Bed-usage curve (issue #51). Paths are SVG command strings built by Rust
+    // in a 12 × 100 viewbox; `has-data` is false when the farm has no beds yet.
+    in property <string> section-bed-usage-text;
+    in property <string> bed-usage-empty-text;
+    in property <string> bed-usage-legend-open;
+    in property <string> bed-usage-legend-sheltered;
+    in property <string> bed-usage-open-path;
+    in property <string> bed-usage-sheltered-path;
+    in property <bool> bed-usage-has-data;
+    in property <bool> bed-usage-has-open;
+    in property <bool> bed-usage-has-sheltered;
 
     // Gantt timeline (annual plantings of the season). Driven from Rust;
     // empty list when there are no annual plantings yet — Timeline renders
@@ -71,19 +190,30 @@ export component HomePage inherits VerticalLayout {
         wrap: word-wrap;
     }
 
+    // ----- Bed-usage curve card -----
     Card {
         VerticalLayout {
             padding: Theme.space-xl;
             spacing: Theme.space-sm;
 
-            SectionHeader { text: root.section-overview-text; }
+            SectionHeader { text: root.section-bed-usage-text; }
             Rectangle { height: Theme.space-xs; }
 
-            StatRow { label: root.label-strata; value: root.count-strata; }
-            Divider { }
-            StatRow { label: root.label-families; value: root.count-families; }
-            Divider { }
-            StatRow { label: root.label-location-kinds; value: root.count-location-kinds; }
+            if !root.bed-usage-has-data: Text {
+                text: root.bed-usage-empty-text;
+                color: Palette.text-muted;
+                font-size: Theme.font-size-body;
+                wrap: word-wrap;
+            }
+            if root.bed-usage-has-data: BedUsageChart {
+                open-path: root.bed-usage-open-path;
+                sheltered-path: root.bed-usage-sheltered-path;
+                has-open: root.bed-usage-has-open;
+                has-sheltered: root.bed-usage-has-sheltered;
+                month-labels: root.gantt-month-labels;
+                legend-open: root.bed-usage-legend-open;
+                legend-sheltered: root.bed-usage-legend-sheltered;
+            }
         }
     }
 
