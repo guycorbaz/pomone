@@ -12,7 +12,6 @@ import { Timeline, GanttBar } from "components/timeline.slint";
 import { PlantingsPage, PlantingRow } from "plantings.slint";
 import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
 import { LocationsPage, LocationItem } from "locations.slint";
-import { CalendarPage, CalendarDay, CalendarEvent } from "calendar.slint";
 import { TaskCalendarPage, TaskCalendarDay, TaskRow, TaskCategoryChip } from "task_calendar.slint";
 import { AgendaPage, AgendaRow } from "agenda.slint";
 import { TaskFormPage } from "task_form.slint";
@@ -23,7 +22,7 @@ import { StrataPage, StrataItem } from "strata.slint";
 import { SettingsPage } from "settings.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow, LocationItem, CalendarDay, CalendarEvent, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, StrataItem, GanttBar, TaskTypeAdminItem, CropMapLaneItem, CropMapBarItem, CropMapLocationOption }
+export { PlantingRow, CropRow, VarietyRow, LocationItem, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, StrataItem, GanttBar, TaskTypeAdminItem, CropMapLaneItem, CropMapBarItem, CropMapLocationOption }
 
 export component MainWindow inherits Window {
     title: "Pomone";
@@ -68,7 +67,6 @@ export component MainWindow inherits Window {
     in property <string> nav-agenda-text;
     in property <string> nav-cultures-text;
     in property <string> nav-locations-text;
-    in property <string> nav-calendar-text;
     in property <string> nav-strata-text;
     in property <string> nav-settings-text;
     in property <string> nav-crop-map-text;
@@ -81,7 +79,6 @@ export component MainWindow inherits Window {
     callback navigate-agenda();
     callback navigate-cultures();
     callback navigate-locations();
-    callback navigate-calendar();
     callback navigate-strata();
     callback navigate-settings();
     callback navigate-crop-map();
@@ -227,21 +224,6 @@ export component MainWindow inherits Window {
     in property <string> create-loc-button-text;
     callback create-location();
 
-    // ------- Calendar page state forwarded to CalendarPage -------
-    in property <string> calendar-title-text;
-    in property <string> calendar-month-label;
-    in property <string> calendar-prev-button-text;
-    in property <string> calendar-next-button-text;
-    in property <string> calendar-today-button-text;
-    in property <string> calendar-empty-state-text;
-    in property <[string]> calendar-weekday-labels;
-    in property <[CalendarDay]> calendar-days;
-    in property <[string]> calendar-kind-labels;
-    in property <bool> calendar-any-events;
-    callback prev-month();
-    callback next-month();
-    callback go-today();
-    callback calendar-event-clicked(string);
     callback planting-row-clicked(string);
 
     // ------- Planting detail page state forwarded to PlantingDetailPage -------
@@ -574,21 +556,16 @@ export component MainWindow inherits Window {
                     return accept;
                 }
                 if (event.text == "7") {
-                    root.current-page = "calendar";
-                    root.navigate-calendar();
-                    return accept;
-                }
-                if (event.text == "8") {
                     root.current-page = "strata";
                     root.navigate-strata();
                     return accept;
                 }
-                if (event.text == "9") {
+                if (event.text == "8") {
                     root.current-page = "settings";
                     root.navigate-settings();
                     return accept;
                 }
-                if (event.text == "0") {
+                if (event.text == "9") {
                     root.current-page = "crop-map";
                     root.navigate-crop-map();
                     return accept;
@@ -601,18 +578,8 @@ export component MainWindow inherits Window {
                 root.open-manual();
                 return accept;
             }
-            // Calendar arrows: Left/Right step prev/next month on either of
-            // the two month grids (harvest calendar, task calendar).
-            if (root.current-page == "calendar") {
-                if (event.text == Key.LeftArrow) {
-                    root.prev-month();
-                    return accept;
-                }
-                if (event.text == Key.RightArrow) {
-                    root.next-month();
-                    return accept;
-                }
-            }
+            // Calendar arrows: Left/Right step prev/next month on the unified
+            // calendar grid.
             if (root.current-page == "tasks") {
                 if (event.text == Key.LeftArrow) {
                     root.task-prev-month();
@@ -735,11 +702,6 @@ export component MainWindow inherits Window {
                     text: nav-locations-text;
                     selected: current-page == "locations";
                     clicked => { current-page = "locations"; navigate-locations(); }
-                }
-                NavButton {
-                    text: nav-calendar-text;
-                    selected: current-page == "calendar";
-                    clicked => { current-page = "calendar"; navigate-calendar(); }
                 }
                 NavButton {
                     text: nav-strata-text;
@@ -1056,25 +1018,7 @@ export component MainWindow inherits Window {
                 delete-strata(id) => { delete-strata(id); }
             }
 
-            // ------- Calendar -------
-            if current-page == "calendar": CalendarPage {
-                title-text: calendar-title-text;
-                month-label: calendar-month-label;
-                prev-button-text: calendar-prev-button-text;
-                next-button-text: calendar-next-button-text;
-                today-button-text: calendar-today-button-text;
-                empty-state-text: calendar-empty-state-text;
-                weekday-labels: calendar-weekday-labels;
-                days: calendar-days;
-                kind-labels: calendar-kind-labels;
-                any-events: calendar-any-events;
-                prev-month => { prev-month(); }
-                next-month => { next-month(); }
-                go-today => { go-today(); }
-                event-clicked(pid) => { calendar-event-clicked(pid); }
-            }
-
-            // ------- Task calendar -------
+            // ------- Unified calendar (tasks + crop-cycle milestones) -------
             if current-page == "tasks": TaskCalendarPage {
                 title-text: task-calendar-title-text;
                 month-label: task-calendar-month-label;
