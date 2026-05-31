@@ -12,9 +12,6 @@ nav-home = Home
 nav-plantings = Plantings
 nav-cultures = Crops
 nav-locations = Locations
-label-strata-count = Strata
-label-families-count = Families
-label-location-kinds-count = Location kinds
 label-variety = Variety
 label-location = Location
 label-sown-on = Sowing date
@@ -27,13 +24,11 @@ placeholder-date = YYYY-MM-DD
 placeholder-area = 20
 placeholder-count = 100
 plants-suffix = plants
-section-overview = Overview
 section-new-planting = New annual planting
 title-plantings = Plantings
 empty-plantings = No plantings yet. Fill in the form below to create one.
 status-planting-created = Planting created
 status-planting-failed = Creation failed: { $message }
-status-pick-variety = Pick a variety and a location before creating.
 
 ## Cultures + Varieties screen
 title-cultures = Crops and varieties
@@ -87,7 +82,6 @@ button-create-crop = Create crop
 button-create-variety = Create variety
 status-crop-created = Crop created
 status-variety-created = Variety created
-status-pick-crop-first = Pick a crop before creating a variety.
 
 ## Planting detail screen
 title-planting-detail = Planting detail
@@ -125,12 +119,9 @@ button-record-harvest = Record
 status-harvest-recorded = Harvest recorded
 
 ## Calendar screen
-nav-calendar = Calendar
-title-calendar = Calendar
 calendar-prev = ‹
 calendar-next = ›
 calendar-today = Today
-calendar-empty = No events this month.
 weekday-mon-short = Mo
 weekday-tue-short = Tu
 weekday-wed-short = We
@@ -151,21 +142,13 @@ month-10 = October
 month-11 = November
 month-12 = December
 event-sowing-glyph = S
-event-sowing-label = Sowing
 event-transplanting-glyph = T
-event-transplanting-label = Transplanting
 event-harvest-start-glyph = ▶
-event-harvest-start-label = Harvest start
 event-harvest-end-glyph = ◼
-event-harvest-end-label = Harvest end
 event-establishment-glyph = P
-event-establishment-label = Planting
 event-removal-glyph = ✕
-event-removal-label = Removal
 event-bud-break-glyph = B
-event-bud-break-label = Bud break
 event-flowering-glyph = F
-event-flowering-label = Flowering
 
 ## Settings screen
 nav-settings = Settings
@@ -289,10 +272,6 @@ confirm-delete-task = Delete this task? This cannot be undone.
 confirm-delete-task-type = Delete this task type? This cannot be undone.
 agenda-overdue-title = Overdue
 agenda-today-title = Today
-agenda-upcoming-title = Upcoming
-agenda-overdue-empty = No overdue task.
-agenda-today-empty = Nothing planned for today.
-agenda-upcoming-empty = Nothing planned in the coming days.
 
 ## Unified calendar (tasks + crop-cycle milestones)
 nav-tasks = Calendar
@@ -402,8 +381,6 @@ error-no-planting-selected = No planting selected.
 error-location-required = Destination location is required.
 
 ## Bed-usage curve (home)
-section-bed-usage = Bed usage
-bed-usage-empty = No beds yet. Add locations on the Locations screen.
 bed-usage-legend-open = Open field
 bed-usage-legend-sheltered = Under cover
 
