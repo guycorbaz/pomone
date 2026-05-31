@@ -115,8 +115,15 @@ pub async fn bed_usage_series(repo: &dyn Repository, season_year: i32) -> AppRes
 
     // Fold each in-season annual planting's occupancy months onto its bed.
     // Same filter (first harvest in `season_year`) and clamp the Gantt uses.
-    let season_start = NaiveDate::from_ymd_opt(season_year, 1, 1).unwrap_or_default();
-    let season_end = NaiveDate::from_ymd_opt(season_year, 12, 31).unwrap_or_default();
+    // A year outside chrono's range (unreachable via `Local::now`, but guarded
+    // in case `season_year` ever becomes user input) yields an empty series
+    // rather than the silent 1970 fallback `unwrap_or_default` would give.
+    let (Some(season_start), Some(season_end)) = (
+        NaiveDate::from_ymd_opt(season_year, 1, 1),
+        NaiveDate::from_ymd_opt(season_year, 12, 31),
+    ) else {
+        return Ok(empty_series());
+    };
     for p in &plantings {
         if let PlantingSchedule::Cycle {
             sown_on,
@@ -175,6 +182,22 @@ pub async fn bed_usage_series(repo: &dyn Repository, season_year: i32) -> AppRes
         has_open_beds: total_open > 0.0,
         has_sheltered_beds: total_sheltered > 0.0,
     })
+}
+
+/// A flat all-zero series with no beds — used for the degenerate out-of-range
+/// year guard.
+fn empty_series() -> BedUsage {
+    BedUsage {
+        points: (1..=WEEKS)
+            .map(|week| BedUsagePoint {
+                week,
+                open_pct: 0.0,
+                sheltered_pct: 0.0,
+            })
+            .collect(),
+        has_open_beds: false,
+        has_sheltered_beds: false,
+    }
 }
 
 /// `numerator / denominator * 100`, guarding the empty-farm case.
