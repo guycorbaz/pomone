@@ -291,6 +291,7 @@ task-calendar-hint = Cliquez sur une tâche pour la modifier (date, type, état,
 task-calendar-new-task = + Nouvelle tâche
 task-calendar-filter-hint = Filtrer par type :
 task-calendar-filter-all = Tout afficher
+task-calendar-filter-milestones = Jalons de culture
 
 ## Task form (create / edit)
 task-form-title-new = Nouvelle tâche

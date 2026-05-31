@@ -366,12 +366,15 @@ export component MainWindow inherits Window {
     in property <string> task-calendar-manage-types-button-text;
     in property <string> task-calendar-filter-hint-text;
     in property <string> task-calendar-filter-all-button-text;
+    in property <string> task-calendar-milestone-filter-label;
     in property <[TaskCategoryChip]> task-calendar-filter-chips;
     callback task-toggle-category(string);
     callback task-select-all-categories();
+    callback task-toggle-milestones();
     in property <[string]> task-calendar-weekday-labels;
     in property <[TaskCalendarDay]> task-calendar-days;
     in property <bool> task-calendar-any-tasks;
+    in property <bool> task-calendar-show-milestones;
     callback task-prev-month();
     callback task-next-month();
     callback task-go-today();
@@ -1027,10 +1030,12 @@ export component MainWindow inherits Window {
                 manage-types-button-text: task-calendar-manage-types-button-text;
                 filter-hint-text: task-calendar-filter-hint-text;
                 filter-all-button-text: task-calendar-filter-all-button-text;
+                milestone-filter-label: task-calendar-milestone-filter-label;
                 filter-chips: task-calendar-filter-chips;
                 weekday-labels: task-calendar-weekday-labels;
                 days: task-calendar-days;
                 any-tasks: task-calendar-any-tasks;
+                show-milestones: task-calendar-show-milestones;
                 prev-month => { task-prev-month(); }
                 next-month => { task-next-month(); }
                 go-today => { task-go-today(); }
@@ -1039,6 +1044,9 @@ export component MainWindow inherits Window {
                 task-dropped(tid, x, y, px, py) => { task-rescheduled(tid, x, y, px, py); }
                 new-task-clicked => { task-new-requested(); }
                 manage-types-clicked => { navigate-task-types(); }
+                toggle-category(k) => { task-toggle-category(k); }
+                select-all-categories => { task-select-all-categories(); }
+                toggle-milestones => { task-toggle-milestones(); }
             }
 
             // ------- Agenda (overdue / today / upcoming) -------

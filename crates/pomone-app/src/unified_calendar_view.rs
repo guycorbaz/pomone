@@ -71,7 +71,9 @@ pub struct CalendarEntry {
 /// the source and sorted by date.
 ///
 /// `categories` filters **tasks** the same way [`list_task_calendar_rows`]
-/// does (`None` = all, empty set = none); milestones are never filtered here.
+/// does (`None` = all, empty set = none). `show_milestones` is the master
+/// toggle for the crop-cycle milestone family: when `false`, no milestones are
+/// emitted (the two filter groups are independent).
 // The only callers (`pomone-ui` + tests) use the default `RandomState`, so
 // threading a `BuildHasher` param would add noise without buying flexibility.
 #[allow(clippy::implicit_hasher)]
@@ -80,6 +82,7 @@ pub async fn list_calendar_entries(
     from: NaiveDate,
     to: NaiveDate,
     categories: Option<&HashSet<TaskCategory>>,
+    show_milestones: bool,
 ) -> AppResult<Vec<CalendarEntry>> {
     // Tasks — reuse the existing helper for labels, colors and filtering.
     let task_rows = list_task_calendar_rows(repo, from, to, categories).await?;
@@ -98,9 +101,24 @@ pub async fn list_calendar_entries(
         })
         .collect();
 
-    // Milestones — curated so we never duplicate an auto-generated task. The
-    // cycle-vs-perennial distinction matters for `HarvestStart`, so classify
-    // each planting once.
+    // Milestones — master-toggled off entirely, else curated so we never
+    // duplicate an auto-generated task. The cycle-vs-perennial distinction
+    // matters for `HarvestStart`, so classify each planting once.
+    if show_milestones {
+        push_milestones(repo, from, to, &mut entries).await?;
+    }
+
+    entries.sort_by_key(|e| e.date);
+    Ok(entries)
+}
+
+/// Append the curated, de-duplicated crop-cycle milestones for `[from, to]`.
+async fn push_milestones(
+    repo: &dyn Repository,
+    from: NaiveDate,
+    to: NaiveDate,
+    entries: &mut Vec<CalendarEntry>,
+) -> AppResult<()> {
     let events = list_events_in_range(repo, from, to).await?;
     let is_cycle: HashMap<String, bool> = repo
         .planting_list()
@@ -131,9 +149,7 @@ pub async fn list_calendar_entries(
             milestone_kind: Some(e.kind),
         });
     }
-
-    entries.sort_by_key(|x| x.date);
-    Ok(entries)
+    Ok(())
 }
 
 /// True when a milestone of `kind` is already materialized as an
@@ -199,7 +215,7 @@ mod tests {
     async fn empty_repo_yields_no_entries() {
         let repo = fresh_repo().await;
         seed_test_data(&repo).await.unwrap();
-        let entries = list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), None)
+        let entries = list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), None, true)
             .await
             .unwrap();
         assert!(entries.is_empty());
@@ -226,7 +242,7 @@ mod tests {
         .await
         .unwrap();
 
-        let entries = list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), None)
+        let entries = list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), None, true)
             .await
             .unwrap();
 
@@ -288,9 +304,10 @@ mod tests {
         // Filter tasks down to Sow only.
         let mut only_sow = HashSet::new();
         only_sow.insert(TaskCategory::Sow);
-        let entries = list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), Some(&only_sow))
-            .await
-            .unwrap();
+        let entries =
+            list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), Some(&only_sow), true)
+                .await
+                .unwrap();
 
         // Harvest task filtered out…
         assert!(entries
@@ -303,5 +320,36 @@ mod tests {
         assert!(entries
             .iter()
             .any(|e| e.milestone_kind == Some(CalendarEventKind::HarvestEnd)));
+    }
+
+    #[tokio::test]
+    async fn milestone_master_toggle_off_drops_all_milestones() {
+        let repo = fresh_repo().await;
+        seed_test_data(&repo).await.unwrap();
+
+        let varieties = repo.variety_list().await.unwrap();
+        let locations = repo.location_list().await.unwrap();
+        let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        create_annual_planting_from_sowing(
+            &repo,
+            varieties[0].id,
+            bed.id,
+            d(2026, 3, 1),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        let entries = list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), None, false)
+            .await
+            .unwrap();
+        // Tasks remain; not a single milestone is emitted.
+        assert!(entries.iter().all(|e| e.kind == CalendarEntryKind::Task));
+        assert!(entries
+            .iter()
+            .any(|e| e.category == Some(TaskCategory::Sow)));
     }
 }

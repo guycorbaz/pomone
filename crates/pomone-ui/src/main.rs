@@ -127,6 +127,9 @@ struct UiState {
     /// every category, the calendar query runs with no filter (i.e.
     /// `None` is passed to `list_task_calendar_rows`).
     task_filter_categories: std::collections::HashSet<String>,
+    /// Master toggle for the crop-cycle milestone family on the calendar
+    /// (the second filter group). `true` = milestones shown.
+    show_milestones: bool,
     /// Stable `RecurrenceUnit` keys (`"days"` / `"weeks"` / `"months"`)
     /// parallel to the task form's recurrence-unit ComboBox model.
     task_form_recurrence_unit_keys: Vec<String>,
@@ -224,6 +227,7 @@ fn main() -> Result<()> {
         task_type_category_keys: Vec::new(),
         editing_task_type_id: String::new(),
         task_filter_categories: all_category_keys().into_iter().collect(),
+        show_milestones: true,
         task_form_recurrence_unit_keys: Vec::new(),
         crop_map_location_ids: Vec::new(),
     }));
@@ -986,6 +990,21 @@ fn main() -> Result<()> {
             }
         });
     }
+    // Toggle the crop-cycle milestone family (the second filter group).
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_task_toggle_milestones(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            s.show_milestones = !s.show_milestones;
+            if let Err(e) = refresh_task_calendar(&window, &mut s) {
+                tracing::error!(error = %e, "failed to refresh task calendar after milestone toggle");
+            }
+        });
+    }
     // Click on an existing task pill → load the task into the form and
     // switch to the task-form page in edit mode.
     {
@@ -1543,6 +1562,9 @@ fn apply_translations(window: &MainWindow, app: &App) {
     ));
     window.set_task_calendar_filter_all_button_text(SharedString::from(
         i18n.t("task-calendar-filter-all"),
+    ));
+    window.set_task_calendar_milestone_filter_label(SharedString::from(
+        i18n.t("task-calendar-filter-milestones"),
     ));
 
     // Task Types catalog
@@ -3051,11 +3073,19 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
 
     // Unified entries = operational tasks + curated crop-cycle milestones,
     // de-duplicated at the source (#47). The category filter applies to tasks
-    // only; milestones always show.
+    // only; the milestone family is governed by its own master toggle.
+    let show_milestones = state.show_milestones;
     let entries: Vec<AppCalendarEntry> = state
         .runtime
         .block_on(async {
-            list_calendar_entries(state.app.repo(), grid_start, grid_end, filter_arg).await
+            list_calendar_entries(
+                state.app.repo(),
+                grid_start,
+                grid_end,
+                filter_arg,
+                show_milestones,
+            )
+            .await
         })
         .context("failed to load unified calendar entries")?;
 
@@ -3117,6 +3147,7 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
     }
     window.set_task_calendar_days(ModelRc::new(VecModel::from(days)));
     window.set_task_calendar_any_tasks(!entries.is_empty());
+    window.set_task_calendar_show_milestones(state.show_milestones);
 
     let i18n = state.app.i18n();
     let month_key = format!("month-{month}");
