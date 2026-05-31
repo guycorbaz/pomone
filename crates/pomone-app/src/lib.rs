@@ -7,6 +7,7 @@
 
 pub mod agenda_view;
 pub mod app;
+pub mod backup;
 pub mod bed_usage_view;
 pub mod calendar_view;
 pub mod config;
@@ -33,6 +34,7 @@ mod test_helpers;
 
 pub use agenda_view::{list_agenda, AgendaRow};
 pub use app::{test_backend, App};
+pub use backup::{backup_path_for, backup_sqlite, restore_sqlite};
 pub use bed_usage_view::{bed_usage_series, BedUsage, BedUsagePoint};
 pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
 pub use config::{default_config_path, AppConfig, BackendConfig};
