@@ -1,0 +1,51 @@
+name: Release
+
+# Builds the Linux distributables (.deb + AppImage) via cargo-packager and
+# attaches them to the GitHub Release for the pushed tag. The packaging
+# metadata lives in crates/pomone-ui/Cargo.toml; its before-packaging hook
+# compiles the LaTeX user manual, so texlive + the manual's fonts are
+# installed here.
+#
+# NOTE: this workflow has not yet run end-to-end — validate it on the first
+# `v0.9.0` tag and adjust artifact paths / package deps if needed.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package-linux:
+    name: Package (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build, manual & packaging deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libfontconfig-dev pkg-config \
+            texlive-xetex texlive-latex-extra latexmk \
+            fonts-lato fonts-inconsolata
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-packager
+        run: cargo install cargo-packager --locked
+
+      - name: Build & package
+        working-directory: crates/pomone-ui
+        run: cargo packager --release --formats deb,appimage
+
+      - name: Attach artifacts to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/release/*.deb
+            target/release/*.AppImage
+          generate_release_notes: true
