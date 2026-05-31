@@ -256,6 +256,8 @@ export component MainWindow inherits Window {
     // ------- Agenda page (overdue / today / upcoming) -------
     in property <string> agenda-title-text;
     in property <string> agenda-empty-text;
+    in property <string> agenda-overdue-label;
+    in property <string> agenda-today-label;
     in property <[AgendaRow]> agenda-rows;
     callback agenda-task-clicked(string);
 
@@ -1043,6 +1045,8 @@ export component MainWindow inherits Window {
             if current-page == "agenda": AgendaPage {
                 title-text: agenda-title-text;
                 empty-text: agenda-empty-text;
+                overdue-label: agenda-overdue-label;
+                today-label: agenda-today-label;
                 rows: agenda-rows;
                 task-clicked(tid) => { agenda-task-clicked(tid); }
             }

@@ -1484,6 +1484,8 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_nav_agenda_text(SharedString::from(i18n.t("nav-agenda")));
     window.set_agenda_title_text(SharedString::from(i18n.t("title-agenda")));
     window.set_agenda_empty_text(SharedString::from(i18n.t("agenda-empty")));
+    window.set_agenda_overdue_label(SharedString::from(i18n.t("agenda-overdue-title")));
+    window.set_agenda_today_label(SharedString::from(i18n.t("agenda-today-title")));
 
     window.set_task_calendar_title_text(SharedString::from(i18n.t("title-task-calendar")));
     window.set_task_calendar_prev_button_text(SharedString::from(i18n.t("calendar-prev")));
@@ -2869,6 +2871,7 @@ fn refresh_agenda(window: &MainWindow, state: &mut UiState) -> Result<()> {
             color: parse_hex_color(&r.color),
             completed: r.completed,
             overdue: r.overdue,
+            today: r.today,
         })
         .collect();
     window.set_agenda_rows(ModelRc::new(VecModel::from(mapped)));

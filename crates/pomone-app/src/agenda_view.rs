@@ -26,8 +26,11 @@ pub struct AgendaRow {
     /// `true` if the task has a `completed_on` date set.
     pub completed: bool,
     /// `true` for a pending task whose planned date is in the past — the UI
-    /// tints the date to flag it.
+    /// shows an "overdue" badge and tints the date.
     pub overdue: bool,
+    /// `true` for a pending task planned for `today` — the UI shows a "today"
+    /// badge.
+    pub today: bool,
 }
 
 /// Build the flat task list relative to `today`, sorted newest planned date
@@ -73,6 +76,7 @@ pub async fn list_agenda(repo: &dyn Repository, today: NaiveDate) -> AppResult<V
             color: tt.color.clone(),
             completed,
             overdue: !completed && task.planned_on < today,
+            today: !completed && task.planned_on == today,
         });
     }
 
@@ -149,7 +153,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn overdue_flag_set_only_for_pending_past_tasks() {
+    async fn overdue_and_today_flags_only_for_pending_tasks() {
         let repo = SqliteRepository::in_memory().await.unwrap();
         seed_defaults(&repo).await.unwrap();
         let today = d(2026, 5, 20);
@@ -162,15 +166,22 @@ mod tests {
             Some(d(2026, 5, 16)),
         )
         .await; // completed past
+        add_task(&repo, TaskCategory::Harvest, today, None).await; // pending today
+        add_task(&repo, TaskCategory::Sow, today, Some(today)).await; // completed today
         add_task(&repo, TaskCategory::Treatment, d(2026, 5, 25), None).await; // future
 
         let rows = list_agenda(&repo, today).await.unwrap();
+
         let overdue: Vec<_> = rows
             .iter()
             .filter(|r| r.overdue)
             .map(|r| r.planned_on.clone())
             .collect();
         assert_eq!(overdue, ["2026-05-15"]);
+
+        // Exactly one "today" flag: the pending today task, not the completed one.
+        assert_eq!(rows.iter().filter(|r| r.today).count(), 1);
+        assert!(rows.iter().all(|r| !(r.today && r.overdue))); // never both
     }
 
     #[tokio::test]

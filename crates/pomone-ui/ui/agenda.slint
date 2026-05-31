@@ -15,11 +15,35 @@ export struct AgendaRow {
     color: color,
     completed: bool,
     overdue: bool,
+    today: bool,
 }
 
-// One clickable task row: colored type dot, label, planned date.
+// A small status pill (e.g. "En retard", "Aujourd'hui").
+component StatusBadge inherits Rectangle {
+    in property <string> label;
+    in property <color> tint;
+    border-radius: Theme.radius-sm;
+    background: root.tint;
+    height: 18px;
+    horizontal-stretch: 0;
+    HorizontalLayout {
+        padding-left: Theme.space-xs;
+        padding-right: Theme.space-xs;
+        Text {
+            text: root.label;
+            color: Palette.text-on-primary;
+            font-size: Theme.font-size-label;
+            font-weight: Theme.font-weight-semibold;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// One clickable task row: colored type dot, label, status badge, planned date.
 component AgendaTaskRow inherits Rectangle {
     in property <AgendaRow> task;
+    in property <string> overdue-label;
+    in property <string> today-label;
     callback clicked(string);
 
     border-radius: Theme.radius-sm;
@@ -56,6 +80,17 @@ component AgendaTaskRow inherits Rectangle {
             overflow: elide;
         }
 
+        if root.task.overdue: StatusBadge {
+            label: root.overdue-label;
+            tint: Palette.danger;
+            y: (parent.height - self.height) / 2;
+        }
+        if root.task.today: StatusBadge {
+            label: root.today-label;
+            tint: Palette.primary;
+            y: (parent.height - self.height) / 2;
+        }
+
         Text {
             text: root.task.planned-on;
             color: root.task.overdue ? Palette.danger
@@ -73,6 +108,8 @@ export component AgendaPage inherits Rectangle {
 
     in property <string> title-text;
     in property <string> empty-text;
+    in property <string> overdue-label;
+    in property <string> today-label;
     in property <[AgendaRow]> rows;
 
     callback task-clicked(string);
@@ -113,6 +150,8 @@ export component AgendaPage inherits Rectangle {
 
                     for row in root.rows: AgendaTaskRow {
                         task: row;
+                        overdue-label: root.overdue-label;
+                        today-label: root.today-label;
                         clicked(id) => { root.task-clicked(id); }
                     }
                 }
