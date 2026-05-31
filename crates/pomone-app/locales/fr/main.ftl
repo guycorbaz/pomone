@@ -262,6 +262,10 @@ error-number-invalid = Nombre invalide.
 error-positive-required = La valeur doit être strictement positive.
 error-year-required = L'année est requise.
 error-height-range = La hauteur minimale doit être inférieure ou égale à la maximale.
+error-count-positive = Le nombre doit être strictement positif.
+error-harvest-window = Le cycle doit couvrir une fenêtre de récolte non vide.
+error-date-range = Date hors de la plage autorisée.
+error-unexpected = Erreur inattendue : { $message }
 status-validation-failed = { $message }
 
 ## Help / manual
