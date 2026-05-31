@@ -281,6 +281,14 @@ status-manual-open-failed = Impossible d'ouvrir le manuel : { $message }
 nav-agenda = Tâches
 title-agenda = Tâches
 agenda-empty = Aucune tâche.
+
+## Confirmation dialog
+confirm-delete-title = Confirmer la suppression
+confirm-ok = Supprimer
+confirm-cancel = Annuler
+confirm-delete-strata = Supprimer cette strate ? Cette action est irréversible.
+confirm-delete-task = Supprimer cette tâche ? Cette action est irréversible.
+confirm-delete-task-type = Supprimer ce type de tâche ? Cette action est irréversible.
 agenda-overdue-title = En retard
 agenda-today-title = Aujourd'hui
 agenda-upcoming-title = À venir
