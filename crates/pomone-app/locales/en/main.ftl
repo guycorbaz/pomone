@@ -290,6 +290,9 @@ task-calendar-new-task = + New task
 task-calendar-filter-hint = Filter by type:
 task-calendar-filter-all = Show all
 task-calendar-filter-milestones = Crop milestones
+task-calendar-legend-task = Task
+task-calendar-legend-milestone = Milestone
+task-calendar-summary = { $tasks } tasks · { $milestones } milestones
 
 ## Task form (create / edit)
 task-form-title-new = New task

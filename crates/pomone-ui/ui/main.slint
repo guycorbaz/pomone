@@ -375,6 +375,9 @@ export component MainWindow inherits Window {
     in property <[TaskCalendarDay]> task-calendar-days;
     in property <bool> task-calendar-any-tasks;
     in property <bool> task-calendar-show-milestones;
+    in property <string> task-calendar-summary-text;
+    in property <string> task-calendar-legend-task-label;
+    in property <string> task-calendar-legend-milestone-label;
     callback task-prev-month();
     callback task-next-month();
     callback task-go-today();
@@ -1036,6 +1039,9 @@ export component MainWindow inherits Window {
                 days: task-calendar-days;
                 any-tasks: task-calendar-any-tasks;
                 show-milestones: task-calendar-show-milestones;
+                summary-text: task-calendar-summary-text;
+                legend-task-label: task-calendar-legend-task-label;
+                legend-milestone-label: task-calendar-legend-milestone-label;
                 prev-month => { task-prev-month(); }
                 next-month => { task-next-month(); }
                 go-today => { task-go-today(); }

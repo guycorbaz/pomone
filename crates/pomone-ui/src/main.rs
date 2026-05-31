@@ -1566,6 +1566,12 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_task_calendar_milestone_filter_label(SharedString::from(
         i18n.t("task-calendar-filter-milestones"),
     ));
+    window.set_task_calendar_legend_task_label(SharedString::from(
+        i18n.t("task-calendar-legend-task"),
+    ));
+    window.set_task_calendar_legend_milestone_label(SharedString::from(
+        i18n.t("task-calendar-legend-milestone"),
+    ));
 
     // Task Types catalog
     window.set_task_types_title_text(SharedString::from(i18n.t("title-task-types")));
@@ -3043,6 +3049,7 @@ fn kind_glyph_key(k: CalendarEventKind) -> &'static str {
 /// Rebuild the unified calendar's 42-cell day grid for `state.task_calendar_*`.
 /// Each cell groups [`AppCalendarEntry`]s by date: editable tasks (TaskType
 /// color) alongside read-only crop-cycle milestones (outline, by kind).
+#[allow(clippy::too_many_lines)]
 fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()> {
     let year = state.task_calendar_year;
     let month = state.task_calendar_month;
@@ -3149,10 +3156,24 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
     window.set_task_calendar_any_tasks(!entries.is_empty());
     window.set_task_calendar_show_milestones(state.show_milestones);
 
+    // Counts for the month-bar summary ("N tâches · M jalons").
+    let n_tasks = entries
+        .iter()
+        .filter(|e| e.kind == CalendarEntryKind::Task)
+        .count();
+    let n_milestones = entries.len() - n_tasks;
+
     let i18n = state.app.i18n();
     let month_key = format!("month-{month}");
     let month_name = i18n.t(&month_key);
     window.set_task_calendar_month_label(SharedString::from(format!("{month_name} {year}")));
+
+    let mut summary_args = fluent::FluentArgs::new();
+    summary_args.set("tasks", i64::try_from(n_tasks).unwrap_or(0));
+    summary_args.set("milestones", i64::try_from(n_milestones).unwrap_or(0));
+    window.set_task_calendar_summary_text(SharedString::from(
+        i18n.t_args("task-calendar-summary", &summary_args),
+    ));
 
     // Keep the chip row in sync (selected state mirrors `state.task_filter_categories`,
     // colors mirror whatever the user has set in the types catalog).
