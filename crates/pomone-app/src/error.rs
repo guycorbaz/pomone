@@ -29,6 +29,12 @@ pub enum AppError {
 
     #[error("inconsistent state: {0}")]
     Inconsistent(String),
+
+    /// The destination of a data migration already holds records. Copying the
+    /// source (whose primary keys are reused verbatim) into it would collide
+    /// and leave it partially written — so the copy is refused up front.
+    #[error("migration target is not empty")]
+    MigrationTargetNotEmpty,
 }
 
 pub type AppResult<T> = Result<T, AppError>;

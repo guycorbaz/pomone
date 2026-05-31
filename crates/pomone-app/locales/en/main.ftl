@@ -195,6 +195,7 @@ settings-migrate-warning = "Migrate data" copies every record into the new datab
 settings-test-ok = Connection successful.
 settings-save-ok = Switched database to: { $backend }
 settings-migrate-ok = Migration done into: { $backend } — { $report }
+settings-migrate-target-not-empty = The destination database already contains data. Point the migration at a fresh, empty database.
 settings-report = { $families } families · { $strata } strata · { $kinds } location kinds · { $locations } locations · { $crops } crops · { $varieties } varieties · { $plantings } plantings · { $harvests } harvests
 
 ## Strata screen

@@ -15,7 +15,7 @@
 //! Returned [`MigrationReport`] carries the count of records copied per
 //! entity so the UI can display a one-line summary.
 
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use pomone_db::Repository;
 use pomone_domain::{Location, LocationId};
 use std::collections::{HashMap, HashSet};
@@ -45,6 +45,14 @@ pub async fn copy_all(
     source: &dyn Repository,
     target: &dyn Repository,
 ) -> AppResult<MigrationReport> {
+    // Guard: the copy reuses the source's primary keys verbatim and runs
+    // without an enclosing transaction, so a non-empty target would collide
+    // mid-write and be left half-populated. Refuse before touching it — the
+    // caller's source DB stays the untouched source of truth either way.
+    if target_has_data(target).await? {
+        return Err(AppError::MigrationTargetNotEmpty);
+    }
+
     let mut report = MigrationReport::default();
 
     // 1. Independent lookup tables.
@@ -100,6 +108,19 @@ pub async fn copy_all(
     Ok(report)
 }
 
+/// True if `target` already holds any record across the catalog or data
+/// tables — i.e. it is not a fresh, unseeded schema. One cheap read per table;
+/// short-circuits on the first non-empty one.
+async fn target_has_data(target: &dyn Repository) -> AppResult<bool> {
+    Ok(!target.family_list().await?.is_empty()
+        || !target.strata_list().await?.is_empty()
+        || !target.location_kind_list().await?.is_empty()
+        || !target.location_list().await?.is_empty()
+        || !target.crop_list().await?.is_empty()
+        || !target.variety_list().await?.is_empty()
+        || !target.planting_list().await?.is_empty())
+}
+
 fn push_with_ancestors(
     loc: &Location,
     by_id: &HashMap<LocationId, Location>,
@@ -127,7 +148,8 @@ mod tests {
     use crate::test_helpers::seed_test_data;
     use chrono::NaiveDate;
     use pomone_db::{
-        seed_defaults, FamilyRepo, LocationRepo, PlantingRepo, SqliteRepository, VarietyRepo,
+        seed_defaults, CropRepo, FamilyRepo, LocationRepo, PlantingRepo, SqliteRepository,
+        VarietyRepo,
     };
     use rust_decimal_macros::dec;
 
@@ -274,6 +296,20 @@ mod tests {
         let report = copy_all(&source, &target).await.unwrap();
         assert!(report.plantings >= 1);
         assert_eq!(report.yearly_harvests, 1);
+    }
+
+    #[tokio::test]
+    async fn copy_all_refuses_a_non_empty_target() {
+        let source = seeded_repo().await;
+        seed_test_data(&source).await.unwrap();
+        // A target that already holds data (here: seeded defaults) must be
+        // rejected before any write, rather than colliding on duplicate PKs.
+        let target = seeded_repo().await;
+
+        let err = copy_all(&source, &target).await.unwrap_err();
+        assert!(matches!(err, AppError::MigrationTargetNotEmpty));
+        // Nothing from the source leaked in.
+        assert_eq!(target.crop_list().await.unwrap().len(), 0);
     }
 
     #[tokio::test]

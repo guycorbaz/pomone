@@ -197,6 +197,7 @@ settings-migrate-warning = "Migrer les données" copie toutes les données exist
 settings-test-ok = Connexion réussie.
 settings-save-ok = Base de données basculée vers : { $backend }
 settings-migrate-ok = Migration terminée vers : { $backend } — { $report }
+settings-migrate-target-not-empty = La base de destination contient déjà des données. Pointez la migration vers une base vide et neuve.
 settings-report = { $families } familles · { $strata } strates · { $kinds } types de lieux · { $locations } lieux · { $crops } cultures · { $varieties } variétés · { $plantings } plantations · { $harvests } récoltes
 
 ## Strata screen
