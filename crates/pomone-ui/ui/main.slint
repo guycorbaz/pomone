@@ -6,7 +6,7 @@
 // in-properties, keeping translations and data in a single Rust-side source
 // of truth.
 
-import { Palette, Theme, NavButton, SecondaryButton } from "theme.slint";
+import { Palette, Theme, NavButton, SecondaryButton, PrimaryButton, Card } from "theme.slint";
 import { HomePage } from "home.slint";
 import { Timeline, GanttBar } from "components/timeline.slint";
 import { PlantingsPage, PlantingRow } from "plantings.slint";
@@ -513,6 +513,16 @@ export component MainWindow inherits Window {
     callback crop-map-split-clicked(string);
     callback crop-map-split-confirm();
     callback crop-map-split-cancel();
+
+    // Shared confirmation dialog (issue #61). Rust sets the message + shows it
+    // before a destructive action; `confirm-accepted` runs the pending delete.
+    in property <bool> confirm-visible: false;
+    in property <string> confirm-title;
+    in property <string> confirm-message;
+    in property <string> confirm-ok-text;
+    in property <string> confirm-cancel-text;
+    callback confirm-accepted();
+    callback confirm-cancelled();
 
     init => {
         // Claim focus for the global shortcut scope at startup so Ctrl+1..6
@@ -1215,6 +1225,54 @@ export component MainWindow inherits Window {
                 status-text: status-text;
                 status-is-error: status-is-error;
                 create-location => { create-location(); }
+            }
+        }
+    }
+
+    // ------- Modal confirmation dialog (issue #61) -------
+    // Drawn after the focus scope so it overlays every page. The dim backdrop
+    // swallows clicks (the user must pick Cancel or Confirm).
+    if confirm-visible: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #00000077;
+
+        TouchArea { } // eat clicks on the backdrop
+
+        Card {
+            width: min(420px, parent.width - 80px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: Palette.surface;
+
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-md;
+
+                Text {
+                    text: confirm-title;
+                    color: Palette.text-primary;
+                    font-size: Theme.font-size-h2;
+                    font-weight: Theme.font-weight-bold;
+                }
+                Text {
+                    text: confirm-message;
+                    color: Palette.text-secondary;
+                    font-size: Theme.font-size-body;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    spacing: Theme.space-sm;
+                    alignment: end;
+                    SecondaryButton {
+                        text: confirm-cancel-text;
+                        clicked => { confirm-cancelled(); }
+                    }
+                    PrimaryButton {
+                        text: confirm-ok-text;
+                        clicked => { confirm-accepted(); }
+                    }
+                }
             }
         }
     }

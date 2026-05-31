@@ -279,6 +279,14 @@ status-manual-open-failed = Couldn't open the manual: { $message }
 nav-agenda = Tasks
 title-agenda = Tasks
 agenda-empty = No tasks.
+
+## Confirmation dialog
+confirm-delete-title = Confirm deletion
+confirm-ok = Delete
+confirm-cancel = Cancel
+confirm-delete-strata = Delete this stratum? This cannot be undone.
+confirm-delete-task = Delete this task? This cannot be undone.
+confirm-delete-task-type = Delete this task type? This cannot be undone.
 agenda-overdue-title = Overdue
 agenda-today-title = Today
 agenda-upcoming-title = Upcoming

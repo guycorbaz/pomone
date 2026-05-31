@@ -61,11 +61,24 @@ use generated::{
     VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
+/// A destructive action awaiting the user's confirmation in the shared dialog
+/// (issue #61). Stored on [`UiState`] between "delete requested" and the
+/// dialog's accept/cancel.
+#[derive(Clone)]
+enum PendingDelete {
+    Strata(String),
+    /// Task id (the one open in the edit form).
+    Task(String),
+    TaskType(String),
+}
+
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
 /// drives async DB calls via `Runtime::block_on` inside callbacks (SQLite
 /// queries finish in microseconds — blocking the UI thread is fine here).
 struct UiState {
     app: App,
+    /// Set when a destructive action is waiting on the confirmation dialog.
+    pending_delete: Option<PendingDelete>,
     runtime: tokio::runtime::Runtime,
     /// Stringified `VarietyId`s, parallel to the Plantings page `variety-labels`.
     variety_ids: Vec<String>,
@@ -205,6 +218,7 @@ fn main() -> Result<()> {
     let today_local = Local::now().date_naive();
     let state = Rc::new(RefCell::new(UiState {
         app,
+        pending_delete: None,
         runtime,
         variety_ids: Vec::new(),
         variety_is_annuals_plantings: Vec::new(),
@@ -519,27 +533,39 @@ fn main() -> Result<()> {
                 return;
             };
             let mut s = state.borrow_mut();
-            let result: Result<(), AppError> = s
-                .runtime
-                .block_on(async { delete_strata(s.app.repo(), &id).await });
-            match result {
-                Ok(()) => {
-                    let i18n = s.app.i18n();
-                    window.set_strata_status_text(SharedString::from(
-                        i18n.t("status-strata-deleted"),
-                    ));
-                    window.set_strata_status_is_error(false);
-                    if let Err(e) = refresh_strata(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh strata after delete");
-                    }
-                    refresh_bed_usage(&window, &s.app, &s.runtime);
-                }
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
-                    window.set_strata_status_text(text);
-                    window.set_strata_status_is_error(is_err);
-                }
+            s.pending_delete = Some(PendingDelete::Strata(id.to_string()));
+            window.set_confirm_message(SharedString::from(s.app.i18n().t("confirm-delete-strata")));
+            window.set_confirm_visible(true);
+        });
+    }
+
+    // --- Confirmation dialog: run or drop the pending destructive action ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_confirm_accepted(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            window.set_confirm_visible(false);
+            let mut s = state.borrow_mut();
+            match s.pending_delete.take() {
+                Some(PendingDelete::Strata(id)) => do_delete_strata(&window, &mut s, &id),
+                Some(PendingDelete::Task(id)) => do_delete_task(&window, &mut s, &id),
+                Some(PendingDelete::TaskType(id)) => do_delete_task_type(&window, &mut s, &id),
+                None => {}
             }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_confirm_cancelled(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            window.set_confirm_visible(false);
+            state.borrow_mut().pending_delete = None;
         });
     }
 
@@ -1169,22 +1195,9 @@ fn main() -> Result<()> {
             if task_id.is_empty() {
                 return; // shouldn't happen — Delete is hidden in create mode.
             }
-            let result = s
-                .runtime
-                .block_on(async { delete_task(s.app.repo(), &task_id).await });
-            match result {
-                Ok(()) => {
-                    let prev = s.task_form_previous_page.clone();
-                    window.set_current_page(SharedString::from(prev.clone()));
-                    refresh_after_task_form(&window, &mut s, &prev);
-                }
-                Err(e) => {
-                    let (text, is_err) =
-                        render_task_form_error(s.app.i18n(), FormError::Service(e));
-                    window.set_task_form_status_text(text);
-                    window.set_task_form_status_is_error(is_err);
-                }
-            }
+            s.pending_delete = Some(PendingDelete::Task(task_id));
+            window.set_confirm_message(SharedString::from(s.app.i18n().t("confirm-delete-task")));
+            window.set_confirm_visible(true);
         });
     }
 
@@ -1274,26 +1287,11 @@ fn main() -> Result<()> {
                 return;
             };
             let mut s = state.borrow_mut();
-            let result = s
-                .runtime
-                .block_on(async { delete_task_type(s.app.repo(), &id).await });
-            match result {
-                Ok(()) => {
-                    if let Err(e) = refresh_task_types(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh task types after delete");
-                    }
-                    // If we were editing the type that just got deleted, drop to create mode.
-                    if s.editing_task_type_id == id.as_str() {
-                        reset_task_types_form_to_create(&window, &mut s);
-                    }
-                }
-                Err(e) => {
-                    let (text, is_err) =
-                        render_task_type_form_error(s.app.i18n(), FormError::Service(e));
-                    window.set_task_types_status_text(text);
-                    window.set_task_types_status_is_error(is_err);
-                }
-            }
+            s.pending_delete = Some(PendingDelete::TaskType(id.to_string()));
+            window.set_confirm_message(SharedString::from(
+                s.app.i18n().t("confirm-delete-task-type"),
+            ));
+            window.set_confirm_visible(true);
         });
     }
 
@@ -1506,6 +1504,11 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_agenda_empty_text(SharedString::from(i18n.t("agenda-empty")));
     window.set_agenda_overdue_label(SharedString::from(i18n.t("agenda-overdue-title")));
     window.set_agenda_today_label(SharedString::from(i18n.t("agenda-today-title")));
+
+    // Shared confirmation dialog (issue #61) — static chrome.
+    window.set_confirm_title(SharedString::from(i18n.t("confirm-delete-title")));
+    window.set_confirm_ok_text(SharedString::from(i18n.t("confirm-ok")));
+    window.set_confirm_cancel_text(SharedString::from(i18n.t("confirm-cancel")));
 
     window.set_task_calendar_title_text(SharedString::from(i18n.t("title-task-calendar")));
     window.set_task_calendar_prev_button_text(SharedString::from(i18n.t("calendar-prev")));
@@ -2799,6 +2802,74 @@ fn render_task_form_error(i18n: &pomone_app::I18n, err: FormError) -> (SharedStr
         }
     };
     (SharedString::from(msg), true)
+}
+
+/// Execute a confirmed strata deletion (issue #61) — the body that used to run
+/// inline in `on_delete_strata`, now gated behind the confirmation dialog.
+fn do_delete_strata(window: &MainWindow, s: &mut UiState, id: &str) {
+    let result: Result<(), AppError> = s
+        .runtime
+        .block_on(async { delete_strata(s.app.repo(), id).await });
+    match result {
+        Ok(()) => {
+            window.set_strata_status_text(SharedString::from(
+                s.app.i18n().t("status-strata-deleted"),
+            ));
+            window.set_strata_status_is_error(false);
+            if let Err(e) = refresh_strata(window, s) {
+                tracing::error!(error = %e, "failed to refresh strata after delete");
+            }
+            refresh_bed_usage(window, &s.app, &s.runtime);
+        }
+        Err(e) => {
+            let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
+            window.set_strata_status_text(text);
+            window.set_strata_status_is_error(is_err);
+        }
+    }
+}
+
+/// Execute a confirmed task deletion (issue #61), routing back to the page the
+/// task form was opened from.
+fn do_delete_task(window: &MainWindow, s: &mut UiState, task_id: &str) {
+    let result = s
+        .runtime
+        .block_on(async { delete_task(s.app.repo(), task_id).await });
+    match result {
+        Ok(()) => {
+            let prev = s.task_form_previous_page.clone();
+            window.set_current_page(SharedString::from(prev.clone()));
+            refresh_after_task_form(window, s, &prev);
+        }
+        Err(e) => {
+            let (text, is_err) = render_task_form_error(s.app.i18n(), FormError::Service(e));
+            window.set_task_form_status_text(text);
+            window.set_task_form_status_is_error(is_err);
+        }
+    }
+}
+
+/// Execute a confirmed task-type deletion (issue #61).
+fn do_delete_task_type(window: &MainWindow, s: &mut UiState, id: &str) {
+    let result = s
+        .runtime
+        .block_on(async { delete_task_type(s.app.repo(), id).await });
+    match result {
+        Ok(()) => {
+            if let Err(e) = refresh_task_types(window, s) {
+                tracing::error!(error = %e, "failed to refresh task types after delete");
+            }
+            // If we were editing the type that just got deleted, drop to create mode.
+            if s.editing_task_type_id == id {
+                reset_task_types_form_to_create(window, s);
+            }
+        }
+        Err(e) => {
+            let (text, is_err) = render_task_type_form_error(s.app.i18n(), FormError::Service(e));
+            window.set_task_types_status_text(text);
+            window.set_task_types_status_is_error(is_err);
+        }
+    }
 }
 
 fn refresh_strata(window: &MainWindow, state: &mut UiState) -> Result<()> {
