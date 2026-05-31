@@ -11,37 +11,45 @@ use uuid::Uuid;
 #[async_trait]
 impl LocationKindRepo for MariaDbRepository {
     async fn location_kind_get(&self, id: LocationKindId) -> DbResult<Option<LocationKind>> {
-        let row = sqlx::query("SELECT id, name, description FROM location_kind WHERE id = ?")
-            .bind(id.as_uuid())
-            .fetch_optional(&self.pool)
-            .await?;
+        let row =
+            sqlx::query("SELECT id, name, description, covered FROM location_kind WHERE id = ?")
+                .bind(id.as_uuid())
+                .fetch_optional(&self.pool)
+                .await?;
         row.map(row_to_kind).transpose()
     }
 
     async fn location_kind_list(&self) -> DbResult<Vec<LocationKind>> {
-        let rows = sqlx::query("SELECT id, name, description FROM location_kind ORDER BY name")
-            .fetch_all(&self.pool)
-            .await?;
+        let rows =
+            sqlx::query("SELECT id, name, description, covered FROM location_kind ORDER BY name")
+                .fetch_all(&self.pool)
+                .await?;
         rows.into_iter().map(row_to_kind).collect()
     }
 
     async fn location_kind_create(&self, k: &LocationKind) -> DbResult<()> {
-        sqlx::query("INSERT INTO location_kind (id, name, description) VALUES (?, ?, ?)")
-            .bind(k.id.as_uuid())
-            .bind(&k.name)
-            .bind(k.description.as_deref())
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "INSERT INTO location_kind (id, name, description, covered) VALUES (?, ?, ?, ?)",
+        )
+        .bind(k.id.as_uuid())
+        .bind(&k.name)
+        .bind(k.description.as_deref())
+        .bind(k.covered)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
     async fn location_kind_update(&self, k: &LocationKind) -> DbResult<()> {
-        let result = sqlx::query("UPDATE location_kind SET name = ?, description = ? WHERE id = ?")
-            .bind(&k.name)
-            .bind(k.description.as_deref())
-            .bind(k.id.as_uuid())
-            .execute(&self.pool)
-            .await?;
+        let result = sqlx::query(
+            "UPDATE location_kind SET name = ?, description = ?, covered = ? WHERE id = ?",
+        )
+        .bind(&k.name)
+        .bind(k.description.as_deref())
+        .bind(k.covered)
+        .bind(k.id.as_uuid())
+        .execute(&self.pool)
+        .await?;
         if result.rows_affected() == 0 {
             return Err(DbError::NotFound {
                 kind: "location_kind",
@@ -72,5 +80,6 @@ fn row_to_kind(row: sqlx::mysql::MySqlRow) -> DbResult<LocationKind> {
         id: LocationKindId::from(id),
         name: row.try_get("name")?,
         description: row.try_get("description")?,
+        covered: row.try_get("covered")?,
     })
 }
