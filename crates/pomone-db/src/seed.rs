@@ -67,18 +67,22 @@ fn default_strata() -> Vec<Strata> {
 
 /// Common kinds of physical locations on a polycultural farm.
 fn default_location_kinds() -> Vec<LocationKind> {
+    // `covered` marks kinds grown under cover — only "Serre" (greenhouse /
+    // tunnel) here. It lets the home-page bed-usage curve split sheltered beds
+    // from open-field ones (issue #51).
     [
-        ("Parcelle", "parcelle de plein champ"),
-        ("Planche", "planche maraîchère"),
-        ("Serre", "serre ou tunnel"),
-        ("Verger", "ensemble d'arbres fruitiers"),
-        ("Ligne agroforestière", "rang d'agroforesterie"),
-        ("Haie", "haie bocagère ou brise-vent"),
+        ("Parcelle", "parcelle de plein champ", false),
+        ("Planche", "planche maraîchère", false),
+        ("Serre", "serre ou tunnel", true),
+        ("Verger", "ensemble d'arbres fruitiers", false),
+        ("Ligne agroforestière", "rang d'agroforesterie", false),
+        ("Haie", "haie bocagère ou brise-vent", false),
     ]
     .into_iter()
-    .map(|(name, desc)| {
+    .map(|(name, desc, covered)| {
         LocationKind::new(name, Some(desc.into()))
             .expect("static seed LocationKind is always valid")
+            .with_covered(covered)
     })
     .collect()
 }
@@ -222,5 +226,18 @@ mod tests {
             repo.strata_list().await.unwrap().len(),
             default_strata().len()
         );
+    }
+
+    #[tokio::test]
+    async fn only_serre_is_seeded_as_covered() {
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let kinds = repo.location_kind_list().await.unwrap();
+        let covered: Vec<_> = kinds
+            .iter()
+            .filter(|k| k.covered)
+            .map(|k| k.name.as_str())
+            .collect();
+        assert_eq!(covered, vec!["Serre"]);
     }
 }

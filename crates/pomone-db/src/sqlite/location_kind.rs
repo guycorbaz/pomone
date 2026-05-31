@@ -11,16 +11,17 @@ use uuid::Uuid;
 #[async_trait]
 impl LocationKindRepo for SqliteRepository {
     async fn location_kind_get(&self, id: LocationKindId) -> DbResult<Option<LocationKind>> {
-        let row = sqlx::query("SELECT id, name, description FROM location_kind WHERE id = ?1")
-            .bind(id.as_uuid())
-            .fetch_optional(&self.pool)
-            .await?;
+        let row =
+            sqlx::query("SELECT id, name, description, covered FROM location_kind WHERE id = ?1")
+                .bind(id.as_uuid())
+                .fetch_optional(&self.pool)
+                .await?;
         row.map(row_to_kind).transpose()
     }
 
     async fn location_kind_list(&self) -> DbResult<Vec<LocationKind>> {
         let rows = sqlx::query(
-            "SELECT id, name, description FROM location_kind ORDER BY name COLLATE NOCASE",
+            "SELECT id, name, description, covered FROM location_kind ORDER BY name COLLATE NOCASE",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -28,23 +29,28 @@ impl LocationKindRepo for SqliteRepository {
     }
 
     async fn location_kind_create(&self, k: &LocationKind) -> DbResult<()> {
-        sqlx::query("INSERT INTO location_kind (id, name, description) VALUES (?1, ?2, ?3)")
-            .bind(k.id.as_uuid())
-            .bind(&k.name)
-            .bind(k.description.as_deref())
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "INSERT INTO location_kind (id, name, description, covered) VALUES (?1, ?2, ?3, ?4)",
+        )
+        .bind(k.id.as_uuid())
+        .bind(&k.name)
+        .bind(k.description.as_deref())
+        .bind(k.covered)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
     async fn location_kind_update(&self, k: &LocationKind) -> DbResult<()> {
-        let result =
-            sqlx::query("UPDATE location_kind SET name = ?2, description = ?3 WHERE id = ?1")
-                .bind(k.id.as_uuid())
-                .bind(&k.name)
-                .bind(k.description.as_deref())
-                .execute(&self.pool)
-                .await?;
+        let result = sqlx::query(
+            "UPDATE location_kind SET name = ?2, description = ?3, covered = ?4 WHERE id = ?1",
+        )
+        .bind(k.id.as_uuid())
+        .bind(&k.name)
+        .bind(k.description.as_deref())
+        .bind(k.covered)
+        .execute(&self.pool)
+        .await?;
         if result.rows_affected() == 0 {
             return Err(DbError::NotFound {
                 kind: "location_kind",
@@ -75,6 +81,7 @@ fn row_to_kind(row: sqlx::sqlite::SqliteRow) -> DbResult<LocationKind> {
         id: LocationKindId::from(id),
         name: row.try_get("name")?,
         description: row.try_get("description")?,
+        covered: row.try_get("covered")?,
     })
 }
 
@@ -106,6 +113,22 @@ mod tests {
 
         repo.location_kind_delete(k.id).await.unwrap();
         assert!(repo.location_kind_get(k.id).await.unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn covered_roundtrips_through_create_and_update() {
+        let repo = fresh().await;
+        let k = LocationKind::new("Serre", None).unwrap().with_covered(true);
+        repo.location_kind_create(&k).await.unwrap();
+        assert!(repo.location_kind_get(k.id).await.unwrap().unwrap().covered);
+
+        // Toggle it back off via update.
+        let off = LocationKind {
+            covered: false,
+            ..k.clone()
+        };
+        repo.location_kind_update(&off).await.unwrap();
+        assert!(!repo.location_kind_get(k.id).await.unwrap().unwrap().covered);
     }
 
     #[tokio::test]
