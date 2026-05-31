@@ -698,10 +698,11 @@ fn main() -> Result<()> {
                         window.set_settings_status_is_error(false);
                     }
                     Err(e) => {
+                        let i18n = s.app.i18n();
                         let mut args = FluentArgs::new();
-                        args.set("message", e.to_string());
+                        args.set("message", localize_app_error(i18n, &e));
                         window.set_settings_status_text(SharedString::from(
-                            s.app.i18n().t_args("status-planting-failed", &args),
+                            i18n.t_args("status-planting-failed", &args),
                         ));
                         window.set_settings_status_is_error(true);
                     }
@@ -2610,14 +2611,11 @@ fn try_swap_backend(
         }
         Err(e) => {
             let i18n = s.app.i18n();
-            let text = if matches!(e, AppError::MigrationTargetNotEmpty) {
-                i18n.t("settings-migrate-target-not-empty")
-            } else {
-                let mut args = FluentArgs::new();
-                args.set("message", e.to_string());
-                i18n.t_args("status-planting-failed", &args)
-            };
-            window.set_settings_status_text(SharedString::from(text));
+            let mut args = FluentArgs::new();
+            args.set("message", localize_app_error(i18n, &e));
+            window.set_settings_status_text(SharedString::from(
+                i18n.t_args("status-planting-failed", &args),
+            ));
             window.set_settings_status_is_error(true);
         }
     }
@@ -2707,9 +2705,67 @@ fn validate_optional_decimal(
         .map_err(|_| FormError::Validation(i18n.t("error-number-invalid")))
 }
 
+/// Localize an [`AppError`] for display, mapping structured variants to the
+/// `error-*` Fluent keys instead of leaking the English `Display` string
+/// (issue #62). Unmapped internal errors fall back to `error-unexpected`,
+/// which still carries the raw text so nothing is lost.
+fn localize_app_error(i18n: &pomone_app::I18n, err: &AppError) -> String {
+    match err {
+        AppError::Domain(d) => localize_domain_error(i18n, d),
+        AppError::Db(_) => i18n.t("error-database"),
+        AppError::Config(message) => {
+            let mut args = FluentArgs::new();
+            args.set("message", message.clone());
+            i18n.t_args("error-config", &args)
+        }
+        AppError::NotFound { kind, id } => {
+            let mut args = FluentArgs::new();
+            args.set("kind", (*kind).to_string());
+            args.set("id", id.clone());
+            i18n.t_args("error-not-found", &args)
+        }
+        AppError::MigrationTargetNotEmpty => i18n.t("settings-migrate-target-not-empty"),
+        AppError::Inconsistent(_)
+        | AppError::Io(_)
+        | AppError::TomlSerialize(_)
+        | AppError::TomlDeserialize(_) => {
+            let mut args = FluentArgs::new();
+            args.set("message", err.to_string());
+            i18n.t_args("error-unexpected", &args)
+        }
+    }
+}
+
+/// Localize a [`pomone_domain::DomainError`]: the common validation variants
+/// map to dedicated keys; rarer structural mismatches use the generic
+/// fallback (wrapping their `Display` text).
+fn localize_domain_error(i18n: &pomone_app::I18n, err: &pomone_domain::DomainError) -> String {
+    use pomone_domain::DomainError as D;
+    match err {
+        D::EmptyName => i18n.t("error-empty-name"),
+        D::NonPositiveArea(v) => {
+            let mut args = FluentArgs::new();
+            args.set("value", v.to_string());
+            i18n.t_args("error-non-positive-area", &args)
+        }
+        D::NonPositiveCount(_) => i18n.t("error-count-positive"),
+        D::NonPositiveValue { .. } | D::NegativeValue { .. } | D::NonPositiveDaysToMaturity => {
+            i18n.t("error-positive-required")
+        }
+        D::InvertedRange { .. } => i18n.t("error-height-range"),
+        D::EmptyHarvestWindow => i18n.t("error-harvest-window"),
+        D::DateBefore { .. } | D::DateAfter { .. } | D::DateOverflow => i18n.t("error-date-range"),
+        _ => {
+            let mut args = FluentArgs::new();
+            args.set("message", err.to_string());
+            i18n.t_args("error-unexpected", &args)
+        }
+    }
+}
+
 /// Push a `FormError` onto a status banner with the appropriate Fluent
 /// template (validation errors get the no-prefix template; service errors
-/// keep the legacy "Échec :" prefix).
+/// keep the legacy "Échec :" prefix, now with a localized detail).
 fn render_form_error(i18n: &pomone_app::I18n, err: FormError) -> (SharedString, bool) {
     let msg = match err {
         FormError::Validation(text) => {
@@ -2719,7 +2775,7 @@ fn render_form_error(i18n: &pomone_app::I18n, err: FormError) -> (SharedString, 
         }
         FormError::Service(app_err) => {
             let mut args = FluentArgs::new();
-            args.set("message", app_err.to_string());
+            args.set("message", localize_app_error(i18n, &app_err));
             i18n.t_args("status-planting-failed", &args)
         }
     };
@@ -2738,7 +2794,7 @@ fn render_task_form_error(i18n: &pomone_app::I18n, err: FormError) -> (SharedStr
         }
         FormError::Service(app_err) => {
             let mut args = FluentArgs::new();
-            args.set("message", app_err.to_string());
+            args.set("message", localize_app_error(i18n, &app_err));
             i18n.t_args("status-task-failed", &args)
         }
     };
