@@ -282,9 +282,9 @@ agenda-overdue-empty = Aucune tâche en retard.
 agenda-today-empty = Rien de prévu aujourd'hui.
 agenda-upcoming-empty = Rien de prévu dans les prochains jours.
 
-## Task Calendar (shown as « Agenda »)
-nav-tasks = Agenda
-title-task-calendar = Agenda
+## Unified calendar (tasks + crop-cycle milestones)
+nav-tasks = Calendrier
+title-task-calendar = Calendrier
 task-calendar-empty = Aucune tâche planifiée ce mois-ci.
 task-calendar-hint = Cliquez sur une tâche pour la modifier (date, type, état, suppression), ou glissez-la sur un autre jour pour la reprogrammer.
 task-calendar-new-task = + Nouvelle tâche
