@@ -31,7 +31,7 @@ pub mod unified_calendar_view;
 #[cfg(test)]
 mod test_helpers;
 
-pub use agenda_view::{list_agenda, Agenda, AgendaRow};
+pub use agenda_view::{list_agenda, AgendaRow};
 pub use app::{test_backend, App};
 pub use bed_usage_view::{bed_usage_series, BedUsage, BedUsagePoint};
 pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
