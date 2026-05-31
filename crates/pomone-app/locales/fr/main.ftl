@@ -292,6 +292,9 @@ task-calendar-new-task = + Nouvelle tâche
 task-calendar-filter-hint = Filtrer par type :
 task-calendar-filter-all = Tout afficher
 task-calendar-filter-milestones = Jalons de culture
+task-calendar-legend-task = Tâche
+task-calendar-legend-milestone = Jalon
+task-calendar-summary = { $tasks } tâches · { $milestones } jalons
 
 ## Task form (create / edit)
 task-form-title-new = Nouvelle tâche
