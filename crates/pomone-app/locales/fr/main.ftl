@@ -14,9 +14,6 @@ nav-home = Accueil
 nav-plantings = Plantations
 nav-cultures = Cultures
 nav-locations = Lieux
-label-strata-count = Strates
-label-families-count = Familles
-label-location-kinds-count = Types de lieux
 label-variety = Variété
 label-location = Lieu
 label-sown-on = Date de semis
@@ -29,13 +26,11 @@ placeholder-date = AAAA-MM-JJ
 placeholder-area = 20
 placeholder-count = 100
 plants-suffix = plants
-section-overview = Aperçu
 section-new-planting = Nouvelle plantation annuelle
 title-plantings = Plantations
 empty-plantings = Aucune plantation pour l'instant. Renseignez le formulaire ci-dessous pour en créer une.
 status-planting-created = Plantation créée
 status-planting-failed = Échec de la création : { $message }
-status-pick-variety = Sélectionnez une variété et un lieu avant de créer.
 
 ## Cultures + Variétés screen
 title-cultures = Cultures et variétés
@@ -89,7 +84,6 @@ button-create-crop = Créer la culture
 button-create-variety = Créer la variété
 status-crop-created = Culture créée
 status-variety-created = Variété créée
-status-pick-crop-first = Sélectionnez une culture avant de créer une variété.
 
 ## Planting detail screen
 title-planting-detail = Détail de la plantation
@@ -127,12 +121,9 @@ button-record-harvest = Enregistrer
 status-harvest-recorded = Récolte enregistrée
 
 ## Calendar screen
-nav-calendar = Calendrier
-title-calendar = Calendrier
 calendar-prev = ‹
 calendar-next = ›
 calendar-today = Aujourd'hui
-calendar-empty = Aucun événement ce mois-ci.
 weekday-mon-short = Lu
 weekday-tue-short = Ma
 weekday-wed-short = Me
@@ -153,21 +144,13 @@ month-10 = Octobre
 month-11 = Novembre
 month-12 = Décembre
 event-sowing-glyph = S
-event-sowing-label = Semis
 event-transplanting-glyph = R
-event-transplanting-label = Repiquage
 event-harvest-start-glyph = ▶
-event-harvest-start-label = Début récolte
 event-harvest-end-glyph = ◼
-event-harvest-end-label = Fin récolte
 event-establishment-glyph = P
-event-establishment-label = Plantation
 event-removal-glyph = ✕
-event-removal-label = Arrachage
 event-bud-break-glyph = B
-event-bud-break-label = Débourrement
 event-flowering-glyph = F
-event-flowering-label = Floraison
 
 ## Settings screen
 nav-settings = Paramètres
@@ -291,10 +274,6 @@ confirm-delete-task = Supprimer cette tâche ? Cette action est irréversible.
 confirm-delete-task-type = Supprimer ce type de tâche ? Cette action est irréversible.
 agenda-overdue-title = En retard
 agenda-today-title = Aujourd'hui
-agenda-upcoming-title = À venir
-agenda-overdue-empty = Aucune tâche en retard.
-agenda-today-empty = Rien de prévu aujourd'hui.
-agenda-upcoming-empty = Rien de prévu dans les prochains jours.
 
 ## Unified calendar (tasks + crop-cycle milestones)
 nav-tasks = Calendrier
@@ -404,8 +383,6 @@ error-no-planting-selected = Aucune plantation sélectionnée.
 error-location-required = Le lieu de destination est requis.
 
 ## Bed-usage curve (home)
-section-bed-usage = Occupation des planches
-bed-usage-empty = Aucune planche pour le moment. Créez des lieux depuis l'écran Lieux.
 bed-usage-legend-open = Plein champ
 bed-usage-legend-sheltered = Sous abri
 
