@@ -284,20 +284,31 @@ fn main() -> Result<()> {
         });
     }
     {
-        // Open the bundled user manual PDF. find_manual_path tries the
-        // standard install locations + a dev-mode fallback; if everything
-        // misses we just log — there's no global status banner yet.
-        window.on_open_manual(move || match find_manual_path() {
-            Some(path) => {
+        // Open the bundled user manual PDF. find_manual_path tries the standard
+        // install locations + a dev-mode fallback; the outcome is surfaced in
+        // the global status banner so a missing PDF isn't a silent no-op (#66).
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_open_manual(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let s = state.borrow();
+            let i18n = s.app.i18n();
+            let (key, is_err) = if let Some(path) = find_manual_path() {
                 if let Err(e) = open::that_detached(&path) {
                     tracing::warn!(error = %e, path = %path.display(), "failed to open manual");
+                    ("status-manual-open-failed", true)
                 } else {
                     tracing::info!(path = %path.display(), "opened user manual");
+                    ("status-manual-opened", false)
                 }
-            }
-            None => {
+            } else {
                 tracing::warn!("user manual PDF not found in any standard location");
-            }
+                ("status-manual-not-found", true)
+            };
+            window.set_status_text(SharedString::from(i18n.t(key)));
+            window.set_status_is_error(is_err);
         });
     }
     {
@@ -630,6 +641,12 @@ fn main() -> Result<()> {
                 .block_on(async { move_planting_to_location(s.app.repo(), &pid, &lid).await });
             if let Err(e) = result {
                 tracing::error!(error = %e, "failed to move planting");
+                let mut args = FluentArgs::new();
+                args.set("message", localize_app_error(s.app.i18n(), &e));
+                window.set_status_text(SharedString::from(
+                    s.app.i18n().t_args("status-planting-failed", &args),
+                ));
+                window.set_status_is_error(true);
                 return;
             }
             if let Err(e) = refresh_crop_map(&window, &mut s) {

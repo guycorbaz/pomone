@@ -13,7 +13,7 @@
 use crate::error::{AppError, AppResult};
 use crate::plantings_view::parse_id;
 use crate::tasks_view::{category_from_str, category_str};
-use pomone_db::{DbError, Repository};
+use pomone_db::Repository;
 use pomone_domain::{TaskCategory, TaskType, TaskTypeId};
 use std::collections::HashSet;
 
@@ -163,7 +163,10 @@ pub async fn delete_task_type(repo: &dyn Repository, id_str: &str) -> AppResult<
     let id: TaskTypeId = parse_id(id_str)?;
     match repo.task_type_delete(id).await {
         Ok(()) => Ok(()),
-        Err(DbError::Sqlx(_)) => Err(AppError::Inconsistent(
+        // Only a foreign-key violation means "still referenced by tasks"; any
+        // other DB error is a real fault and must surface as such rather than
+        // being mislabeled as "in use".
+        Err(e) if e.is_foreign_key_violation() => Err(AppError::Inconsistent(
             "task_type_in_use".to_owned(), // UI re-keys via Fluent
         )),
         Err(other) => Err(AppError::Db(other)),
