@@ -1,9 +1,12 @@
 //! Pomone admin/debug CLI binary entry point.
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use chrono::Local;
 use clap::Parser;
-use pomone_app::{seed_demo_data, App, AppConfig, BackendConfig};
+use pomone_app::{
+    backup_path_for, backup_sqlite, restore_sqlite, seed_demo_data, App, AppConfig, BackendConfig,
+};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(name = "pomone-cli", version, about = "Pomone admin/debug tools")]
@@ -21,6 +24,20 @@ enum Command {
     /// task series). Bails out if the database already contains any
     /// crop — we don't want to scramble a populated database.
     SeedDemo,
+    /// Snapshot the SQLite database to a timestamped `.bak` file (a plain
+    /// file copy). Take it while the app is closed. SQLite backend only.
+    Backup {
+        /// Directory to write the backup into (default: next to the database).
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Restore the SQLite database from a backup file, replacing the current
+    /// one. The current database is first snapshotted to `<db>.pre-restore.bak`.
+    /// SQLite backend only; run while the app is closed.
+    Restore {
+        /// Path to the `.bak` file to restore.
+        file: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -34,7 +51,53 @@ fn main() -> Result<()> {
             Ok(())
         }
         Some(Command::SeedDemo) => seed_demo(),
+        Some(Command::Backup { output }) => backup(output),
+        Some(Command::Restore { file }) => restore(file),
     }
+}
+
+/// Resolve the SQLite database path from the active config, or bail with a
+/// clear message when the backend is MariaDB (use the server's native tools).
+fn sqlite_db_path(config: &AppConfig) -> Result<PathBuf> {
+    match &config.backend {
+        BackendConfig::Sqlite { path } => Ok(path.clone()),
+        BackendConfig::Mariadb { .. } => bail!(
+            "backup/restore is only supported for the SQLite backend; \
+             use your MariaDB server's native tools (e.g. mysqldump)"
+        ),
+    }
+}
+
+fn backup(output: Option<PathBuf>) -> Result<()> {
+    let config = AppConfig::load_or_default().context("failed to load Pomone config")?;
+    let db_path = sqlite_db_path(&config)?;
+    let stamp = Local::now().format("%Y-%m-%d_%H%M%S").to_string();
+    let dest = match output {
+        Some(dir) => {
+            let name = db_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("pomone.sqlite");
+            dir.join(format!("{name}.{stamp}.bak"))
+        }
+        None => backup_path_for(&db_path, &stamp),
+    };
+    backup_sqlite(&db_path, &dest).context("backup failed")?;
+    println!("Backup written to {}", dest.display());
+    Ok(())
+}
+
+fn restore(file: PathBuf) -> Result<()> {
+    let config = AppConfig::load_or_default().context("failed to load Pomone config")?;
+    let db_path = sqlite_db_path(&config)?;
+    let safety = restore_sqlite(&file, &db_path).context("restore failed")?;
+    println!(
+        "Restored {} → {}\nPrevious database saved to {}",
+        file.display(),
+        db_path.display(),
+        safety.display()
+    );
+    Ok(())
 }
 
 fn seed_demo() -> Result<()> {
