@@ -11,7 +11,7 @@
 
 use crate::error::{AppError, AppResult};
 use crate::plantings_view::parse_id;
-use chrono::{Datelike, NaiveDate};
+use chrono::{Months, NaiveDate};
 use pomone_db::Repository;
 use pomone_domain::{
     PlantingId, RecurrenceRule, RecurrenceUnit, Task, TaskCategory, TaskId, TaskSeries,
@@ -286,8 +286,14 @@ fn recurrence_unit_from(key: &str) -> Option<RecurrenceUnit> {
 /// Rolling horizon used to cap open-ended series (no `end_on`). One year
 /// past the supplied "today" — enough to keep the calendar populated for
 /// the foreseeable usage horizon without exploding row counts.
+///
+/// Uses `checked_add_months`, which clamps an overflowing day to the last day
+/// of the target month (so a leap-day "today" like 2024-02-29 maps to
+/// 2025-02-28). The naive `from_ymd_opt(year+1, month, day)` it replaced
+/// returned `None` on a leap day and collapsed the horizon to `today`,
+/// silently halting occurrence materialization for that day (issue #60).
 fn extend_horizon(today: NaiveDate) -> NaiveDate {
-    NaiveDate::from_ymd_opt(today.year() + 1, today.month(), today.day()).unwrap_or(today)
+    today.checked_add_months(Months::new(12)).unwrap_or(today)
 }
 
 /// Create a new recurring task series and materialize every occurrence
@@ -687,5 +693,56 @@ mod tests {
         extend_series_if_needed(&repo, later).await.unwrap();
         let new_count = repo.task_list().await.unwrap().len();
         assert_eq!(new_count, first_count + 2);
+    }
+
+    #[test]
+    fn extend_horizon_handles_leap_day() {
+        // 2024-02-29 has no Feb-29 in 2025 → clamps to 2025-02-28, never `today`.
+        let leap = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+        assert_eq!(
+            extend_horizon(leap),
+            NaiveDate::from_ymd_opt(2025, 2, 28).unwrap()
+        );
+        // A normal day maps to exactly one year later.
+        let normal = NaiveDate::from_ymd_opt(2026, 5, 24).unwrap();
+        assert_eq!(
+            extend_horizon(normal),
+            NaiveDate::from_ymd_opt(2027, 5, 24).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn open_ended_series_created_on_leap_day_fills_a_full_year() {
+        use pomone_db::TaskRepo;
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        pomone_db::seed_defaults(&repo).await.unwrap();
+        let irrig = list_task_type_options(&repo)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|o| o.category == "irrigation")
+            .unwrap();
+        // Open-ended weekly series created ON a leap day. With the old
+        // horizon the window collapsed to `today` → a single occurrence;
+        // now it spans the full ~year (issue #60).
+        let leap = NaiveDate::from_ymd_opt(2024, 2, 29).unwrap();
+        create_recurring_task(
+            &repo,
+            "",
+            &irrig.id,
+            "2024-02-29",
+            "",
+            1,
+            "weeks",
+            None,
+            leap,
+        )
+        .await
+        .unwrap();
+        let count = repo.task_list().await.unwrap().len();
+        assert!(
+            count >= 50,
+            "expected a full year of weekly occurrences, got {count}"
+        );
     }
 }
