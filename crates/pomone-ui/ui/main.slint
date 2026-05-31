@@ -255,15 +255,10 @@ export component MainWindow inherits Window {
 
     // ------- Agenda page (overdue / today / upcoming) -------
     in property <string> agenda-title-text;
-    in property <string> agenda-overdue-title;
-    in property <string> agenda-today-title;
-    in property <string> agenda-upcoming-title;
-    in property <string> agenda-overdue-empty;
-    in property <string> agenda-today-empty;
-    in property <string> agenda-upcoming-empty;
-    in property <[AgendaRow]> agenda-overdue-rows;
-    in property <[AgendaRow]> agenda-today-rows;
-    in property <[AgendaRow]> agenda-upcoming-rows;
+    in property <string> agenda-empty-text;
+    in property <string> agenda-overdue-label;
+    in property <string> agenda-today-label;
+    in property <[AgendaRow]> agenda-rows;
     callback agenda-task-clicked(string);
 
     // ------- Yearly harvest section (perennials only) -------
@@ -1049,15 +1044,10 @@ export component MainWindow inherits Window {
             // ------- Agenda (overdue / today / upcoming) -------
             if current-page == "agenda": AgendaPage {
                 title-text: agenda-title-text;
-                overdue-title: agenda-overdue-title;
-                today-title: agenda-today-title;
-                upcoming-title: agenda-upcoming-title;
-                overdue-empty: agenda-overdue-empty;
-                today-empty: agenda-today-empty;
-                upcoming-empty: agenda-upcoming-empty;
-                overdue-rows: agenda-overdue-rows;
-                today-rows: agenda-today-rows;
-                upcoming-rows: agenda-upcoming-rows;
+                empty-text: agenda-empty-text;
+                overdue-label: agenda-overdue-label;
+                today-label: agenda-today-label;
+                rows: agenda-rows;
                 task-clicked(tid) => { agenda-task-clicked(tid); }
             }
 

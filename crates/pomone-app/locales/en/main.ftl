@@ -273,6 +273,7 @@ status-manual-open-failed = Couldn't open the manual: { $message }
 ## Agenda (shown as "Tasks")
 nav-agenda = Tasks
 title-agenda = Tasks
+agenda-empty = No tasks.
 agenda-overdue-title = Overdue
 agenda-today-title = Today
 agenda-upcoming-title = Upcoming

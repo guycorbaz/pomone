@@ -1,11 +1,11 @@
-// Pomone — Agenda (what-needs-doing) page.
+// Pomone — Tasks page.
 //
-// A global, urgency-first view of tasks split into three cards: Overdue,
-// Today, and Upcoming (the coming days). Rows come pre-bucketed and
-// pre-sorted from Rust (`list_agenda`); each row is clickable and opens the
-// shared task edit form. Mirrors the planting-detail task list's row style.
+// A single flat list of every task, newest planned date first
+// (reverse-chronological), built by Rust (`list_agenda`). Each row is
+// clickable and opens the shared task edit form. The date is tinted red for
+// overdue rows (pending and past); completed rows are greyed out.
 
-import { Palette, Theme, Card, SectionHeader } from "theme.slint";
+import { Palette, Theme, Card } from "theme.slint";
 import { ScrollView } from "std-widgets.slint";
 
 export struct AgendaRow {
@@ -14,15 +14,36 @@ export struct AgendaRow {
     label: string,
     color: color,
     completed: bool,
+    overdue: bool,
+    today: bool,
 }
 
-// One clickable task row: colored type dot, label, planned date. `accent` is
-// the date color (red for overdue, muted otherwise); `dim` greys out the
-// label for completed tasks.
+// A small status pill (e.g. "En retard", "Aujourd'hui").
+component StatusBadge inherits Rectangle {
+    in property <string> label;
+    in property <color> tint;
+    border-radius: Theme.radius-sm;
+    background: root.tint;
+    height: 18px;
+    horizontal-stretch: 0;
+    HorizontalLayout {
+        padding-left: Theme.space-xs;
+        padding-right: Theme.space-xs;
+        Text {
+            text: root.label;
+            color: Palette.text-on-primary;
+            font-size: Theme.font-size-label;
+            font-weight: Theme.font-weight-semibold;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// One clickable task row: colored type dot, label, status badge, planned date.
 component AgendaTaskRow inherits Rectangle {
     in property <AgendaRow> task;
-    in property <brush> accent;
-    in property <bool> dim;
+    in property <string> overdue-label;
+    in property <string> today-label;
     callback clicked(string);
 
     border-radius: Theme.radius-sm;
@@ -45,12 +66,13 @@ component AgendaTaskRow inherits Rectangle {
             height: 12px;
             border-radius: 6px;
             background: root.task.color;
+            opacity: root.task.completed ? 0.45 : 1.0;
             y: (parent.height - self.height) / 2;
         }
 
         Text {
             text: root.task.label;
-            color: root.dim ? Palette.text-muted : Palette.text-primary;
+            color: root.task.completed ? Palette.text-muted : Palette.text-primary;
             font-size: Theme.font-size-body;
             font-weight: Theme.font-weight-semibold;
             horizontal-stretch: 1;
@@ -58,53 +80,25 @@ component AgendaTaskRow inherits Rectangle {
             overflow: elide;
         }
 
+        if root.task.overdue: StatusBadge {
+            label: root.overdue-label;
+            tint: Palette.danger;
+            y: (parent.height - self.height) / 2;
+        }
+        if root.task.today: StatusBadge {
+            label: root.today-label;
+            tint: Palette.primary;
+            y: (parent.height - self.height) / 2;
+        }
+
         Text {
             text: root.task.planned-on;
-            color: root.accent;
+            color: root.task.overdue ? Palette.danger
+                 : root.task.completed ? Palette.text-muted
+                 : Palette.text-secondary;
             font-size: Theme.font-size-label;
+            font-weight: root.task.overdue ? Theme.font-weight-semibold : Theme.font-weight-regular;
             vertical-alignment: center;
-        }
-    }
-}
-
-// One section card: a header with a count badge, an empty placeholder, and
-// the list of rows. `accent` tints both the count and each row's date.
-component AgendaSection inherits Card {
-    in property <string> title;
-    in property <string> empty-text;
-    in property <[AgendaRow]> rows;
-    in property <brush> accent;
-    in property <bool> dim-rows;
-    callback row-clicked(string);
-
-    VerticalLayout {
-        padding: Theme.space-xl;
-        spacing: Theme.space-sm;
-
-        HorizontalLayout {
-            spacing: Theme.space-sm;
-            SectionHeader { text: root.title; }
-            Text {
-                text: "(\{root.rows.length})";
-                color: root.accent;
-                font-size: Theme.font-size-body;
-                font-weight: Theme.font-weight-semibold;
-                vertical-alignment: center;
-                horizontal-stretch: 1;
-            }
-        }
-
-        if root.rows.length == 0: Text {
-            text: root.empty-text;
-            color: Palette.text-muted;
-            font-size: Theme.font-size-body;
-        }
-
-        for row in root.rows: AgendaTaskRow {
-            task: row;
-            accent: root.accent;
-            dim: root.dim-rows;
-            clicked(id) => { root.row-clicked(id); }
         }
     }
 }
@@ -113,15 +107,10 @@ export component AgendaPage inherits Rectangle {
     background: Palette.background;
 
     in property <string> title-text;
-    in property <string> overdue-title;
-    in property <string> today-title;
-    in property <string> upcoming-title;
-    in property <string> overdue-empty;
-    in property <string> today-empty;
-    in property <string> upcoming-empty;
-    in property <[AgendaRow]> overdue-rows;
-    in property <[AgendaRow]> today-rows;
-    in property <[AgendaRow]> upcoming-rows;
+    in property <string> empty-text;
+    in property <string> overdue-label;
+    in property <string> today-label;
+    in property <[AgendaRow]> rows;
 
     callback task-clicked(string);
 
@@ -130,38 +119,42 @@ export component AgendaPage inherits Rectangle {
             padding: Theme.space-2xl;
             spacing: Theme.space-xl;
 
-            Text {
-                text: root.title-text;
-                color: Palette.primary;
-                font-size: Theme.font-size-h1;
-                font-weight: Theme.font-weight-bold;
+            HorizontalLayout {
+                spacing: Theme.space-sm;
+                Text {
+                    text: root.title-text;
+                    color: Palette.primary;
+                    font-size: Theme.font-size-h1;
+                    font-weight: Theme.font-weight-bold;
+                }
+                Text {
+                    text: "(\{root.rows.length})";
+                    color: Palette.text-secondary;
+                    font-size: Theme.font-size-body;
+                    font-weight: Theme.font-weight-semibold;
+                    vertical-alignment: bottom;
+                    horizontal-stretch: 1;
+                }
             }
 
-            AgendaSection {
-                title: root.overdue-title;
-                empty-text: root.overdue-empty;
-                rows: root.overdue-rows;
-                accent: Palette.danger;
-                dim-rows: false;
-                row-clicked(id) => { root.task-clicked(id); }
-            }
+            Card {
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-sm;
 
-            AgendaSection {
-                title: root.today-title;
-                empty-text: root.today-empty;
-                rows: root.today-rows;
-                accent: Palette.primary;
-                dim-rows: false;
-                row-clicked(id) => { root.task-clicked(id); }
-            }
+                    if root.rows.length == 0: Text {
+                        text: root.empty-text;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-body;
+                    }
 
-            AgendaSection {
-                title: root.upcoming-title;
-                empty-text: root.upcoming-empty;
-                rows: root.upcoming-rows;
-                accent: Palette.text-secondary;
-                dim-rows: false;
-                row-clicked(id) => { root.task-clicked(id); }
+                    for row in root.rows: AgendaTaskRow {
+                        task: row;
+                        overdue-label: root.overdue-label;
+                        today-label: root.today-label;
+                        clicked(id) => { root.task-clicked(id); }
+                    }
+                }
             }
 
             Rectangle { vertical-stretch: 1; }

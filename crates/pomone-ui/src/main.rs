@@ -22,13 +22,13 @@ use pomone_app::{
     list_strata_rows, list_task_category_options, list_task_type_options, list_task_types_admin,
     list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting,
     move_planting_to_location, parse_id, recurrence_unit_str, reschedule_task, services,
-    split_planting, test_backend, update_task, update_task_type, Agenda as AppAgenda,
-    AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
-    BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry, CalendarEntryKind,
-    CalendarEventKind, CropInput, CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane,
-    CropRow as AppCropRow, CycleDates, FamilyOption, Lang, LifespanKind, LocationInput,
-    LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
-    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
+    split_planting, test_backend, update_task, update_task_type, AgendaRow as AppAgendaRow, App,
+    AppConfig, AppError, BackendConfig, BedUsagePoint as AppBedUsagePoint,
+    CalendarEntry as AppCalendarEntry, CalendarEntryKind, CalendarEventKind, CropInput,
+    CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates,
+    FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption, LocationListItem,
+    LocationOption, MigrationReport, ParentLocationOption, PlantingChoice,
+    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
     PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
     StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
     TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption, VarietyProfileKind,
@@ -1483,12 +1483,9 @@ fn apply_translations(window: &MainWindow, app: &App) {
     // `refresh_agenda` on navigation and after any task edit.
     window.set_nav_agenda_text(SharedString::from(i18n.t("nav-agenda")));
     window.set_agenda_title_text(SharedString::from(i18n.t("title-agenda")));
-    window.set_agenda_overdue_title(SharedString::from(i18n.t("agenda-overdue-title")));
-    window.set_agenda_today_title(SharedString::from(i18n.t("agenda-today-title")));
-    window.set_agenda_upcoming_title(SharedString::from(i18n.t("agenda-upcoming-title")));
-    window.set_agenda_overdue_empty(SharedString::from(i18n.t("agenda-overdue-empty")));
-    window.set_agenda_today_empty(SharedString::from(i18n.t("agenda-today-empty")));
-    window.set_agenda_upcoming_empty(SharedString::from(i18n.t("agenda-upcoming-empty")));
+    window.set_agenda_empty_text(SharedString::from(i18n.t("agenda-empty")));
+    window.set_agenda_overdue_label(SharedString::from(i18n.t("agenda-overdue-title")));
+    window.set_agenda_today_label(SharedString::from(i18n.t("agenda-today-title")));
 
     window.set_task_calendar_title_text(SharedString::from(i18n.t("title-task-calendar")));
     window.set_task_calendar_prev_button_text(SharedString::from(i18n.t("calendar-prev")));
@@ -2857,27 +2854,14 @@ fn refresh_after_task_form(window: &MainWindow, state: &mut UiState, prev: &str)
     }
 }
 
-/// Look-ahead horizon (days) for the agenda's "upcoming" bucket — the coming
-/// week of pending work.
-const AGENDA_UPCOMING_DAYS: i64 = 7;
-
-/// Load the agenda buckets relative to today and push them to the window.
+/// Load the flat task list (newest first) and push it to the window.
 fn refresh_agenda(window: &MainWindow, state: &mut UiState) -> Result<()> {
     let today = Local::now().date_naive();
-    let agenda: AppAgenda = state
+    let rows: Vec<AppAgendaRow> = state
         .runtime
-        .block_on(async { list_agenda(state.app.repo(), today, AGENDA_UPCOMING_DAYS).await })
-        .context("failed to load agenda")?;
+        .block_on(async { list_agenda(state.app.repo(), today).await })
+        .context("failed to load tasks list")?;
 
-    window.set_agenda_overdue_rows(agenda_rows_model(agenda.overdue));
-    window.set_agenda_today_rows(agenda_rows_model(agenda.today));
-    window.set_agenda_upcoming_rows(agenda_rows_model(agenda.upcoming));
-    Ok(())
-}
-
-/// Map a bucket of app-level agenda rows into a Slint model, resolving the
-/// hex color into a brush on the way.
-fn agenda_rows_model(rows: Vec<AppAgendaRow>) -> ModelRc<SlintAgendaRow> {
     let mapped: Vec<SlintAgendaRow> = rows
         .into_iter()
         .map(|r| SlintAgendaRow {
@@ -2886,9 +2870,12 @@ fn agenda_rows_model(rows: Vec<AppAgendaRow>) -> ModelRc<SlintAgendaRow> {
             label: SharedString::from(r.label),
             color: parse_hex_color(&r.color),
             completed: r.completed,
+            overdue: r.overdue,
+            today: r.today,
         })
         .collect();
-    ModelRc::new(VecModel::from(mapped))
+    window.set_agenda_rows(ModelRc::new(VecModel::from(mapped)));
+    Ok(())
 }
 
 fn refresh_planting_detail(
