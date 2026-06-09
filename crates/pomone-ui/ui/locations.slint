@@ -29,7 +29,7 @@ component LocationRowView inherits Card {
     in property <string> in-use-text;
     callback edit(string);
     callback delete(string);
-    height: 80px;
+    height: 84px;
 
     HorizontalLayout {
         padding: Theme.space-md;
@@ -43,6 +43,7 @@ component LocationRowView inherits Card {
 
         VerticalLayout {
             horizontal-stretch: 1;
+            alignment: center;
             spacing: 2px;
 
             Text {
@@ -58,9 +59,17 @@ component LocationRowView inherits Card {
                 font-size: Theme.font-size-label;
             }
         }
-        VerticalLayout {
-            alignment: center;
-            spacing: Theme.space-xs;
+        // Actions side by side so they fit the row height; the "in use" hint
+        // sits to their left rather than stacked underneath.
+        HorizontalLayout {
+            spacing: Theme.space-sm;
+            alignment: end;
+            if entry.in-use: Text {
+                text: in-use-text;
+                color: Palette.text-secondary;
+                font-size: Theme.font-size-label;
+                vertical-alignment: center;
+            }
             SecondaryButton {
                 text: edit-text;
                 clicked => { edit(entry.id); }
@@ -71,12 +80,6 @@ component LocationRowView inherits Card {
                 // deleted (FK RESTRICT) — disable and explain.
                 enabled: !entry.in-use;
                 clicked => { delete(entry.id); }
-            }
-            if entry.in-use: Text {
-                text: in-use-text;
-                color: Palette.text-secondary;
-                font-size: Theme.font-size-label;
-                horizontal-alignment: center;
             }
         }
     }
