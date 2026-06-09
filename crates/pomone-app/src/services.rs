@@ -591,7 +591,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn creating_perennial_planting_autogenerates_transplant_task() {
+    async fn creating_perennial_planting_generates_no_task() {
+        // Perennials are planted from bought stock → no auto task at
+        // establishment (nothing to transplant).
         let (repo, vid, lid, sid) = setup_perennial().await;
         seed_defaults(&repo).await.unwrap();
         let p = create_perennial_planting(
@@ -609,15 +611,7 @@ mod tests {
         .await
         .unwrap();
         let tasks = repo.task_list_for_planting(p.id).await.unwrap();
-        assert_eq!(tasks.len(), 1);
-        // Single transplant task on the establishment date.
-        let types = repo.task_type_list().await.unwrap();
-        let tt = types
-            .iter()
-            .find(|t| t.id == tasks[0].task_type_id)
-            .unwrap();
-        assert_eq!(tt.category, TaskCategory::Transplant);
-        assert_eq!(tasks[0].planned_on, d(2026, 3, 15));
+        assert!(tasks.is_empty());
     }
 
     #[tokio::test]

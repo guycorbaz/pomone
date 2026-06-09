@@ -3,8 +3,9 @@
 //! When the UI creates a new planting (annual `Cycle` or `Perennial`), the
 //! services layer calls [`generate_tasks_for_planting`] to populate the
 //! corresponding operational tasks: a Sow on the sowing date, a Transplant
-//! on the transplant date, a Harvest on the first-harvest date for cycles;
-//! a Transplant on the establishment date for perennials. The user can
+//! on the transplant date, a Harvest on the first-harvest date for cycles.
+//! Perennials get no auto task at establishment (bought stock → nothing to
+//! transplant). The user can
 //! mark them complete from the task calendar (PR E UI) and add ad-hoc
 //! tasks later.
 //!
@@ -85,11 +86,10 @@ fn phase_dates(planting: &Planting) -> Vec<(TaskCategory, NaiveDate)> {
             }
             out.push((TaskCategory::Harvest, first_harvest_on));
         }
-        PlantingSchedule::Perennial { established_on, .. } => {
-            // "Établissement" of a perennial = putting it in the ground.
-            // We file it under Transplant (the closest semantic match)
-            // rather than coining a new category just for this.
-            out.push((TaskCategory::Transplant, established_on));
+        PlantingSchedule::Perennial { .. } => {
+            // No auto task at establishment: perennials are typically planted
+            // from bought stock, so there is nothing to "transplant" (the user
+            // adds a task manually if they want one). Issue: spurious Repiquage.
         }
     }
     out
@@ -189,11 +189,9 @@ mod tests {
     }
 
     #[test]
-    fn perennial_yields_one_transplant_trigger() {
+    fn perennial_yields_no_trigger() {
+        // Bought stock → no auto task at establishment.
         let p = perennial_planting(d(2026, 3, 15));
-        assert_eq!(
-            phase_dates(&p),
-            vec![(TaskCategory::Transplant, d(2026, 3, 15))]
-        );
+        assert!(phase_dates(&p).is_empty());
     }
 }
