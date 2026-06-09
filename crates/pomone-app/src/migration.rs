@@ -149,7 +149,7 @@ mod tests {
     use chrono::NaiveDate;
     use pomone_db::{
         seed_defaults, CropRepo, FamilyRepo, LocationRepo, PlantingRepo, SqliteRepository,
-        VarietyRepo,
+        StrataRepo, VarietyRepo,
     };
     use rust_decimal_macros::dec;
 
@@ -195,10 +195,12 @@ mod tests {
         let varieties = source.variety_list().await.unwrap();
         let locations = source.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        let strata = source.strata_list().await.unwrap()[0].id;
         create_annual_planting_from_sowing(
             &source,
             varieties[0].id,
             bed.id,
+            strata,
             NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
             dec!(20),
             100,
@@ -232,7 +234,7 @@ mod tests {
 
     #[tokio::test]
     async fn copy_all_handles_perennial_with_harvests() {
-        use pomone_db::{CropRepo, FamilyRepo, LocationKindRepo, StrataRepo};
+        use pomone_db::{CropRepo, FamilyRepo, LocationKindRepo};
         use pomone_domain::{
             Crop, Family, Lifespan, Location, LocationKind, PluriannualProfile, PruningSeason,
             Strata, Variety, VarietyProfile,
@@ -247,7 +249,6 @@ mod tests {
         source.location_kind_create(&k).await.unwrap();
         let crop = Crop::new(
             f.id,
-            s.id,
             "Pommier",
             None,
             Lifespan::perennial(40, 3).unwrap(),
@@ -272,6 +273,7 @@ mod tests {
             &source,
             variety.id,
             location.id,
+            s.id,
             NaiveDate::from_ymd_opt(2026, 3, 15).unwrap(),
             None,
             dec!(100),

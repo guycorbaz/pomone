@@ -244,7 +244,8 @@ mod tests {
     use super::*;
     use crate::test_helpers::seed_test_data;
     use pomone_db::{
-        seed_defaults, LocationKindRepo, LocationRepo, PlantingRepo, SqliteRepository, VarietyRepo,
+        seed_defaults, LocationKindRepo, LocationRepo, PlantingRepo, SqliteRepository, StrataRepo,
+        VarietyRepo,
     };
     use pomone_domain::{Lifespan, Planting, VarietyId};
     use rust_decimal_macros::dec;
@@ -307,9 +308,11 @@ mod tests {
         first: NaiveDate,
         last: NaiveDate,
     ) {
+        let strata = r.strata_list().await.unwrap()[0].id;
         let p = Planting::new(
             variety,
             loc,
+            strata,
             Lifespan::Annual,
             dec!(1),
             1,

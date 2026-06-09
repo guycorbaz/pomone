@@ -103,7 +103,7 @@ fn find_type(types: &[TaskType], category: TaskCategory) -> Option<&TaskType> {
 mod tests {
     use super::*;
     use chrono::NaiveDate;
-    use pomone_domain::{Lifespan, LocationId, VarietyId};
+    use pomone_domain::{Lifespan, LocationId, StrataId, VarietyId};
     use rust_decimal_macros::dec;
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
@@ -119,6 +119,7 @@ mod tests {
         Planting::new(
             VarietyId::new(),
             LocationId::new(),
+            StrataId::new(),
             Lifespan::Annual,
             dec!(10),
             10,
@@ -134,6 +135,7 @@ mod tests {
         Planting::new(
             VarietyId::new(),
             LocationId::new(),
+            StrataId::new(),
             lifespan,
             dec!(100),
             5,

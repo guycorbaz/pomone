@@ -15,7 +15,6 @@ export struct CropRow {
     id: string,
     name: string,
     family-label: string,
-    strata-label: string,
     lifespan-label: string,
     pruning-label: string,
     variety-count: int,
@@ -70,7 +69,7 @@ component CropRowView inherits Rectangle {
                 }
             }
             Text {
-                text: entry.family-label + " · " + entry.strata-label
+                text: entry.family-label
                       + " · " + entry.lifespan-label + " · " + entry.pruning-label;
                 color: Palette.text-muted;
                 font-size: Theme.font-size-label;
@@ -126,11 +125,8 @@ export component CulturesPage inherits Rectangle {
     in property <string> label-crop-latin;
     in property <string> placeholder-crop-latin;
     in property <string> label-family;
-    in property <string> label-strata;
     in property <[string]> family-labels;
-    in property <[string]> strata-labels;
     in-out property <int> family-index: 0;
-    in-out property <int> strata-index: 0;
     in-out property <string> new-crop-name;
     in-out property <string> new-crop-latin;
     // Lifespan kind: 0 = Annual, 1 = Pluriannual single cycle,
@@ -300,20 +296,6 @@ export component CulturesPage inherits Rectangle {
                                 enabled: family-labels.length > 0;
                             }
                         }
-                        VerticalLayout {
-                            spacing: Theme.space-xs;
-                            horizontal-stretch: 1;
-                            Text {
-                                text: label-strata;
-                                color: Palette.text-secondary;
-                                font-size: Theme.font-size-label;
-                            }
-                            ThemedComboBox {
-                                model: strata-labels;
-                                current-index <=> strata-index;
-                                enabled: strata-labels.length > 0;
-                            }
-                        }
                     }
                     // Lifespan + pruning dropdowns.
                     HorizontalLayout {
@@ -382,7 +364,7 @@ export component CulturesPage inherits Rectangle {
                     }
                     PrimaryButton {
                         text: create-crop-button-text;
-                        enabled: family-labels.length > 0 && strata-labels.length > 0;
+                        enabled: family-labels.length > 0;
                         clicked => { create-crop(); }
                     }
                 }

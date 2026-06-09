@@ -442,7 +442,9 @@ mod tests {
     use super::*;
     use crate::services::create_annual_planting_from_sowing;
     use crate::test_helpers::seed_test_data;
-    use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, TaskRepo, VarietyRepo};
+    use pomone_db::{
+        seed_defaults, LocationRepo, SqliteRepository, StrataRepo, TaskRepo, VarietyRepo,
+    };
     use rust_decimal_macros::dec;
 
     async fn fresh_repo_with_data() -> (SqliteRepository, String) {
@@ -452,10 +454,12 @@ mod tests {
         let varieties = repo.variety_list().await.unwrap();
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        let strata = repo.strata_list().await.unwrap()[0].id;
         let planting = create_annual_planting_from_sowing(
             &repo,
             varieties[0].id,
             bed.id,
+            strata,
             NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
             dec!(20),
             100,

@@ -130,14 +130,17 @@ export component PlantingsPage inherits Rectangle {
     in property <string> placeholder-area;
     in property <string> placeholder-count;
     in property <string> create-button-text;
+    in property <string> label-strata;
     in property <[string]> variety-labels;
     in property <[string]> location-labels;
+    in property <[string]> strata-labels;
     // Parallel to variety-labels: drives which date fields the form shows.
     in property <[bool]> variety-is-annuals;
 
     // Form state (read back by Rust on "create" callback)
     in-out property <int> variety-index: 0;
     in-out property <int> location-index: 0;
+    in-out property <int> strata-index: 0;
     in-out property <string> sown-on-text;
     in-out property <string> established-on-text;
     in-out property <string> removal-on-text;
@@ -273,6 +276,22 @@ export component PlantingsPage inherits Rectangle {
                             enabled: location-labels.length > 0;
                         }
                     }
+                    // Strata: the vegetation layer this planting occupies
+                    // (issue #86 — a cultivar can be grown at different heights).
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: label-strata;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedComboBox {
+                            model: strata-labels;
+                            current-index <=> strata-index;
+                            enabled: strata-labels.length > 0;
+                        }
+                    }
                 }
 
                 // Row 2 — dates depend on whether the variety is annual.
@@ -362,7 +381,7 @@ export component PlantingsPage inherits Rectangle {
                     alignment: stretch;
                     PrimaryButton {
                         text: create-button-text;
-                        enabled: variety-labels.length > 0 && location-labels.length > 0;
+                        enabled: variety-labels.length > 0 && location-labels.length > 0 && strata-labels.length > 0;
                         clicked => { create-planting(); }
                     }
                     Text {

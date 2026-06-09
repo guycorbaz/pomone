@@ -120,7 +120,6 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     // ---------------- Crops + varieties ----------------
     let tomate = Crop::new(
         solanacees.id,
-        herbacee.id,
         "Tomate",
         Some("Solanum lycopersicum".to_owned()),
         Lifespan::Annual,
@@ -129,7 +128,6 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     repo.crop_create(&tomate).await?;
     let carotte = Crop::new(
         apiacees.id,
-        racinaire.id,
         "Carotte",
         Some("Daucus carota".to_owned()),
         Lifespan::Annual,
@@ -138,7 +136,6 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     repo.crop_create(&carotte).await?;
     let laitue = Crop::new(
         asteracees.id,
-        herbacee.id,
         "Laitue",
         Some("Lactuca sativa".to_owned()),
         Lifespan::Annual,
@@ -147,7 +144,6 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     repo.crop_create(&laitue).await?;
     let courgette = Crop::new(
         cucurbitacees.id,
-        herbacee.id,
         "Courgette",
         Some("Cucurbita pepo".to_owned()),
         Lifespan::Annual,
@@ -156,7 +152,6 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     repo.crop_create(&courgette).await?;
     let pommier = Crop::new(
         rosacees.id,
-        sous_etage.id,
         "Pommier",
         Some("Malus domestica".to_owned()),
         Lifespan::perennial(30, 3)?,
@@ -262,6 +257,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         repo,
         marmande.id,
         serre.id,
+        herbacee.id,
         early_spring,
         Decimal::from(8),
         24,
@@ -273,6 +269,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         repo,
         roma.id,
         planche_a.id,
+        herbacee.id,
         early_spring,
         Decimal::from(20),
         60,
@@ -284,6 +281,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         repo,
         nantaise.id,
         planche_b.id,
+        racinaire.id,
         mid_spring,
         Decimal::from(20),
         400,
@@ -295,6 +293,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         repo,
         batavia.id,
         planche_c.id,
+        herbacee.id,
         early_spring,
         Decimal::from(10),
         80,
@@ -306,6 +305,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         repo,
         romaine.id,
         planche_c.id,
+        herbacee.id,
         mid_spring,
         Decimal::from(10),
         80,
@@ -317,6 +317,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         repo,
         verte_milan.id,
         planche_d.id,
+        herbacee.id,
         mid_spring,
         Decimal::from(20),
         12,
@@ -331,6 +332,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         repo,
         reine_reinettes.id,
         verger.id,
+        sous_etage.id,
         early_spring,
         None,
         Decimal::from(20),

@@ -159,7 +159,7 @@ mod tests {
         let s = Strata::new("Test", None, None, None, 0).unwrap();
         repo.family_create(&f).await.unwrap();
         repo.strata_create(&s).await.unwrap();
-        let c = Crop::new(f.id, s.id, "Test", None, lifespan, PruningSeason::None).unwrap();
+        let c = Crop::new(f.id, "Test", None, lifespan, PruningSeason::None).unwrap();
         repo.crop_create(&c).await.unwrap();
         (repo, c.id)
     }
@@ -204,9 +204,7 @@ mod tests {
         let (repo, crop_a) = setup_with_crop(Lifespan::Annual).await;
         // A second crop in the same DB
         let f2 = repo.family_list().await.unwrap()[0].id;
-        let s2 = repo.strata_list().await.unwrap()[0].id;
-        let crop_b =
-            Crop::new(f2, s2, "Other", None, Lifespan::Annual, PruningSeason::None).unwrap();
+        let crop_b = Crop::new(f2, "Other", None, Lifespan::Annual, PruningSeason::None).unwrap();
         repo.crop_create(&crop_b).await.unwrap();
         let crop_b_id = crop_b.id;
 

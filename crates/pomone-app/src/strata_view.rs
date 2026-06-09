@@ -21,8 +21,8 @@ pub struct StrataRow {
     /// Human-readable height range (e.g. `"6 – 40 m"`, `"≤ 0.5 m"`, `"—"`).
     pub height_label: String,
     pub sort_order: i32,
-    /// True when at least one Crop references this stratum — the UI uses
-    /// this to disable the Delete control (the domain has no FK-cascade).
+    /// True when at least one planting references this stratum — the UI uses
+    /// this to disable the Delete control (issue #86 moved strata to plantings).
     pub in_use: bool,
 }
 
@@ -56,11 +56,11 @@ pub async fn list_strata_rows(repo: &dyn Repository) -> AppResult<Vec<StrataRow>
             .then_with(|| a.name.cmp(&b.name))
     });
 
-    // Pre-compute which strata are referenced by at least one crop. A single
-    // pass over the crops list keeps this linear; Pomone-sized catalogs make
-    // this trivially cheap.
-    let crops = repo.crop_list().await?;
-    let used: HashSet<StrataId> = crops.iter().map(|c| c.strata_id).collect();
+    // Pre-compute which strata are referenced by at least one planting. A
+    // single pass over the plantings keeps this linear; Pomone-sized catalogs
+    // make this trivially cheap.
+    let plantings = repo.planting_list().await?;
+    let used: HashSet<StrataId> = plantings.iter().map(|p| p.strata_id).collect();
 
     let rows = strata
         .into_iter()
@@ -90,15 +90,15 @@ pub async fn create_strata(repo: &dyn Repository, input: StrataInput) -> AppResu
     Ok(strata)
 }
 
-/// Delete a stratum after confirming no crop still references it. Returns
+/// Delete a stratum after confirming no planting still references it. Returns
 /// `Inconsistent` if the stratum is in use — the UI is expected to disable
 /// the action in that case, but we guard server-side too.
 pub async fn delete_strata(repo: &dyn Repository, id_str: &str) -> AppResult<()> {
     let id: StrataId = parse_id(id_str)?;
-    let crops = repo.crop_list().await?;
-    if crops.iter().any(|c| c.strata_id == id) {
+    let plantings = repo.planting_list().await?;
+    if plantings.iter().any(|p| p.strata_id == id) {
         return Err(AppError::Inconsistent(
-            "cannot delete a stratum still referenced by a crop".into(),
+            "cannot delete a stratum still referenced by a planting".into(),
         ));
     }
     repo.strata_delete(id).await?;
@@ -108,8 +108,10 @@ pub async fn delete_strata(repo: &dyn Repository, id_str: &str) -> AppResult<()>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pomone_db::{seed_defaults, CropRepo, FamilyRepo, SqliteRepository, StrataRepo};
-    use pomone_domain::{Crop, Family, Lifespan, PruningSeason};
+    use crate::services::create_annual_planting_from_sowing;
+    use crate::test_helpers::seed_test_data;
+    use chrono::NaiveDate;
+    use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, StrataRepo, VarietyRepo};
     use rust_decimal_macros::dec;
 
     async fn fresh_repo() -> SqliteRepository {
@@ -166,28 +168,37 @@ mod tests {
     #[tokio::test]
     async fn delete_refuses_in_use_stratum() {
         let repo = fresh_repo().await;
-        let strata = repo.strata_list().await.unwrap();
-        let target = &strata[0];
-        let family = Family::new("Test", None, None).unwrap();
-        repo.family_create(&family).await.unwrap();
-        let crop = Crop::new(
-            family.id,
-            target.id,
-            "Démo",
+        seed_test_data(&repo).await.unwrap();
+        // A planting now references its stratum (issue #86), so seed one.
+        let target = repo.strata_list().await.unwrap()[0].id;
+        let variety = repo.variety_list().await.unwrap()[0].id;
+        let bed = repo
+            .location_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.parent_id.is_some())
+            .unwrap()
+            .id;
+        create_annual_planting_from_sowing(
+            &repo,
+            variety,
+            bed,
+            target,
+            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+            dec!(10),
+            10,
             None,
-            Lifespan::Annual,
-            PruningSeason::None,
+            None,
         )
+        .await
         .unwrap();
-        repo.crop_create(&crop).await.unwrap();
 
         let rows = list_strata_rows(&repo).await.unwrap();
-        let row = rows.iter().find(|r| r.id == target.id.to_string()).unwrap();
+        let row = rows.iter().find(|r| r.id == target.to_string()).unwrap();
         assert!(row.in_use);
 
-        let err = delete_strata(&repo, &target.id.to_string())
-            .await
-            .unwrap_err();
+        let err = delete_strata(&repo, &target.to_string()).await.unwrap_err();
         assert!(matches!(err, AppError::Inconsistent(_)));
     }
 }

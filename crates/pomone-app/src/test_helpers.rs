@@ -9,7 +9,7 @@
 use crate::error::AppResult;
 use pomone_db::Repository;
 use pomone_domain::{
-    AnnualProfile, Crop, Family, Lifespan, Location, LocationKind, PruningSeason, Strata, Variety,
+    AnnualProfile, Crop, Family, Lifespan, Location, LocationKind, PruningSeason, Variety,
     VarietyProfile,
 };
 use rust_decimal::Decimal;
@@ -27,19 +27,17 @@ pub(crate) async fn seed_test_data(repo: &dyn Repository) -> AppResult<()> {
     }
 
     let solanaceae = find_family_by_latin(repo, "Solanaceae").await?;
-    let herbacee = find_strata_by_name(repo, "Herbacée").await?;
     let parcelle_kind = find_kind_by_name(repo, "Parcelle").await?;
     let planche_kind = find_kind_by_name(repo, "Planche").await?;
 
-    let (Some(family), Some(strata), Some(parcelle_kind), Some(planche_kind)) =
-        (solanaceae, herbacee, parcelle_kind, planche_kind)
+    let (Some(family), Some(parcelle_kind), Some(planche_kind)) =
+        (solanaceae, parcelle_kind, planche_kind)
     else {
         return Ok(());
     };
 
     let tomato = Crop::new(
         family.id,
-        strata.id,
         "Tomate",
         Some("Solanum lycopersicum".to_owned()),
         Lifespan::Annual,
@@ -93,11 +91,6 @@ async fn find_family_by_latin(repo: &dyn Repository, latin: &str) -> AppResult<O
     Ok(families
         .into_iter()
         .find(|f| f.latin_name.as_deref() == Some(latin)))
-}
-
-async fn find_strata_by_name(repo: &dyn Repository, name: &str) -> AppResult<Option<Strata>> {
-    let strata = repo.strata_list().await?;
-    Ok(strata.into_iter().find(|s| s.name == name))
 }
 
 async fn find_kind_by_name(repo: &dyn Repository, name: &str) -> AppResult<Option<LocationKind>> {

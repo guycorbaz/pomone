@@ -7,7 +7,7 @@
 use crate::error::{AppError, AppResult};
 use pomone_db::Repository;
 use pomone_domain::{
-    AnnualProfile, Crop, FamilyId, Lifespan, PluriannualProfile, PruningSeason, StrataId, Variety,
+    AnnualProfile, Crop, FamilyId, Lifespan, PluriannualProfile, PruningSeason, Variety,
     VarietyProfile,
 };
 use rust_decimal::Decimal;
@@ -41,7 +41,6 @@ pub struct CropRow {
     pub id: String,
     pub name: String,
     pub family_label: String,
-    pub strata_label: String,
     pub lifespan_label: String,
     pub pruning_label: String,
     pub variety_count: u32,
@@ -71,18 +70,17 @@ pub struct StrataOption {
     pub label: String,
 }
 
-/// Return crops sorted by name, each annotated with its family + strata
-/// labels and the number of varieties currently attached.
+/// Return crops sorted by name, each annotated with its family label and the
+/// number of varieties currently attached. (Strata moved to the planting —
+/// issue #86 — so it's no longer a crop attribute.)
 pub async fn list_crops(repo: &dyn Repository) -> AppResult<Vec<CropRow>> {
     let mut crops = repo.crop_list().await?;
     crops.sort_by(|a, b| a.name.cmp(&b.name));
 
     let families = repo.family_list().await?;
-    let strata = repo.strata_list().await?;
     let varieties = repo.variety_list().await?;
 
     let family_by_id: HashMap<_, _> = families.iter().map(|f| (f.id, f)).collect();
-    let strata_by_id: HashMap<_, _> = strata.iter().map(|s| (s.id, s)).collect();
     let mut variety_count: HashMap<_, u32> = HashMap::new();
     for v in &varieties {
         *variety_count.entry(v.crop_id).or_insert(0) += 1;
@@ -95,9 +93,6 @@ pub async fn list_crops(repo: &dyn Repository) -> AppResult<Vec<CropRow>> {
             family_label: family_by_id
                 .get(&c.family_id)
                 .map_or_else(|| "?".to_owned(), |f| f.name.clone()),
-            strata_label: strata_by_id
-                .get(&c.strata_id)
-                .map_or_else(|| "?".to_owned(), |s| s.name.clone()),
             lifespan_label: lifespan_label(c.lifespan),
             pruning_label: pruning_label(c.pruning_season),
             variety_count: *variety_count.get(&c.id).unwrap_or(&0),
@@ -156,7 +151,6 @@ pub async fn list_strata_options(repo: &dyn Repository) -> AppResult<Vec<StrataO
 #[derive(Debug, Clone)]
 pub struct CropInput {
     pub family_id_str: String,
-    pub strata_id_str: String,
     pub name: String,
     pub latin_name: Option<String>,
     pub lifespan_kind: LifespanKind,
@@ -174,7 +168,6 @@ pub struct CropInput {
 /// performs the field-level validation.
 pub async fn create_crop(repo: &dyn Repository, input: CropInput) -> AppResult<Crop> {
     let family_id: FamilyId = crate::plantings_view::parse_id(&input.family_id_str)?;
-    let strata_id: StrataId = crate::plantings_view::parse_id(&input.strata_id_str)?;
     let lifespan = match input.lifespan_kind {
         LifespanKind::Annual => Lifespan::Annual,
         LifespanKind::PluriannualSingleCycle => {
@@ -186,7 +179,6 @@ pub async fn create_crop(repo: &dyn Repository, input: CropInput) -> AppResult<C
     };
     let crop = Crop::new(
         family_id,
-        strata_id,
         input.name,
         input.latin_name,
         lifespan,
@@ -341,14 +333,6 @@ mod tests {
             .clone()
     }
 
-    fn herbacee_id_str(rows: &[StrataOption]) -> String {
-        rows.iter()
-            .find(|s| s.label == "Herbacée")
-            .expect("seed includes Herbacée")
-            .id
-            .clone()
-    }
-
     #[tokio::test]
     async fn list_crops_returns_seeded_tomato() {
         let repo = fresh_repo().await;
@@ -356,7 +340,6 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].name, "Tomate");
         assert_eq!(rows[0].family_label, "Solanacées");
-        assert_eq!(rows[0].strata_label, "Herbacée");
         assert_eq!(rows[0].lifespan_label, "Annuelle");
         assert_eq!(rows[0].variety_count, 2);
     }
@@ -385,10 +368,9 @@ mod tests {
         assert_eq!(rows[0].label, "Canopée");
     }
 
-    fn annual_crop_input(family_id: &str, strata_id: &str, name: &str) -> CropInput {
+    fn annual_crop_input(family_id: &str, name: &str) -> CropInput {
         CropInput {
             family_id_str: family_id.to_owned(),
-            strata_id_str: strata_id.to_owned(),
             name: name.to_owned(),
             latin_name: None,
             lifespan_kind: LifespanKind::Annual,
@@ -436,16 +418,11 @@ mod tests {
     async fn create_annual_crop_persists_and_lists() {
         let repo = fresh_repo().await;
         let families = list_family_options(&repo).await.unwrap();
-        let strata = list_strata_options(&repo).await.unwrap();
         let crop = create_crop(
             &repo,
             CropInput {
                 latin_name: Some("Solanum melongena".to_owned()),
-                ..annual_crop_input(
-                    &solanaceae_id_str(&families),
-                    &herbacee_id_str(&strata),
-                    "Aubergine",
-                )
+                ..annual_crop_input(&solanaceae_id_str(&families), "Aubergine")
             },
         )
         .await
@@ -460,17 +437,12 @@ mod tests {
     async fn create_pluriannual_single_cycle_crop_persists() {
         let repo = fresh_repo().await;
         let families = list_family_options(&repo).await.unwrap();
-        let strata = list_strata_options(&repo).await.unwrap();
         let crop = create_crop(
             &repo,
             CropInput {
                 lifespan_kind: LifespanKind::PluriannualSingleCycle,
                 lifespan_years: 2,
-                ..annual_crop_input(
-                    &solanaceae_id_str(&families),
-                    &herbacee_id_str(&strata),
-                    "Carotte porte-graine",
-                )
+                ..annual_crop_input(&solanaceae_id_str(&families), "Carotte porte-graine")
             },
         )
         .await
@@ -484,16 +456,9 @@ mod tests {
     async fn create_pluriannual_recurring_crop_persists_with_pruning() {
         let repo = fresh_repo().await;
         let families = list_family_options(&repo).await.unwrap();
-        let strata = list_strata_options(&repo).await.unwrap();
         let rosacees = families
             .iter()
             .find(|f| f.label.contains("Rosacées"))
-            .unwrap()
-            .id
-            .clone();
-        let sous_etage = strata
-            .iter()
-            .find(|s| s.label == "Sous-étage")
             .unwrap()
             .id
             .clone();
@@ -504,7 +469,7 @@ mod tests {
                 lifespan_years: 40,
                 years_to_first_yield: 3,
                 pruning_season: PruningSeason::Winter,
-                ..annual_crop_input(&rosacees, &sous_etage, "Pommier")
+                ..annual_crop_input(&rosacees, "Pommier")
             },
         )
         .await
@@ -523,18 +488,13 @@ mod tests {
     async fn create_pluriannual_recurring_rejects_first_yield_ge_lifespan() {
         let repo = fresh_repo().await;
         let families = list_family_options(&repo).await.unwrap();
-        let strata = list_strata_options(&repo).await.unwrap();
         let err = create_crop(
             &repo,
             CropInput {
                 lifespan_kind: LifespanKind::PluriannualRecurring,
                 lifespan_years: 5,
                 years_to_first_yield: 5,
-                ..annual_crop_input(
-                    &solanaceae_id_str(&families),
-                    &herbacee_id_str(&strata),
-                    "Bad",
-                )
+                ..annual_crop_input(&solanaceae_id_str(&families), "Bad")
             },
         )
         .await
@@ -565,16 +525,9 @@ mod tests {
     async fn create_pluriannual_variety_persists_under_recurring_crop() {
         let repo = fresh_repo().await;
         let families = list_family_options(&repo).await.unwrap();
-        let strata = list_strata_options(&repo).await.unwrap();
         let rosacees = families
             .iter()
             .find(|f| f.label.contains("Rosacées"))
-            .unwrap()
-            .id
-            .clone();
-        let sous_etage = strata
-            .iter()
-            .find(|s| s.label == "Sous-étage")
             .unwrap()
             .id
             .clone();
@@ -585,7 +538,7 @@ mod tests {
                 lifespan_years: 40,
                 years_to_first_yield: 3,
                 pruning_season: PruningSeason::Winter,
-                ..annual_crop_input(&rosacees, &sous_etage, "Pommier")
+                ..annual_crop_input(&rosacees, "Pommier")
             },
         )
         .await
@@ -611,7 +564,6 @@ mod tests {
     async fn create_annual_variety_rejects_pluriannual_crop() {
         let repo = fresh_repo().await;
         let families = list_family_options(&repo).await.unwrap();
-        let strata = list_strata_options(&repo).await.unwrap();
         // Make a perennial crop via the public service so this also covers
         // create_crop's pluriannual path.
         let crop = create_crop(
@@ -621,11 +573,7 @@ mod tests {
                 lifespan_years: 40,
                 years_to_first_yield: 3,
                 pruning_season: PruningSeason::Winter,
-                ..annual_crop_input(
-                    &solanaceae_id_str(&families),
-                    &herbacee_id_str(&strata),
-                    "Pommier",
-                )
+                ..annual_crop_input(&solanaceae_id_str(&families), "Pommier")
             },
         )
         .await

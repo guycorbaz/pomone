@@ -95,6 +95,7 @@ export component MainWindow inherits Window {
     in property <string> section-new-text;
     in property <string> label-variety;
     in property <string> label-location;
+    in property <string> label-planting-strata;
     in property <string> label-sown-on;
     in property <string> label-established-on;
     in property <string> label-removal-on;
@@ -107,9 +108,11 @@ export component MainWindow inherits Window {
     in property <string> create-button-text;
     in property <[string]> variety-labels;
     in property <[string]> location-labels;
+    in property <[string]> strata-labels;
     in property <[bool]> variety-is-annuals;
     in-out property <int> variety-index: 0;
     in-out property <int> location-index: 0;
+    in-out property <int> strata-index: 0;
     in-out property <string> sown-on-text;
     in-out property <string> established-on-text;
     in-out property <string> removal-on-text;
@@ -135,11 +138,8 @@ export component MainWindow inherits Window {
     in property <string> label-crop-latin;
     in property <string> placeholder-crop-latin;
     in property <string> label-crop-family;
-    in property <string> label-crop-strata;
     in property <[string]> family-labels;
-    in property <[string]> strata-labels;
     in-out property <int> family-index: 0;
-    in-out property <int> strata-index: 0;
     in-out property <string> new-crop-name;
     in-out property <string> new-crop-latin;
     in property <string> label-lifespan;
@@ -806,6 +806,7 @@ export component MainWindow inherits Window {
                 section-new-text: section-new-text;
                 label-variety: label-variety;
                 label-location: label-location;
+                label-strata: label-planting-strata;
                 label-sown-on: label-sown-on;
                 label-established-on: label-established-on;
                 label-removal-on: label-removal-on;
@@ -818,9 +819,11 @@ export component MainWindow inherits Window {
                 create-button-text: create-button-text;
                 variety-labels: variety-labels;
                 location-labels: location-labels;
+                strata-labels: strata-labels;
                 variety-is-annuals: variety-is-annuals;
                 variety-index <=> variety-index;
                 location-index <=> location-index;
+                strata-index <=> strata-index;
                 sown-on-text <=> sown-on-text;
                 established-on-text <=> established-on-text;
                 removal-on-text <=> removal-on-text;
@@ -914,11 +917,8 @@ export component MainWindow inherits Window {
                 label-crop-latin: label-crop-latin;
                 placeholder-crop-latin: placeholder-crop-latin;
                 label-family: label-crop-family;
-                label-strata: label-crop-strata;
                 family-labels: family-labels;
-                strata-labels: strata-labels;
                 family-index <=> family-index;
-                strata-index <=> strata-index;
                 new-crop-name <=> new-crop-name;
                 new-crop-latin <=> new-crop-latin;
                 label-lifespan: label-lifespan;

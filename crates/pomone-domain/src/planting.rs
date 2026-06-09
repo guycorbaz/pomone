@@ -6,7 +6,7 @@
 
 use crate::crop::Lifespan;
 use crate::error::{DomainError, DomainResult};
-use crate::ids::{LocationId, PlantingId, VarietyId};
+use crate::ids::{LocationId, PlantingId, StrataId, VarietyId};
 use crate::validation::{
     normalize_optional, require_name, require_positive_area, require_positive_count,
 };
@@ -167,6 +167,11 @@ pub struct Planting {
     pub id: PlantingId,
     pub variety_id: VarietyId,
     pub location_id: LocationId,
+    /// Vegetation stratum this planting occupies. Carried per-planting (not
+    /// per-crop) so the same cultivar can be grown at different heights — e.g.
+    /// an apple as basse-tige (shrub layer) or mi-tige (understory) depending
+    /// on rootstock/training (issue #86).
+    pub strata_id: StrataId,
     pub area_m2: Decimal,
     pub plants_count: u32,
     pub schedule: PlantingSchedule,
@@ -179,6 +184,7 @@ impl Planting {
     pub fn new(
         variety_id: VarietyId,
         location_id: LocationId,
+        strata_id: StrataId,
         crop_lifespan: Lifespan,
         area_m2: Decimal,
         plants_count: u32,
@@ -202,6 +208,7 @@ impl Planting {
             id: PlantingId::new(),
             variety_id,
             location_id,
+            strata_id,
             area_m2: require_positive_area(area_m2)?,
             plants_count: require_positive_count(plants_count)?,
             schedule,
@@ -435,6 +442,7 @@ mod tests {
         let p = Planting::new(
             VarietyId::new(),
             LocationId::new(),
+            StrataId::new(),
             Lifespan::Annual,
             dec!(20.0),
             100,
@@ -456,6 +464,7 @@ mod tests {
         let res = Planting::new(
             VarietyId::new(),
             LocationId::new(),
+            StrataId::new(),
             Lifespan::Annual,
             dec!(0),
             10,
@@ -468,6 +477,7 @@ mod tests {
         let res = Planting::new(
             VarietyId::new(),
             LocationId::new(),
+            StrataId::new(),
             Lifespan::Annual,
             dec!(10),
             0,
@@ -484,6 +494,7 @@ mod tests {
         let res = Planting::new(
             VarietyId::new(),
             LocationId::new(),
+            StrataId::new(),
             Lifespan::Annual,
             dec!(10),
             5,
