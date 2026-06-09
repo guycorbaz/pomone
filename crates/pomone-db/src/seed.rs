@@ -139,6 +139,10 @@ fn default_task_types() -> Vec<TaskType> {
     [
         (TaskCategory::Sow, "Semis", "#6FAF7A"),
         (TaskCategory::Transplant, "Repiquage", "#3C6E47"),
+        // "Plantation" (mise en place of bought plants / perennials) shares the
+        // Transplant category but is a distinct type so the task reads right
+        // (issue: establishment methods). The auto-generator picks it by name.
+        (TaskCategory::Transplant, "Plantation", "#4E8C5A"),
         (TaskCategory::Harvest, "Récolte", "#B85C38"),
         (TaskCategory::Weeding, "Désherbage", "#B07C25"),
         (TaskCategory::Irrigation, "Irrigation", "#5F9F8B"),
@@ -170,10 +174,17 @@ pub async fn seed_defaults(repo: &dyn Repository) -> DbResult<()> {
             repo.family_create(&f).await?;
         }
     }
-    if repo.task_type_list().await?.is_empty() {
+    let task_types = repo.task_type_list().await?;
+    if task_types.is_empty() {
         for tt in default_task_types() {
             repo.task_type_create(&tt).await?;
         }
+    } else if !task_types.iter().any(|t| t.name == "Plantation") {
+        // Additive backfill for databases seeded before the "Plantation" type
+        // existed (establishment methods): the planting auto-generator needs
+        // it. Created only if absent, so it never clobbers a user's edits.
+        let plantation = TaskType::new("Plantation", TaskCategory::Transplant, "#4E8C5A")?;
+        repo.task_type_create(&plantation).await?;
     }
     Ok(())
 }

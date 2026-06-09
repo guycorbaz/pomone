@@ -12,18 +12,31 @@ use pomone_domain::{
 };
 use rust_decimal::Decimal;
 
-/// Create an annual `Cycle` planting whose dates are inferred from the
-/// variety's `AnnualProfile` and a sowing date.
-///
-/// Returns an `Inconsistent` error if the variety has a `PluriannualProfile`
-/// (callers must use a different code path for perennial establishments).
+/// How an annual cropping is established — Qrop's three classic paths. Chosen
+/// per planting (not stored: it's encoded by which dates the `Cycle` carries),
+/// it drives both the inferred dates and the auto-generated tasks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EstablishmentMethod {
+    /// Sown straight in place: Sow + Harvest (no transplant).
+    DirectSow,
+    /// Raised under cover then transplanted: Sow + Transplant + Harvest.
+    RaisedTransplant,
+    /// Bought ready-made plants: Plantation + Harvest (no sow).
+    BoughtPlants,
+}
+
+/// Create an annual `Cycle` planting with the chosen establishment method.
+/// `date` is the sowing date for `DirectSow`/`RaisedTransplant`, or the
+/// planting date for `BoughtPlants`. Harvest dates are inferred from the
+/// variety's `AnnualProfile`. `Inconsistent` if the variety is pluriannual.
 #[allow(clippy::too_many_arguments)]
-pub async fn create_annual_planting_from_sowing(
+pub async fn create_annual_planting(
     repo: &dyn Repository,
     variety_id: VarietyId,
     location_id: LocationId,
     strata_id: StrataId,
-    sown_on: NaiveDate,
+    method: EstablishmentMethod,
+    date: NaiveDate,
     area_m2: Decimal,
     plants_count: u32,
     name: Option<String>,
@@ -51,13 +64,28 @@ pub async fn create_annual_planting_from_sowing(
             ));
         }
     };
-    let inferred = date_calc::infer_cycle_from_sowing(sown_on, annual_profile)?;
-    let schedule = PlantingSchedule::cycle(
-        Some(inferred.sown_on),
-        inferred.transplanted_on,
-        inferred.first_harvest_on,
-        inferred.last_harvest_on,
-    )?;
+    // Build the schedule: which of sown_on / transplanted_on are set encodes
+    // the method, and the auto-generator reads that back (Sow / Transplant /
+    // Plantation). Harvest dates come from the variety profile.
+    let schedule = match method {
+        EstablishmentMethod::DirectSow => {
+            let c = date_calc::infer_cycle_from_transplant(date, annual_profile)?;
+            PlantingSchedule::cycle(Some(date), None, c.first_harvest_on, c.last_harvest_on)?
+        }
+        EstablishmentMethod::RaisedTransplant => {
+            let c = date_calc::infer_cycle_from_sowing(date, annual_profile)?;
+            PlantingSchedule::cycle(
+                Some(c.sown_on),
+                c.transplanted_on,
+                c.first_harvest_on,
+                c.last_harvest_on,
+            )?
+        }
+        EstablishmentMethod::BoughtPlants => {
+            let c = date_calc::infer_cycle_from_transplant(date, annual_profile)?;
+            PlantingSchedule::cycle(None, Some(date), c.first_harvest_on, c.last_harvest_on)?
+        }
+    };
     let planting = Planting::new(
         variety_id,
         location_id,
@@ -70,13 +98,41 @@ pub async fn create_annual_planting_from_sowing(
         notes,
     )?;
     repo.planting_create(&planting).await?;
-    // Best-effort auto-generation of the operational tasks (Sow / Transplant
-    // / Harvest). A failure here only logs — the planting is already saved
-    // and the user can re-trigger generation manually later.
+    // Best-effort auto-generation of the operational tasks. A failure here only
+    // logs — the planting is already saved and the user can re-trigger later.
     if let Err(e) = crate::task_autogen::generate_tasks_for_planting(repo, &planting).await {
         tracing::warn!(error = %e, planting_id = %planting.id, "failed to auto-generate tasks");
     }
     Ok(planting)
+}
+
+/// Back-compat thin wrapper: create from a sowing date using the
+/// raise-then-transplant method (the original behaviour).
+#[allow(clippy::too_many_arguments)]
+pub async fn create_annual_planting_from_sowing(
+    repo: &dyn Repository,
+    variety_id: VarietyId,
+    location_id: LocationId,
+    strata_id: StrataId,
+    sown_on: NaiveDate,
+    area_m2: Decimal,
+    plants_count: u32,
+    name: Option<String>,
+    notes: Option<String>,
+) -> AppResult<Planting> {
+    create_annual_planting(
+        repo,
+        variety_id,
+        location_id,
+        strata_id,
+        EstablishmentMethod::RaisedTransplant,
+        sown_on,
+        area_m2,
+        plants_count,
+        name,
+        notes,
+    )
+    .await
 }
 
 /// Create a perennial planting (a long-lived productive plant tracked by
@@ -591,9 +647,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn creating_perennial_planting_generates_no_task() {
-        // Perennials are planted from bought stock → no auto task at
-        // establishment (nothing to transplant).
+    async fn creating_perennial_planting_generates_a_plantation_task() {
+        // Perennials are planted from bought stock → a single "Plantation"
+        // task at establishment (not "Repiquage").
         let (repo, vid, lid, sid) = setup_perennial().await;
         seed_defaults(&repo).await.unwrap();
         let p = create_perennial_planting(
@@ -611,7 +667,96 @@ mod tests {
         .await
         .unwrap();
         let tasks = repo.task_list_for_planting(p.id).await.unwrap();
-        assert!(tasks.is_empty());
+        assert_eq!(tasks.len(), 1);
+        let types = repo.task_type_list().await.unwrap();
+        let tt = types
+            .iter()
+            .find(|t| t.id == tasks[0].task_type_id)
+            .unwrap();
+        assert_eq!(tt.name, "Plantation");
+        assert_eq!(tasks[0].planned_on, d(2026, 3, 15));
+    }
+
+    #[tokio::test]
+    async fn bought_plants_annual_generates_plantation_and_harvest() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting(
+            &repo,
+            vid,
+            lid,
+            sid,
+            EstablishmentMethod::BoughtPlants,
+            d(2026, 4, 1),
+            dec!(20),
+            50,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        // No sowing recorded; a planting date instead.
+        match p.schedule {
+            PlantingSchedule::Cycle {
+                sown_on,
+                transplanted_on,
+                ..
+            } => {
+                assert!(sown_on.is_none());
+                assert_eq!(transplanted_on, Some(d(2026, 4, 1)));
+            }
+            PlantingSchedule::Perennial { .. } => panic!("expected Cycle"),
+        }
+        let tasks = repo.task_list_for_planting(p.id).await.unwrap();
+        let types = repo.task_type_list().await.unwrap();
+        let names: Vec<&str> = tasks
+            .iter()
+            .map(|t| {
+                types
+                    .iter()
+                    .find(|tt| tt.id == t.task_type_id)
+                    .unwrap()
+                    .name
+                    .as_str()
+            })
+            .collect();
+        assert!(names.contains(&"Plantation"));
+        assert!(names.contains(&"Récolte"));
+        assert!(!names.contains(&"Repiquage"));
+        assert!(!names.contains(&"Semis"));
+    }
+
+    #[tokio::test]
+    async fn direct_sow_annual_generates_sow_and_harvest_only() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting(
+            &repo,
+            vid,
+            lid,
+            sid,
+            EstablishmentMethod::DirectSow,
+            d(2026, 3, 1),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        match p.schedule {
+            PlantingSchedule::Cycle {
+                sown_on,
+                transplanted_on,
+                ..
+            } => {
+                assert_eq!(sown_on, Some(d(2026, 3, 1)));
+                assert!(transplanted_on.is_none());
+            }
+            PlantingSchedule::Perennial { .. } => panic!("expected Cycle"),
+        }
+        let tasks = repo.task_list_for_planting(p.id).await.unwrap();
+        assert_eq!(tasks.len(), 2, "Sow + Harvest, no transplant");
     }
 
     #[tokio::test]

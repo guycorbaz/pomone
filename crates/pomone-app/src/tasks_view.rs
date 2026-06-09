@@ -476,7 +476,8 @@ mod tests {
         let repo = SqliteRepository::in_memory().await.unwrap();
         seed_defaults(&repo).await.unwrap();
         let opts = list_task_type_options(&repo).await.unwrap();
-        assert_eq!(opts.len(), 8); // one per TaskCategory
+        // 8 base categories + the extra "Plantation" type (Transplant category).
+        assert_eq!(opts.len(), 9);
         assert!(opts.iter().any(|o| o.name == "Semis"));
         assert!(opts.iter().all(|o| o.color.starts_with('#')));
         assert!(opts.iter().any(|o| o.category == "sow"));

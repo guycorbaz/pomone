@@ -96,6 +96,10 @@ export component MainWindow inherits Window {
     in property <string> label-variety;
     in property <string> label-location;
     in property <string> label-planting-strata;
+    in property <string> label-planting-method;
+    in property <string> label-planting-date;
+    in property <[string]> planting-method-labels;
+    in-out property <int> planting-method-index: 0;
     in property <string> label-sown-on;
     in property <string> label-established-on;
     in property <string> label-removal-on;
@@ -825,6 +829,10 @@ export component MainWindow inherits Window {
                 label-variety: label-variety;
                 label-location: label-location;
                 label-strata: label-planting-strata;
+                label-method: label-planting-method;
+                label-planting-date: label-planting-date;
+                method-labels: planting-method-labels;
+                method-index <=> planting-method-index;
                 label-sown-on: label-sown-on;
                 label-established-on: label-established-on;
                 label-removal-on: label-removal-on;

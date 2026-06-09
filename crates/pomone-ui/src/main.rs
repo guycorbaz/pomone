@@ -1821,6 +1821,18 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_label_variety(SharedString::from(i18n.t("label-variety")));
     window.set_label_location(SharedString::from(i18n.t("label-location")));
     window.set_label_sown_on(SharedString::from(i18n.t("label-sown-on")));
+    window.set_label_planting_method(SharedString::from(i18n.t("label-planting-method")));
+    window.set_label_planting_date(SharedString::from(i18n.t("label-planting-date")));
+    // Order must match `establishment_method_from_index`: 0 direct, 1 raised, 2 bought.
+    let method_labels: Vec<SharedString> = [
+        "method-direct-sow",
+        "method-raised-transplant",
+        "method-bought-plants",
+    ]
+    .into_iter()
+    .map(|k| SharedString::from(i18n.t(k)))
+    .collect();
+    window.set_planting_method_labels(ModelRc::new(VecModel::from(method_labels)));
     window.set_label_established_on(SharedString::from(i18n.t("label-established-on")));
     window.set_label_removal_on(SharedString::from(i18n.t("label-removal-on")));
     window.set_placeholder_removal_date(SharedString::from(i18n.t("placeholder-removal-date")));
@@ -2225,14 +2237,18 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
     let plants_count = validate_positive_count(&window.get_count_text(), i18n)?;
 
     if is_annual {
-        let sown_on = validate_iso_date(&window.get_sown_on_text(), i18n)?;
+        // The sown-on field holds the sowing date (direct / raised) or the
+        // planting date (bought plants), per the chosen establishment method.
+        let date = validate_iso_date(&window.get_sown_on_text(), i18n)?;
+        let method = establishment_method_from_index(window.get_planting_method_index());
         state.runtime.block_on(async {
-            services::create_annual_planting_from_sowing(
+            services::create_annual_planting(
                 state.app.repo(),
                 variety_id,
                 location_id,
                 strata_id,
-                sown_on,
+                method,
+                date,
                 area_m2,
                 plants_count,
                 None,
@@ -2385,6 +2401,16 @@ fn lifespan_kind_from_index(idx: i32) -> Result<LifespanKind, AppError> {
         other => Err(AppError::Inconsistent(format!(
             "unexpected lifespan dropdown index {other}"
         ))),
+    }
+}
+
+/// Map the establishment-method dropdown index to the service enum. Order must
+/// match the `planting-method-labels` model built in `refresh_i18n`.
+fn establishment_method_from_index(idx: i32) -> services::EstablishmentMethod {
+    match idx {
+        1 => services::EstablishmentMethod::RaisedTransplant,
+        2 => services::EstablishmentMethod::BoughtPlants,
+        _ => services::EstablishmentMethod::DirectSow,
     }
 }
 
