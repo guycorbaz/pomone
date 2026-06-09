@@ -33,6 +33,9 @@ pub struct LocationListItem {
     pub parent_label: String,
     pub full_path: String,
     pub depth: u32,
+    /// True when the location has child locations or is used by a planting —
+    /// the UI disables Delete (both FKs are `ON DELETE RESTRICT`).
+    pub in_use: bool,
 }
 
 /// One option for the LocationKind dropdown.
@@ -67,17 +70,35 @@ pub async fn list_locations_tree(repo: &dyn Repository) -> AppResult<Vec<Locatio
         kids.sort_by(|a, b| a.name.cmp(&b.name));
     }
 
+    // Locations referenced by a planting can't be deleted (FK RESTRICT).
+    let planted: std::collections::HashSet<LocationId> = repo
+        .planting_list()
+        .await?
+        .iter()
+        .map(|p| p.location_id)
+        .collect();
+
     let mut out = Vec::with_capacity(locations.len());
-    walk(None, 0, &children_by_parent, &kind_by_id, &by_id, &mut out);
+    walk(
+        None,
+        0,
+        &children_by_parent,
+        &kind_by_id,
+        &by_id,
+        &planted,
+        &mut out,
+    );
     Ok(out)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn walk(
     parent: Option<LocationId>,
     depth: u32,
     children_by_parent: &HashMap<Option<LocationId>, Vec<&Location>>,
     kind_by_id: &HashMap<LocationKindId, &pomone_domain::LocationKind>,
     by_id: &HashMap<LocationId, &Location>,
+    planted: &std::collections::HashSet<LocationId>,
     out: &mut Vec<LocationListItem>,
 ) {
     if depth > MAX_TREE_DEPTH {
@@ -102,6 +123,7 @@ fn walk(
             parent_label,
             full_path: build_full_path(child, by_id),
             depth,
+            in_use: children_by_parent.contains_key(&Some(child.id)) || planted.contains(&child.id),
         });
         walk(
             Some(child.id),
@@ -109,6 +131,7 @@ fn walk(
             children_by_parent,
             kind_by_id,
             by_id,
+            planted,
             out,
         );
     }
@@ -222,6 +245,21 @@ pub async fn create_location(repo: &dyn Repository, input: LocationInput) -> App
         .await
         .map_err(AppError::from)?;
     Ok(location)
+}
+
+/// Delete a location. Blocked (FK `ON DELETE RESTRICT`) when it has child
+/// locations or is used by a planting — surfaced as the
+/// `Inconsistent("location_in_use")` sentinel the UI re-keys to a localized
+/// message (same convention as crops / varieties).
+pub async fn delete_location(repo: &dyn Repository, id_str: &str) -> AppResult<()> {
+    let id: LocationId = crate::plantings_view::parse_id(id_str)?;
+    match repo.location_delete(id).await {
+        Ok(()) => Ok(()),
+        Err(e) if e.is_foreign_key_violation() => {
+            Err(AppError::Inconsistent("location_in_use".to_owned()))
+        }
+        Err(other) => Err(AppError::Db(other)),
+    }
 }
 
 #[cfg(test)]
@@ -412,5 +450,78 @@ mod tests {
         let leaf = tree.iter().find(|l| l.name == "D").unwrap();
         assert_eq!(leaf.depth, 3);
         assert_eq!(leaf.full_path, "A / B / C / D");
+    }
+
+    // ----- Delete guards (issue #86 follow-up) ---------------------------
+
+    #[tokio::test]
+    async fn delete_location_refused_when_it_has_children() {
+        let repo = fresh_repo().await; // Jardin Pomone (parent) → Planche A
+        let jardin = list_locations_tree(&repo)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.name == "Jardin Pomone")
+            .unwrap();
+        assert!(jardin.in_use);
+        let err = delete_location(&repo, &jardin.id).await.unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(m) if m == "location_in_use"));
+    }
+
+    #[tokio::test]
+    async fn delete_location_removes_an_unused_leaf() {
+        let repo = fresh_repo().await;
+        let planche = list_locations_tree(&repo)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.name == "Planche A")
+            .unwrap();
+        assert!(!planche.in_use);
+        delete_location(&repo, &planche.id).await.unwrap();
+        assert!(list_locations_tree(&repo)
+            .await
+            .unwrap()
+            .iter()
+            .all(|l| l.name != "Planche A"));
+    }
+
+    #[tokio::test]
+    async fn delete_location_refused_when_it_holds_a_planting() {
+        use crate::services::create_annual_planting_from_sowing;
+        use chrono::NaiveDate;
+        use pomone_db::{StrataRepo, VarietyRepo};
+        let repo = fresh_repo().await;
+        let variety = repo.variety_list().await.unwrap()[0].id;
+        let strata = repo.strata_list().await.unwrap()[0].id;
+        let planche = list_locations_tree(&repo)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.name == "Planche A")
+            .unwrap();
+        let loc_id: LocationId = crate::plantings_view::parse_id(&planche.id).unwrap();
+        create_annual_planting_from_sowing(
+            &repo,
+            variety,
+            loc_id,
+            strata,
+            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+            dec!(10),
+            10,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let planche = list_locations_tree(&repo)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.name == "Planche A")
+            .unwrap();
+        assert!(planche.in_use);
+        let err = delete_location(&repo, &planche.id).await.unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(m) if m == "location_in_use"));
     }
 }

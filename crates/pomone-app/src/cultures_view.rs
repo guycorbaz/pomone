@@ -57,6 +57,9 @@ pub struct VarietyRow {
     pub name: String,
     pub description: String,
     pub profile_label: String,
+    /// True when at least one planting uses this variety — the UI disables
+    /// Delete (the planting FK is `ON DELETE RESTRICT`).
+    pub in_use: bool,
 }
 
 /// One option for the Family dropdown.
@@ -124,7 +127,19 @@ pub async fn list_varieties_for_crop(
     let crop_id: pomone_domain::CropId = crate::plantings_view::parse_id(crop_id_str)?;
     let mut varieties = repo.variety_list_for_crop(crop_id).await?;
     varieties.sort_by(|a, b| a.name.cmp(&b.name));
-    let rows = varieties.into_iter().map(variety_to_row).collect();
+    let planted: HashSet<_> = repo
+        .planting_list()
+        .await?
+        .iter()
+        .map(|p| p.variety_id)
+        .collect();
+    let rows = varieties
+        .into_iter()
+        .map(|v| {
+            let in_use = planted.contains(&v.id);
+            variety_to_row(v, in_use)
+        })
+        .collect();
     Ok(rows)
 }
 
@@ -402,7 +417,7 @@ fn pruning_label(pruning: PruningSeason) -> String {
     }
 }
 
-fn variety_to_row(v: Variety) -> VarietyRow {
+fn variety_to_row(v: Variety, in_use: bool) -> VarietyRow {
     let profile_label = match v.profile {
         VarietyProfile::Annual(p) => {
             let dtt = p
@@ -422,6 +437,21 @@ fn variety_to_row(v: Variety) -> VarietyRow {
         name: v.name,
         description: v.description.unwrap_or_default(),
         profile_label,
+        in_use,
+    }
+}
+
+/// Delete a variety. Blocked (FK `ON DELETE RESTRICT`) when a planting still
+/// uses it — surfaced as the `Inconsistent("variety_in_use")` sentinel the UI
+/// re-keys to a localized message (same convention as crops / task types).
+pub async fn delete_variety(repo: &dyn Repository, id_str: &str) -> AppResult<()> {
+    let id: pomone_domain::VarietyId = crate::plantings_view::parse_id(id_str)?;
+    match repo.variety_delete(id).await {
+        Ok(()) => Ok(()),
+        Err(e) if e.is_foreign_key_violation() => {
+            Err(AppError::Inconsistent("variety_in_use".to_owned()))
+        }
+        Err(other) => Err(AppError::Db(other)),
     }
 }
 
@@ -798,6 +828,53 @@ mod tests {
         let tomate_id = list_crops(&repo).await.unwrap()[0].id.clone();
         delete_crop(&repo, &tomate_id).await.unwrap();
         assert!(list_crops(&repo).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn delete_variety_removes_an_unplanted_variety() {
+        let repo = fresh_repo().await; // Tomate with Marmande + Roma, none planted
+        let crops = list_crops(&repo).await.unwrap();
+        let varieties = list_varieties_for_crop(&repo, &crops[0].id).await.unwrap();
+        assert!(varieties.iter().all(|v| !v.in_use));
+        let target = varieties[0].id.clone();
+        delete_variety(&repo, &target).await.unwrap();
+        let after = list_varieties_for_crop(&repo, &crops[0].id).await.unwrap();
+        assert!(after.iter().all(|v| v.id != target));
+    }
+
+    #[tokio::test]
+    async fn delete_variety_refused_when_planted() {
+        use crate::services::create_annual_planting_from_sowing;
+        use chrono::NaiveDate;
+        use pomone_db::{LocationRepo, StrataRepo, VarietyRepo};
+        let repo = fresh_repo().await;
+        let variety = repo.variety_list().await.unwrap()[0].id;
+        let bed = repo
+            .location_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.parent_id.is_some())
+            .unwrap()
+            .id;
+        let strata = repo.strata_list().await.unwrap()[0].id;
+        create_annual_planting_from_sowing(
+            &repo,
+            variety,
+            bed,
+            strata,
+            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+            Decimal::from(10),
+            10,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let err = delete_variety(&repo, &variety.to_string())
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(m) if m == "variety_in_use"));
     }
 
     #[tokio::test]

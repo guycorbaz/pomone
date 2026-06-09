@@ -27,6 +27,7 @@ export struct VarietyRow {
     name: string,
     description: string,
     profile-label: string,
+    in-use: bool,
 }
 
 // A single row in the Crops list. Highlights itself when selected.
@@ -108,28 +109,49 @@ component CropRowView inherits Rectangle {
 
 component VarietyRowView inherits Card {
     in property <VarietyRow> entry;
+    in property <string> delete-text;
+    in property <string> in-use-text;
+    callback delete(string);
     height: 96px;
 
-    VerticalLayout {
+    HorizontalLayout {
         padding: Theme.space-md;
-        spacing: 2px;
-
-        Text {
-            text: entry.name;
-            color: Palette.text-primary;
-            font-size: Theme.font-size-body;
-            font-weight: Theme.font-weight-semibold;
+        spacing: Theme.space-md;
+        VerticalLayout {
+            spacing: 2px;
+            horizontal-stretch: 1;
+            Text {
+                text: entry.name;
+                color: Palette.text-primary;
+                font-size: Theme.font-size-body;
+                font-weight: Theme.font-weight-semibold;
+            }
+            Text {
+                text: entry.profile-label;
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+            }
+            if entry.description != "": Text {
+                text: entry.description;
+                color: Palette.text-secondary;
+                font-size: Theme.font-size-label;
+                wrap: word-wrap;
+            }
         }
-        Text {
-            text: entry.profile-label;
-            color: Palette.text-muted;
-            font-size: Theme.font-size-label;
-        }
-        if entry.description != "": Text {
-            text: entry.description;
-            color: Palette.text-secondary;
-            font-size: Theme.font-size-label;
-            wrap: word-wrap;
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.space-xs;
+            SecondaryButton {
+                text: delete-text;
+                enabled: !entry.in-use;
+                clicked => { delete(entry.id); }
+            }
+            if entry.in-use: Text {
+                text: in-use-text;
+                color: Palette.text-secondary;
+                font-size: Theme.font-size-label;
+                horizontal-alignment: center;
+            }
         }
     }
 }
@@ -233,6 +255,9 @@ export component CulturesPage inherits Rectangle {
     in-out property <string> new-variety-yield-kg;
     in property <string> create-variety-button-text;
     callback create-variety();
+    in property <string> variety-delete-text;
+    in property <string> variety-in-use-text;
+    callback delete-variety(string);
 
     // Shared status line at the bottom
     in property <string> status-text;
@@ -461,7 +486,10 @@ export component CulturesPage inherits Rectangle {
                         ListView {
                             for v in varieties: VarietyRowView {
                                 entry: v;
+                                delete-text: variety-delete-text;
+                                in-use-text: variety-in-use-text;
                                 width: var-list.width;
+                                delete(id) => { delete-variety(id); }
                             }
                         }
                     }

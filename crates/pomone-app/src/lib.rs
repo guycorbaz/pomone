@@ -43,17 +43,18 @@ pub use crop_map_view::{
     SplitPart,
 };
 pub use cultures_view::{
-    create_crop, create_variety, delete_crop, get_crop_for_edit, list_crops, list_family_options,
-    list_strata_options, list_varieties_for_crop, update_crop, CropEditForm, CropInput, CropRow,
-    FamilyOption, LifespanKind, StrataOption, VarietyInput, VarietyProfileKind, VarietyRow,
+    create_crop, create_variety, delete_crop, delete_variety, get_crop_for_edit, list_crops,
+    list_family_options, list_strata_options, list_varieties_for_crop, update_crop, CropEditForm,
+    CropInput, CropRow, FamilyOption, LifespanKind, StrataOption, VarietyInput, VarietyProfileKind,
+    VarietyRow,
 };
 pub use demo::{seed_demo_data, DemoSummary};
 pub use error::{AppError, AppResult};
 pub use harvest_view::{list_yearly_harvests_for_planting, YearlyHarvestRow};
 pub use i18n::{I18n, Lang};
 pub use locations_view::{
-    create_location, list_location_kind_options, list_locations_tree, list_parent_options,
-    LocationInput, LocationKindOption, LocationListItem, ParentLocationOption,
+    create_location, delete_location, list_location_kind_options, list_locations_tree,
+    list_parent_options, LocationInput, LocationKindOption, LocationListItem, ParentLocationOption,
 };
 pub use migration::{copy_all, MigrationReport};
 pub use planting_detail_view::{

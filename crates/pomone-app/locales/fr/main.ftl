@@ -85,6 +85,9 @@ button-create-crop = Créer la culture
 button-create-variety = Créer la variété
 status-crop-created = Culture créée
 status-variety-created = Variété créée
+status-variety-deleted = Variété supprimée
+confirm-delete-variety = Supprimer cette variété ? Cette action est irréversible.
+error-variety-in-use = Cette variété est utilisée par une plantation ; supprimez d'abord ces plantations.
 status-crop-updated = Culture mise à jour
 status-crop-deleted = Culture supprimée
 button-edit = Modifier
@@ -233,6 +236,9 @@ placeholder-loc-notes = orientation est-ouest, exposition sud…
 button-create-location = Créer le lieu
 parent-none = (racine — aucun parent)
 status-location-created = Lieu créé
+status-location-deleted = Lieu supprimé
+confirm-delete-location = Supprimer ce lieu ? Cette action est irréversible.
+error-location-in-use = Ce lieu contient d'autres lieux ou des plantations ; supprimez-les d'abord.
 
 ## Common nouns
 crop = Culture
