@@ -235,6 +235,9 @@ button-create-location = Create location
 parent-none = (root — no parent)
 status-location-created = Location created
 status-location-deleted = Location deleted
+status-location-updated = Location updated
+loc-form-section-edit = Edit location
+error-location-cycle = A location cannot become a sub-location of itself.
 confirm-delete-location = Delete this location? This cannot be undone.
 error-location-in-use = This location holds child locations or plantings; delete those first.
 
