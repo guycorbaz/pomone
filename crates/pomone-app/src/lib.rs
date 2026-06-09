@@ -61,7 +61,7 @@ pub use planting_detail_view::{
 };
 pub use plantings_view::{
     list_location_options, list_plantings, list_variety_options, parse_id, parse_iso_date,
-    CycleDates, LocationOption, PlantingRow, VarietyOption,
+    planting_status_key, CycleDates, LocationOption, PlantingRow, VarietyOption,
 };
 pub use strata_view::{create_strata, delete_strata, list_strata_rows, StrataInput, StrataRow};
 pub use task_autogen::generate_tasks_for_planting;

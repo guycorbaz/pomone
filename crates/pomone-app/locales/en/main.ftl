@@ -231,6 +231,12 @@ strata = Stratum
 variety = Variety
 yearly-harvest = Yearly harvest
 
+## Planting life-cycle status (issue #63)
+planting-status-active = Active
+planting-status-completed = Completed
+planting-status-failed = Failed
+planting-status-abandoned = Abandoned
+
 ## Errors
 error-config = Configuration error: { $message }
 error-database = Database error
@@ -270,6 +276,15 @@ confirm-cancel = Cancel
 confirm-delete-strata = Delete this stratum? This cannot be undone.
 confirm-delete-task = Delete this task? This cannot be undone.
 confirm-delete-task-type = Delete this task type? This cannot be undone.
+confirm-delete-planting = Delete this planting? This cannot be undone, and is only allowed when no activity has been recorded.
+
+## Planting life cycle (issue #63)
+section-planting-lifecycle = Life cycle
+label-status = Status
+button-change-status = Change status
+button-delete-planting = Delete planting
+status-planting-status-updated = Status updated
+status-planting-deleted = Planting deleted
 agenda-overdue-title = Overdue
 agenda-today-title = Today
 
@@ -379,6 +394,7 @@ crop-map-split-confirm = Split
 crop-map-split-cancel = Cancel
 error-no-planting-selected = No planting selected.
 error-location-required = Destination location is required.
+error-planting-has-activity = This planting has recorded activity (completed tasks or logged hours) and cannot be deleted. Mark it completed, failed, or abandoned instead.
 
 ## Bed-usage curve (home)
 bed-usage-legend-open = Open field

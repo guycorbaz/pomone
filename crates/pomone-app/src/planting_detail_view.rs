@@ -8,7 +8,7 @@
 use crate::error::{AppError, AppResult};
 use chrono::NaiveDate;
 use pomone_db::Repository;
-use pomone_domain::{Planting, PlantingId, PlantingSchedule};
+use pomone_domain::{Planting, PlantingId, PlantingSchedule, PlantingStatus};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -32,6 +32,9 @@ pub struct PlantingDetail {
     pub plants_count: u32,
     pub name: Option<String>,
     pub notes: Option<String>,
+    /// Life-cycle status (issue #63); localize with
+    /// [`crate::plantings_view::planting_status_key`].
+    pub status: PlantingStatus,
     /// Schedule entries: sowing/transplant/harvest for `Cycle`, establishment
     /// + (optional) removal for `Perennial`. Always non-empty.
     pub schedule_lines: Vec<DetailLine>,
@@ -204,6 +207,7 @@ pub async fn get_planting_detail(repo: &dyn Repository, id_str: &str) -> AppResu
         plants_count: planting.plants_count,
         name: planting.name.clone(),
         notes: planting.notes.clone(),
+        status: planting.status,
         schedule_lines: schedule_lines(&planting),
         is_perennial,
     })

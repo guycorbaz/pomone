@@ -1,6 +1,9 @@
 //! `PlantingRepo` implementation for MariaDB.
 
-use crate::codec::{decode_planting_schedule, encode_planting_schedule};
+use crate::codec::{
+    decode_planting_schedule, decode_planting_status, encode_planting_schedule,
+    encode_planting_status,
+};
 use crate::error::{DbError, DbResult};
 use crate::mariadb::MariaDbRepository;
 use crate::repository::PlantingRepo;
@@ -12,7 +15,7 @@ use uuid::Uuid;
 
 const COLUMNS: &str = "id, variety_id, location_id, area_m2, plants_count, name, notes, \
                        schedule_kind, sown_on, transplanted_on, first_harvest_on, \
-                       last_harvest_on, established_on, expected_removal_on";
+                       last_harvest_on, established_on, expected_removal_on, status";
 
 #[async_trait]
 impl PlantingRepo for MariaDbRepository {
@@ -45,8 +48,8 @@ impl PlantingRepo for MariaDbRepository {
         sqlx::query(
             "INSERT INTO planting (id, variety_id, location_id, area_m2, plants_count, name, \
              notes, schedule_kind, sown_on, transplanted_on, first_harvest_on, last_harvest_on, \
-             established_on, expected_removal_on) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             established_on, expected_removal_on, status) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(p.id.as_uuid())
         .bind(p.variety_id.as_uuid())
@@ -62,6 +65,7 @@ impl PlantingRepo for MariaDbRepository {
         .bind(s.last_harvest_on)
         .bind(s.established_on)
         .bind(s.expected_removal_on)
+        .bind(encode_planting_status(p.status))
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -73,7 +77,7 @@ impl PlantingRepo for MariaDbRepository {
             "UPDATE planting SET variety_id = ?, location_id = ?, area_m2 = ?, \
              plants_count = ?, name = ?, notes = ?, schedule_kind = ?, sown_on = ?, \
              transplanted_on = ?, first_harvest_on = ?, last_harvest_on = ?, \
-             established_on = ?, expected_removal_on = ? WHERE id = ?",
+             established_on = ?, expected_removal_on = ?, status = ? WHERE id = ?",
         )
         .bind(p.variety_id.as_uuid())
         .bind(p.location_id.as_uuid())
@@ -88,6 +92,7 @@ impl PlantingRepo for MariaDbRepository {
         .bind(s.last_harvest_on)
         .bind(s.established_on)
         .bind(s.expected_removal_on)
+        .bind(encode_planting_status(p.status))
         .bind(p.id.as_uuid())
         .execute(&self.pool)
         .await?;
@@ -132,6 +137,7 @@ fn row_to_planting(row: sqlx::mysql::MySqlRow) -> DbResult<Planting> {
         row.try_get("established_on")?,
         row.try_get("expected_removal_on")?,
     )?;
+    let status: String = row.try_get("status")?;
     Ok(Planting {
         id: PlantingId::from(id),
         variety_id: VarietyId::from(variety_id),
@@ -139,6 +145,7 @@ fn row_to_planting(row: sqlx::mysql::MySqlRow) -> DbResult<Planting> {
         area_m2: row.try_get::<Decimal, _>("area_m2")?,
         plants_count,
         schedule,
+        status: decode_planting_status(&status)?,
         name: row.try_get("name")?,
         notes: row.try_get("notes")?,
     })

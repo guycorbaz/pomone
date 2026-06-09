@@ -35,6 +35,12 @@ pub enum AppError {
     /// and leave it partially written — so the copy is refused up front.
     #[error("migration target is not empty")]
     MigrationTargetNotEmpty,
+
+    /// A planting carrying real activity (completed tasks or logged labor) was
+    /// asked to be deleted. We refuse so its history survives (issue #63); the
+    /// caller should mark it terminal (Completed / Failed / Abandoned) instead.
+    #[error("planting has recorded activity and cannot be deleted")]
+    PlantingHasActivity,
 }
 
 pub type AppResult<T> = Result<T, AppError>;

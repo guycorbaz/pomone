@@ -5,7 +5,7 @@
 // chooses which lines to emit based on Cycle vs Perennial), and a "summary"
 // card with location, area, plants count, optional name and notes.
 
-import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit } from "theme.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
 import { ScrollView } from "std-widgets.slint";
 
 export struct DetailLine {
@@ -56,6 +56,19 @@ export component PlantingDetailPage inherits Rectangle {
 
     in property <string> empty-state-text;    // shown when no detail loaded
     in property <bool> has-detail;
+
+    // ---------- Life-cycle status & delete (issue #63) ----------
+    in property <string> status-label;            // current status, localized (badge)
+    in property <string> status-section-text;     // card title ("Life cycle")
+    in property <string> status-field-label;      // "Status"
+    in property <[string]> status-options;        // 4 localized status labels
+    in-out property <int> status-index;           // selected status in the combo
+    in property <string> change-status-text;      // "Change status" button
+    in property <string> delete-button-text;      // "Delete planting" button
+    in property <string> lifecycle-status-text;   // action result message
+    in property <bool> lifecycle-status-is-error: false;
+    callback change-status();
+    callback delete-planting();
 
     // ---------- Tasks section ----------
     in property <string> tasks-section-text;
@@ -119,6 +132,27 @@ export component PlantingDetailPage inherits Rectangle {
                     color: Palette.primary;
                     font-size: Theme.font-size-h1;
                     font-weight: Theme.font-weight-bold;
+                }
+            }
+            // Current life-cycle status badge (issue #63).
+            if has-detail && status-label != "": Rectangle {
+                background: Palette.surface-alt;
+                border-radius: Theme.radius-sm;
+                border-width: 1px;
+                border-color: Palette.border;
+                horizontal-stretch: 0;
+                HorizontalLayout {
+                    padding-left: Theme.space-sm;
+                    padding-right: Theme.space-sm;
+                    padding-top: Theme.space-xs;
+                    padding-bottom: Theme.space-xs;
+                    Text {
+                        text: status-label;
+                        color: Palette.text-secondary;
+                        font-size: Theme.font-size-label;
+                        font-weight: Theme.font-weight-semibold;
+                        vertical-alignment: center;
+                    }
                 }
             }
             SecondaryButton {
@@ -258,6 +292,63 @@ export component PlantingDetailPage inherits Rectangle {
                             wrap: word-wrap;
                         }
                     }
+                }
+            }
+        }
+
+        // ---------- Life-cycle status & delete (issue #63) ----------
+        if has-detail: Card {
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-md;
+
+                SectionHeader { text: status-section-text; }
+
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    alignment: start;
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: status-field-label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedComboBox {
+                            model: status-options;
+                            current-index <=> status-index;
+                            min-width: 200px;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: " ";
+                            font-size: Theme.font-size-label;
+                        }
+                        PrimaryButton {
+                            text: change-status-text;
+                            clicked => { change-status(); }
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: " ";
+                            font-size: Theme.font-size-label;
+                        }
+                        SecondaryButton {
+                            text: delete-button-text;
+                            clicked => { delete-planting(); }
+                        }
+                    }
+                }
+
+                if lifecycle-status-text != "": Text {
+                    text: lifecycle-status-text;
+                    color: lifecycle-status-is-error ? Palette.danger : Palette.success;
+                    font-size: Theme.font-size-label;
+                    wrap: word-wrap;
                 }
             }
         }
