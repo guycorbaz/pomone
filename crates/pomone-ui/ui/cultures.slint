@@ -76,10 +76,13 @@ component CropRowView inherits Rectangle {
                 }
                 SecondaryButton {
                     text: edit-text;
+                    compact: true;
                     clicked => { edit(entry.id); }
                 }
                 SecondaryButton {
                     text: delete-text;
+                    compact: true;
+                    danger: true;
                     // Deletion is blocked while a variety of this crop is
                     // planted (FK); show why and disable the control.
                     enabled: !entry.in-use;
@@ -149,6 +152,8 @@ component VarietyRowView inherits Card {
             }
             SecondaryButton {
                 text: delete-text;
+                compact: true;
+                danger: true;
                 enabled: !entry.in-use;
                 clicked => { delete(entry.id); }
             }

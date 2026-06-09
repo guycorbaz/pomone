@@ -72,10 +72,13 @@ component LocationRowView inherits Card {
             }
             SecondaryButton {
                 text: edit-text;
+                compact: true;
                 clicked => { edit(entry.id); }
             }
             SecondaryButton {
                 text: delete-text;
+                compact: true;
+                danger: true;
                 // A location with child locations or plantings can't be
                 // deleted (FK RESTRICT) — disable and explain.
                 enabled: !entry.in-use;

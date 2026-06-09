@@ -181,15 +181,22 @@ export component PrimaryButton inherits Rectangle {
 export component SecondaryButton inherits Rectangle {
     in property <string> text;
     in property <bool> enabled: true;
+    // `compact` shrinks the button for dense list-row actions; `danger` tints
+    // it red (used for destructive actions like Delete).
+    in property <bool> compact: false;
+    in property <bool> danger: false;
     callback clicked();
 
-    height: 48px;
+    property <length> pad: compact ? Theme.space-md : Theme.space-xl;
+    property <brush> edge: danger ? Palette.danger : Palette.border-strong;
+
+    height: compact ? 34px : 48px;
     // Hug content + comfortable padding (see PrimaryButton's note).
-    min-width: max(120px, secondary-text.preferred-width + 2 * Theme.space-xl);
+    min-width: max(compact ? 72px : 120px, secondary-text.preferred-width + 2 * root.pad);
     horizontal-stretch: 0;
     border-radius: Theme.radius-md;
     border-width: Theme.border-width;
-    border-color: enabled ? Palette.border-strong : Palette.border;
+    border-color: enabled ? root.edge : Palette.border;
     background: !enabled ? transparent
                 : touch.pressed ? Palette.surface-alt
                 : touch.has-hover ? Palette.surface-alt
@@ -221,14 +228,16 @@ export component SecondaryButton inherits Rectangle {
 
         secondary-text := Text {
             text: root.text;
-            color: root.enabled ? Palette.text-primary : Palette.text-muted;
-            font-size: Theme.font-size-body;
+            color: !root.enabled ? Palette.text-muted
+                   : root.danger ? Palette.danger
+                   : Palette.text-primary;
+            font-size: root.compact ? Theme.font-size-label : Theme.font-size-body;
             font-weight: Theme.font-weight-medium;
             horizontal-alignment: center;
             vertical-alignment: center;
-            x: Theme.space-lg;
+            x: root.pad;
             y: 0;
-            width: parent.width - 2 * Theme.space-lg;
+            width: parent.width - 2 * root.pad;
             height: parent.height;
         }
     }
