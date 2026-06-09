@@ -38,6 +38,12 @@ jobs:
       - name: Install cargo-packager
         run: cargo install cargo-packager --locked
 
+      # cargo-packager does not compile the app — it packages an existing
+      # binary. Build the release binary first, otherwise packaging fails with
+      # "Failed to copy file from target/release/pomone: No such file".
+      - name: Build release binary
+        run: cargo build --release -p pomone-ui
+
       - name: Build & package
         working-directory: crates/pomone-ui
         run: cargo packager --release --formats deb,appimage
