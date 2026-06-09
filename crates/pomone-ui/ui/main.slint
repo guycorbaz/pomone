@@ -170,6 +170,10 @@ export component MainWindow inherits Window {
     callback cancel-crop-edit();
     callback delete-variety(string);
     callback delete-location(string);
+    in property <string> loc-form-section-edit;
+    in property <bool> loc-is-edit-mode: false;
+    callback edit-location(string);
+    callback cancel-location-edit();
 
     in property <string> varieties-title;
     in property <string> empty-varieties-text;
@@ -1278,8 +1282,15 @@ export component MainWindow inherits Window {
                 status-is-error: status-is-error;
                 location-delete-text: crop-delete-text;
                 location-in-use-text: crop-in-use-text;
+                location-edit-text: crop-edit-text;
+                loc-form-section-edit: loc-form-section-edit;
+                loc-cancel-text: crop-cancel-text;
+                loc-save-text: crop-save-text;
+                loc-is-edit-mode: loc-is-edit-mode;
                 create-location => { create-location(); }
                 delete-location(id) => { delete-location(id); }
+                edit-location(id) => { edit-location(id); }
+                cancel-location-edit => { cancel-location-edit(); }
             }
         }
     }

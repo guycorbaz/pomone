@@ -53,8 +53,9 @@ pub use error::{AppError, AppResult};
 pub use harvest_view::{list_yearly_harvests_for_planting, YearlyHarvestRow};
 pub use i18n::{I18n, Lang};
 pub use locations_view::{
-    create_location, delete_location, list_location_kind_options, list_locations_tree,
-    list_parent_options, LocationInput, LocationKindOption, LocationListItem, ParentLocationOption,
+    create_location, delete_location, get_location_for_edit, list_location_kind_options,
+    list_locations_tree, list_parent_options, update_location, LocationEditForm, LocationInput,
+    LocationKindOption, LocationListItem, ParentLocationOption,
 };
 pub use migration::{copy_all, MigrationReport};
 pub use planting_detail_view::{

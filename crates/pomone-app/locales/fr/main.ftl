@@ -237,6 +237,9 @@ button-create-location = Créer le lieu
 parent-none = (racine — aucun parent)
 status-location-created = Lieu créé
 status-location-deleted = Lieu supprimé
+status-location-updated = Lieu mis à jour
+loc-form-section-edit = Modifier le lieu
+error-location-cycle = Un lieu ne peut pas devenir un sous-lieu de lui-même.
 confirm-delete-location = Supprimer ce lieu ? Cette action est irréversible.
 error-location-in-use = Ce lieu contient d'autres lieux ou des plantations ; supprimez-les d'abord.
 

@@ -16,22 +16,23 @@ use pomone_app::{
     bed_usage_series, create_crop, create_location, create_recurring_task, create_strata,
     create_task, create_task_type, create_variety, delete_crop, delete_location, delete_strata,
     delete_task, delete_task_type, delete_variety, extend_series_if_needed, get_crop_for_edit,
-    get_planting_detail, get_task_for_edit, get_task_type_for_edit, list_agenda,
-    list_calendar_entries, list_crop_map_lanes, list_crops, list_family_options,
+    get_location_for_edit, get_planting_detail, get_task_for_edit, get_task_type_for_edit,
+    list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops, list_family_options,
     list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
     list_planting_choices, list_planting_tasks, list_plantings, list_strata_options,
     list_strata_rows, list_task_category_options, list_task_type_options, list_task_types_admin,
     list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting,
     move_planting_to_location, parse_id, planting_status_key, recurrence_unit_str, reschedule_task,
-    services, split_planting, test_backend, update_crop, update_task, update_task_type,
-    AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
+    services, split_planting, test_backend, update_crop, update_location, update_task,
+    update_task_type, AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
     BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry, CalendarEntryKind,
     CalendarEventKind, CropEditForm, CropInput, CropMapBar as AppCropMapBar,
     CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyOption, Lang,
-    LifespanKind, LocationInput, LocationKindOption, LocationListItem, LocationOption,
-    MigrationReport, ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
-    PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput,
-    StrataOption, StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
+    LifespanKind, LocationEditForm, LocationInput, LocationKindOption, LocationListItem,
+    LocationOption, MigrationReport, ParentLocationOption, PlantingChoice,
+    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
+    PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
+    StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
     TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption, VarietyProfileKind,
     VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
@@ -149,6 +150,9 @@ struct UiState {
     /// Stringified `CropId` currently edited in the Cultures crop form; empty
     /// in create mode.
     editing_crop_id: String,
+    /// Stringified `LocationId` currently edited in the Lieux form; empty in
+    /// create mode.
+    editing_location_id: String,
     /// Active categories on the Task Calendar's per-category filter row.
     /// Stored as stable string keys (`"sow"`, `"transplant"`, …) so the
     /// UI doesn't depend on the enum variant order. When this set holds
@@ -256,6 +260,7 @@ fn main() -> Result<()> {
         task_type_category_keys: Vec::new(),
         editing_task_type_id: String::new(),
         editing_crop_id: String::new(),
+        editing_location_id: String::new(),
         task_filter_categories: all_category_keys().into_iter().collect(),
         show_milestones: true,
         task_form_recurrence_unit_keys: Vec::new(),
@@ -540,16 +545,29 @@ fn main() -> Result<()> {
                 return;
             };
             let mut s = state.borrow_mut();
-            match try_create_location(&window, &mut s) {
+            let was_edit = window.get_loc_is_edit_mode();
+            match try_save_location(&window, &mut s) {
                 Ok(()) => {
-                    let i18n = s.app.i18n();
-                    window.set_status_text(SharedString::from(i18n.t("status-location-created")));
+                    let key = if was_edit {
+                        "status-location-updated"
+                    } else {
+                        "status-location-created"
+                    };
+                    window.set_status_text(SharedString::from(s.app.i18n().t(key)));
                     window.set_status_is_error(false);
-                    window.set_new_loc_name(SharedString::from(""));
-                    window.set_new_loc_notes(SharedString::from(""));
+                    reset_location_form_to_create(&window, &mut s);
                     if let Err(e) = refresh_locations(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh locations after create");
+                        tracing::error!(error = %e, "failed to refresh locations after save");
                     }
+                }
+                // Reparenting under a descendant — show the localized message.
+                Err(FormError::Service(AppError::Inconsistent(ref msg)))
+                    if msg == "location_cycle" =>
+                {
+                    window.set_status_text(SharedString::from(
+                        s.app.i18n().t("error-location-cycle"),
+                    ));
+                    window.set_status_is_error(true);
                 }
                 Err(e) => {
                     let (text, is_err) = render_form_error(s.app.i18n(), e);
@@ -557,6 +575,31 @@ fn main() -> Result<()> {
                     window.set_status_is_error(is_err);
                 }
             }
+        });
+    }
+
+    // --- Edit / cancel-edit a location (Lieux screen) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_edit_location(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            if let Err(e) = open_location_form_for_edit(&window, &mut s, &id) {
+                tracing::error!(error = %e, "failed to open location edit form");
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_cancel_location_edit(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            reset_location_form_to_create(&window, &mut state.borrow_mut());
         });
     }
 
@@ -1938,6 +1981,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_label_loc_notes(SharedString::from(i18n.t("label-loc-notes")));
     window.set_placeholder_loc_notes(SharedString::from(i18n.t("placeholder-loc-notes")));
     window.set_create_loc_button_text(SharedString::from(i18n.t("button-create-location")));
+    window.set_loc_form_section_edit(SharedString::from(i18n.t("loc-form-section-edit")));
 }
 
 /// Rebuild the home page's bed-usage curve: a 12-month series turned into two
@@ -2718,7 +2762,9 @@ fn location_to_slint(item: LocationListItem) -> SlintLocationItem {
     }
 }
 
-fn try_create_location(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+/// Build the `LocationInput` from the form, then create or update depending on
+/// the edit mode (`state.editing_location_id`).
+fn try_save_location(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
     let i18n = state.app.i18n();
     let kind_idx = i32_to_usize(window.get_loc_kind_index());
     let parent_idx = i32_to_usize(window.get_loc_parent_index());
@@ -2739,24 +2785,69 @@ fn try_create_location(window: &MainWindow, state: &mut UiState) -> Result<(), F
     let width_m = validate_positive_decimal(&window.get_new_loc_width(), i18n)?;
     let notes = optional_text(&window.get_new_loc_notes());
 
+    let input = LocationInput {
+        kind_id_str,
+        name,
+        length_m,
+        width_m,
+        parent_id_str,
+        notes,
+    };
+    let editing_id = state.editing_location_id.clone();
     state
         .runtime
         .block_on(async {
-            create_location(
-                state.app.repo(),
-                LocationInput {
-                    kind_id_str,
-                    name,
-                    length_m,
-                    width_m,
-                    parent_id_str,
-                    notes,
-                },
-            )
-            .await
-            .map(|_| ())
+            if editing_id.is_empty() {
+                create_location(state.app.repo(), input).await.map(|_| ())
+            } else {
+                update_location(state.app.repo(), &editing_id, input).await
+            }
         })
         .map_err(FormError::Service)
+}
+
+/// Clear the location form and drop back to create mode.
+fn reset_location_form_to_create(window: &MainWindow, state: &mut UiState) {
+    state.editing_location_id.clear();
+    window.set_loc_is_edit_mode(false);
+    window.set_new_loc_name(SharedString::from(""));
+    window.set_new_loc_length(SharedString::from("5"));
+    window.set_new_loc_width(SharedString::from("2"));
+    window.set_new_loc_notes(SharedString::from(""));
+    window.set_loc_kind_index(0);
+    window.set_loc_parent_index(0);
+}
+
+/// Load one location into the form and switch it to edit mode.
+fn open_location_form_for_edit(window: &MainWindow, state: &mut UiState, id: &str) -> Result<()> {
+    let form: LocationEditForm = state
+        .runtime
+        .block_on(async { get_location_for_edit(state.app.repo(), id).await })
+        .context("failed to load location for edit")?;
+
+    let kind_idx = state
+        .location_kind_ids
+        .iter()
+        .position(|k| k == &form.kind_id_str)
+        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
+    // parent_id_str is "" for a root; the parent dropdown's slot 0 is "(none)".
+    let parent_idx = state
+        .parent_location_ids
+        .iter()
+        .position(|p| p == &form.parent_id_str)
+        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
+
+    state.editing_location_id.clone_from(&form.id);
+    window.set_loc_is_edit_mode(true);
+    window.set_loc_kind_index(kind_idx);
+    window.set_loc_parent_index(parent_idx);
+    window.set_new_loc_name(SharedString::from(form.name));
+    window.set_new_loc_length(SharedString::from(form.length));
+    window.set_new_loc_width(SharedString::from(form.width));
+    window.set_new_loc_notes(SharedString::from(form.notes));
+    window.set_status_text(SharedString::from(""));
+    window.set_status_is_error(false);
+    Ok(())
 }
 
 fn today_iso() -> String {

@@ -247,6 +247,85 @@ pub async fn create_location(repo: &dyn Repository, input: LocationInput) -> App
     Ok(location)
 }
 
+/// Flattened location fields for prefilling the edit form. Dimensions are
+/// stringified for the text inputs; `parent_id_str` is empty for a root.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LocationEditForm {
+    pub id: String,
+    pub kind_id_str: String,
+    pub name: String,
+    pub length: String,
+    pub width: String,
+    pub parent_id_str: String,
+    pub notes: String,
+}
+
+/// Load one location and flatten it for the edit form. `NotFound` if unknown.
+pub async fn get_location_for_edit(
+    repo: &dyn Repository,
+    id_str: &str,
+) -> AppResult<LocationEditForm> {
+    let id: LocationId = crate::plantings_view::parse_id(id_str)?;
+    let loc = repo
+        .location_get(id)
+        .await?
+        .ok_or_else(|| AppError::NotFound {
+            kind: "location",
+            id: id_str.to_owned(),
+        })?;
+    Ok(LocationEditForm {
+        id: loc.id.to_string(),
+        kind_id_str: loc.kind_id.to_string(),
+        name: loc.name,
+        length: loc.length_m.normalize().to_string(),
+        width: loc.width_m.normalize().to_string(),
+        parent_id_str: loc.parent_id.map(|p| p.to_string()).unwrap_or_default(),
+        notes: loc.notes.unwrap_or_default(),
+    })
+}
+
+/// Update an existing location from the same `LocationInput` the create form
+/// produces. Reuses `Location::new` for validation, keeps the original id, and
+/// surfaces a hierarchy cycle (reparenting under a descendant) as the
+/// `Inconsistent("location_cycle")` sentinel.
+pub async fn update_location(
+    repo: &dyn Repository,
+    id_str: &str,
+    input: LocationInput,
+) -> AppResult<()> {
+    let id: LocationId = crate::plantings_view::parse_id(id_str)?;
+    if repo.location_get(id).await?.is_none() {
+        return Err(AppError::NotFound {
+            kind: "location",
+            id: id_str.to_owned(),
+        });
+    }
+    let kind_id: LocationKindId = crate::plantings_view::parse_id(&input.kind_id_str)?;
+    let parent_id = if input.parent_id_str.trim().is_empty() {
+        None
+    } else {
+        Some(crate::plantings_view::parse_id::<LocationId>(
+            input.parent_id_str.trim(),
+        )?)
+    };
+    let mut location = Location::new(
+        kind_id,
+        input.name,
+        input.length_m,
+        input.width_m,
+        parent_id,
+        input.notes,
+    )?;
+    location.id = id;
+    match repo.location_update(&location).await {
+        Ok(()) => Ok(()),
+        Err(pomone_db::DbError::HierarchyCycle) => {
+            Err(AppError::Inconsistent("location_cycle".to_owned()))
+        }
+        Err(other) => Err(AppError::Db(other)),
+    }
+}
+
 /// Delete a location. Blocked (FK `ON DELETE RESTRICT`) when it has child
 /// locations or is used by a planting — surfaced as the
 /// `Inconsistent("location_in_use")` sentinel the UI re-keys to a localized
@@ -453,6 +532,60 @@ mod tests {
     }
 
     // ----- Delete guards (issue #86 follow-up) ---------------------------
+
+    #[tokio::test]
+    async fn update_location_changes_name() {
+        let repo = fresh_repo().await;
+        let planche = list_locations_tree(&repo)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.name == "Planche A")
+            .unwrap();
+        let form = get_location_for_edit(&repo, &planche.id).await.unwrap();
+        update_location(
+            &repo,
+            &planche.id,
+            LocationInput {
+                kind_id_str: form.kind_id_str,
+                name: "Planche B".to_owned(),
+                length_m: dec!(25),
+                width_m: dec!(0.8),
+                parent_id_str: form.parent_id_str,
+                notes: None,
+            },
+        )
+        .await
+        .unwrap();
+        let after = list_locations_tree(&repo).await.unwrap();
+        assert!(after.iter().any(|l| l.name == "Planche B"));
+        assert!(after.iter().all(|l| l.name != "Planche A"));
+    }
+
+    #[tokio::test]
+    async fn update_location_rejects_parent_cycle() {
+        let repo = fresh_repo().await; // Jardin Pomone → Planche A
+        let tree = list_locations_tree(&repo).await.unwrap();
+        let jardin = tree.iter().find(|l| l.name == "Jardin Pomone").unwrap();
+        let planche = tree.iter().find(|l| l.name == "Planche A").unwrap();
+        let form = get_location_for_edit(&repo, &jardin.id).await.unwrap();
+        // Reparent the root under its own child → cycle.
+        let err = update_location(
+            &repo,
+            &jardin.id,
+            LocationInput {
+                kind_id_str: form.kind_id_str,
+                name: form.name,
+                length_m: dec!(20),
+                width_m: dec!(10),
+                parent_id_str: planche.id.clone(),
+                notes: None,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(m) if m == "location_cycle"));
+    }
 
     #[tokio::test]
     async fn delete_location_refused_when_it_has_children() {
