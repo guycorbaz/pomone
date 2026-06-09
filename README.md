@@ -21,19 +21,24 @@ livrées : modèle métier (`pomone-domain`), persistance SQLite ou MariaDB
 derrière un même trait `Repository` (`pomone-db`), services applicatifs
 (`pomone-app`), i18n FR/EN avec Fluent, UI desktop native (Slint).
 
-L'application expose aujourd'hui les écrans **Accueil** (vue Gantt
-résumée de la saison), **Plantations** (liste + vue Gantt multi-segments
-serre/champ/récolte + formulaire annuel/pluriannuel), **Cultures et
-variétés**, **Lieux**, **Strates**, **Calendrier mensuel**, **Détail de
-plantation** avec récoltes annuelles pour les pluriannuelles, et
-**Paramètres** (basculement SQLite ↔ MariaDB avec migration des données
-à la volée).
+L'application expose aujourd'hui les écrans **Accueil** (courbe
+d'occupation des planches plein champ / sous abri + Gantt de la saison),
+**Plantations** (liste avec badge de statut + vue Gantt multi-segments
+serre/champ/récolte + formulaire annuel/pluriannuel), **Calendrier**
+(grille mensuelle unifiée : tâches pleines et jalons de culture en
+contour, glisser-déposer pour replanifier, filtres par catégorie),
+**Tâches** (liste à plat triée par date, badges « En retard » /
+« Aujourd'hui »), **Cultures et variétés**, **Lieux**, **Strates**,
+**Carte** (occupation des lieux dans le temps, déplacement/division),
+**Détail de plantation** (cycle de vie, tâches rattachées, récoltes
+annuelles pour les pluriannuelles) et **Paramètres** (basculement
+SQLite ↔ MariaDB avec migration des données à la volée).
 
-Le packaging Linux est livré (`.deb` + AppImage avec manuel PDF
-embarqué, accessible depuis l'application via la touche `F1`). Le
-backend des **tâches/opérations** (table + repository) est en place ;
-l'auto-génération depuis les plantations, l'écran Calendrier des tâches
-et la superposition Gantt sont en cours (PRs E et F).
+Les **tâches/opérations** sont pleinement intégrées : auto-génération
+depuis les plantations (semis, repiquage, récolte), séries récurrentes,
+et superposition des jalons de culture dans le calendrier. Le packaging
+Linux est livré (`.deb` + AppImage avec manuel PDF embarqué, accessible
+depuis l'application via la touche `F1`).
 
 Voir la [feuille de route détaillée](https://guycorbaz.github.io/pomone/roadmap) sur le site et le [manuel utilisateur PDF](https://github.com/guycorbaz/pomone/releases/download/docs-latest/manuel.pdf).
 
@@ -57,7 +62,7 @@ pomone/
 │   ├── pomone-ui/       # binaire desktop (Slint) — `pomone`
 │   └── pomone-cli/      # binaire admin/debug — `pomone-cli`
 ├── migrations/
-│   ├── sqlite/          # schéma SQLite (un seul 0001_initial.sql pré-v1.0.0)
+│   ├── sqlite/          # schéma SQLite (migrations numérotées 0001…)
 │   └── mariadb/         # idem pour MariaDB
 ├── doc-latex/           # doc technique LaTeX → pomone.pdf (release docs-latest)
 └── docs/                # site GitHub Pages (Jekyll + Just the Docs)

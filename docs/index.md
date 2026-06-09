@@ -27,8 +27,10 @@ Le projet reprend l'ambition libriste de Qrop, créé par André Hoarau et [L'At
 ## Caractéristiques
 
 - **Annuelles & pluriannuelles** unifiées dans le modèle de domaine (`Crop.Lifespan`).
-- **Vue Gantt** de la saison sur l'Accueil et l'écran Plantations : barres multi-segments serre → champ → récolte, ligne du jour, clic pour ouvrir le détail.
-- **Tâches & opérations** (en cours d'intégration) : auto-génération depuis les plantations, calendrier mensuel.
+- **Accueil** : courbe d'occupation des planches (plein champ vs sous abri) sur la saison, au-dessus du Gantt.
+- **Vue Gantt** de la saison sur l'écran Plantations : barres multi-segments serre → champ → récolte, ligne du jour, clic pour ouvrir le détail.
+- **Calendrier unifié** : grille mensuelle mêlant tâches (pleines) et jalons de culture (en contour), glisser-déposer pour replanifier, filtres par catégorie.
+- **Tâches & opérations** : auto-génération depuis les plantations (semis, repiquage, récolte), séries récurrentes, et liste à plat « Tâches » avec badges En retard / Aujourd'hui.
 - **Persistance au choix** : SQLite (local mono-poste, recommandé) ou MariaDB (serveur partagé) derrière le même trait `Repository`. Bascule à chaud avec migration des données depuis l'écran Paramètres.
 - **UI native desktop** avec [Slint](https://slint.dev/) — pas de WebView.
 - **Multilingue** (français, anglais) via [Project Fluent](https://projectfluent.org/).

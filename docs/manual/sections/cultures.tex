@@ -9,12 +9,15 @@ Une \emph{variété} (\emph{variety}) est une déclinaison d'une culture : « To
 
 \section{L'écran Cultures}
 
-\begin{todobox}
-À détailler : layout maître-détail (liste cultures à gauche, variétés à droite), création d'une culture, choix annuel/pluriannuel.
-\end{todobox}
+L'écran \textbf{Cultures} adopte une disposition \textbf{maître-détail} : la liste des cultures à gauche, les variétés de la culture sélectionnée à droite. Sous chaque colonne, un formulaire de création.
+
+Pour créer une culture, renseignez son \textbf{nom}, son éventuel \textbf{nom latin}, sa \textbf{famille} botanique, sa \textbf{strate}, son \textbf{cycle de vie} (annuelle, pluriannuelle à cycle unique, ou pluriannuelle récurrente) et son régime de \textbf{taille}. Pour une culture pluriannuelle, indiquez aussi le nombre d'années de vie et les années avant la première récolte.
 
 \section{Créer une variété}
 
-\begin{todobox}
-À détailler : champs spécifiques annuelles (DTT, DTM, fenêtre de récolte) vs pluriannuelles (DOY débourrement, floraison, début/fin récolte, rendement attendu).
-\end{todobox}
+Sélectionnez d'abord une culture, puis renseignez la variété dans le formulaire de droite. Les champs dépendent du cycle de vie de la culture :
+
+\begin{itemize}
+  \item \textbf{Annuelle} : jours semis→repiquage (DTT), jours semis→récolte (DTM) et fenêtre de récolte (jours). Ces valeurs servent à inférer automatiquement les dates d'une plantation à partir de sa date de semis.
+  \item \textbf{Pluriannuelle} : jours-de-l'année (DOY) de débourrement, de floraison, de début et de fin de récolte, et rendement attendu (kg/plant).
+\end{itemize}
