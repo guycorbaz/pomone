@@ -17,9 +17,15 @@ Chaque lieu possède :
 
 \section{Créer un lieu}
 
-\begin{todobox}
-À détailler : formulaire de création, choix du parent, affichage hiérarchique de la liste.
-\end{todobox}
+L'écran \textbf{Lieux} présente la hiérarchie des emplacements (les enfants indentés sous leur parent) et un formulaire de création. Pour ajouter un lieu :
+
+\begin{enumerate}
+  \item Saisissez le \textbf{nom}.
+  \item Choisissez la \textbf{catégorie} (parcelle, planche, serre, verger, rang…). Les catégories marquées « sous abri » (serre, tunnel) comptent dans la courbe d'occupation \emph{sous abri} de l'accueil.
+  \item Renseignez la \textbf{longueur} et la \textbf{largeur} en mètres ; la surface est calculée automatiquement.
+  \item Sélectionnez éventuellement un \textbf{parent} pour rattacher ce lieu (par exemple une planche dans une parcelle).
+  \item Ajoutez des \textbf{notes} si besoin, puis validez.
+\end{enumerate}
 
 \section{Les strates}
 \label{sec:strates}
@@ -34,12 +40,8 @@ Chaque strate possède :
   \item Un \textbf{ordre de tri} pour l'affichage.
 \end{itemize}
 
-\begin{todobox}
-À détailler : écran Strates, création/édition, suppression (avec garde-fou si la strate est référencée par une culture).
-\end{todobox}
+L'écran \textbf{Strates} liste les strates existantes et un formulaire de création/édition. Chaque ligne porte un bouton \textbf{Supprimer} ; la suppression est refusée (avec un message clair) tant qu'une culture référence la strate — réaffectez ces cultures d'abord.
 
-\section{Vue Crop Map (occupation des planches)}
+\section{Vue Carte (occupation des lieux)}
 
-\begin{todobox}
-\textbf{À venir.} Vue chronologique par planche : pour chaque emplacement, frise temporelle des plantations qui l'occupent dans la saison, avec drag-and-drop entre planches.
-\end{todobox}
+L'occupation des lieux dans le temps fait l'objet d'un écran dédié, la \textbf{Carte} (\emph{Crop Map}) : pour chaque emplacement, une frise des plantations qui l'occupent sur la saison, avec déplacement et division de plantations. Voir le chapitre \ref{chap:carte}.

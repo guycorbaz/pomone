@@ -1,40 +1,38 @@
 \chapter{Calendrier}
 \label{chap:calendrier}
 
-\section{Vue mensuelle}
+L'écran \emph{Calendrier} (raccourci \texttt{Ctrl+3}) est une \textbf{grille mensuelle unifiée} qui réunit, sur les mêmes cases, deux choses :
 
-L'écran \emph{Calendrier} affiche une grille mensuelle des événements liés à vos plantations : démarrages de récolte, fins de récolte, retraits prévus. Les jours portant un événement sont surlignés et cliquables pour atteindre la plantation correspondante.
+\begin{itemize}
+  \item les \textbf{tâches} (opérations de travail : semis, repiquage, récolte, désherbage, irrigation, traitement, travail du sol, autres), affichées en pastilles \emph{pleines} et colorées ;
+  \item les \textbf{jalons de culture} (début/fin de récolte, mise en place, retrait prévu… déduits du calendrier de chaque plantation), affichés en pastilles \emph{en contour} pour les distinguer des tâches.
+\end{itemize}
+
+Une \textbf{légende} en bas de la grille rappelle cette distinction, et un compteur sur la barre du mois indique le nombre d'entrées affichées.
 
 \section{Navigation}
 
 \begin{itemize}
   \item Boutons \textbf{Mois précédent} / \textbf{Mois suivant} dans l'en-tête.
   \item Bouton \textbf{Aujourd'hui} pour revenir au mois courant.
-  \item Sur la page Calendrier, les flèches \textbf{Gauche / Droite} du clavier feuillètent les mois.
+  \item Les flèches \textbf{Gauche / Droite} du clavier feuillètent les mois.
+  \item \textbf{Survol} d'une entrée : une infobulle donne son libellé complet et sa date.
 \end{itemize}
 
-\begin{todobox}
-À détailler : types d'événements affichés, code couleur, filtres.
-\end{todobox}
+\section{Glisser-déposer pour replanifier}
 
-\section{Calendrier des tâches}
+Une tâche peut être \textbf{déplacée} d'un jour à l'autre par glisser-déposer directement dans la grille : sa date prévue est mise à jour à la volée. Les jalons de culture, eux, sont en lecture seule (ils reflètent les dates de la plantation) : pour les décaler, modifiez la plantation correspondante.
 
-L'écran \emph{Tâches} (raccourci \texttt{Ctrl+3}) affiche une grille mensuelle dédiée aux opérations de travail : semis, repiquage, récolte, désherbage, irrigation, traitement, travail du sol et autres. Il s'utilise comme le calendrier des récoltes : prev/next/today dans l'en-tête, flèches \texttt{Gauche / Droite} pour feuilleter les mois.
+\section{Filtrer l'affichage}
 
-\subsection{Tâches générées automatiquement}
-
-Lorsque vous créez une plantation, Pomone génère automatiquement les opérations correspondantes :
+Au-dessus de la grille, deux groupes de filtres :
 
 \begin{itemize}
-  \item Pour une plantation annuelle : un \textbf{Semis} à la date de semis (si renseignée), un \textbf{Repiquage} à la date de repiquage (si renseignée), une \textbf{Récolte} à la date de début de récolte.
-  \item Pour une plantation pluriannuelle : un \textbf{Repiquage} (mise en place) à la date d'établissement.
+  \item une rangée de \textbf{chips de catégories de tâches} (Semis, Repiquage, Récolte, Désherbage, Irrigation, Traitement, Travail du sol, Autre) ;
+  \item un \textbf{interrupteur maître des jalons} qui montre ou masque d'un coup tous les jalons de culture.
 \end{itemize}
 
-Chaque tâche s'affiche sous forme de pastille colorée selon son type. La pastille porte un point (\texttt{•}) pour une tâche en attente et un check (\texttt{✓}) avec opacité réduite pour une tâche terminée.
-
-\subsection{Filtrer par type}
-
-Au-dessus de la grille, une rangée de \textbf{chips} (un par catégorie de tâche : Semis, Repiquage, Récolte, Désherbage, Irrigation, Traitement, Travail du sol, Autre) permet de restreindre l'affichage. Cliquer sur un chip bascule sa catégorie :
+Cliquer sur un chip bascule sa catégorie :
 
 \begin{itemize}
   \item Chip activé : fond coloré + bordure renforcée. Les tâches de cette catégorie apparaissent.
@@ -43,7 +41,18 @@ Au-dessus de la grille, une rangée de \textbf{chips} (un par catégorie de tâc
 
 Le bouton \textbf{Tout afficher} réactive tous les chips d'un coup. Les chips reprennent la couleur du premier type de chaque catégorie : si vous avez personnalisé la couleur de « Semis » dans \emph{Gérer les types}, le chip « Semis » du calendrier reflète la nouvelle teinte.
 
-\subsection{Créer, modifier, supprimer une tâche}
+\section{Tâches générées automatiquement}
+
+Lorsque vous créez une plantation, Pomone génère automatiquement les opérations correspondantes :
+
+\begin{itemize}
+  \item Pour une plantation annuelle : un \textbf{Semis} à la date de semis (si renseignée), un \textbf{Repiquage} à la date de repiquage (si renseignée), une \textbf{Récolte} à la date de début de récolte.
+  \item Pour une plantation pluriannuelle : un \textbf{Repiquage} (mise en place) à la date d'établissement.
+\end{itemize}
+
+Chaque tâche s'affiche sous forme de pastille colorée selon son type ; une tâche terminée apparaît avec une opacité réduite.
+
+\section{Créer, modifier, supprimer une tâche}
 
 Le bouton \textbf{+ Nouvelle tâche} dans l'en-tête du calendrier ouvre un formulaire vierge où vous choisissez :
 
@@ -55,16 +64,16 @@ Le bouton \textbf{+ Nouvelle tâche} dans l'en-tête du calendrier ouvre un form
   \item la case \textbf{Tâche terminée} si elle est déjà faite.
 \end{itemize}
 
-Cliquer sur une pastille existante dans le calendrier rouvre le même formulaire en mode \emph{édition}, pré-rempli avec les valeurs courantes. Vous pouvez alors :
+Cliquer sur une pastille de tâche existante rouvre le même formulaire en mode \emph{édition}, pré-rempli avec les valeurs courantes. Vous pouvez alors :
 
 \begin{itemize}
   \item changer la date, le type, l'état \emph{terminé / à faire}, les notes ;
-  \item cliquer \textbf{Supprimer} pour effacer la tâche définitivement (le bouton n'apparaît qu'en mode édition).
+  \item cliquer \textbf{Supprimer} pour effacer la tâche définitivement (le bouton n'apparaît qu'en mode édition, après confirmation).
 \end{itemize}
 
 \textbf{Astuce} : pour marquer rapidement une tâche comme faite, ouvrez-la d'un clic, cochez \emph{Tâche terminée} et validez avec \textbf{Enregistrer}. Re-saver une tâche déjà terminée ne change pas sa date de réalisation.
 
-\subsection{Tâches récurrentes}
+\section{Tâches récurrentes}
 
 Une grande partie du travail d'entretien (désherbage, irrigation, observation) suit un rythme régulier. Pomone permet de créer une \textbf{série récurrente} en une seule opération.
 
@@ -84,28 +93,28 @@ Quelques exemples :
   \item Inspection mensuelle du verger : intervalle 1, unité \emph{mois}, sans fin.
 \end{itemize}
 
-\subsubsection*{Comment ça marche en interne}
+\subsection*{Comment ça marche en interne}
 
 Lorsque vous enregistrez la série, Pomone matérialise immédiatement toutes les occurrences entre la date de début et la date de fin (ou un an à l'avance si la fin est vide). Chaque occurrence devient une vraie tâche dans le calendrier, avec sa propre case « fait », ses propres notes éventuelles, etc.
 
-Pour une série sans fin, Pomone \textbf{étend automatiquement} la liste à chaque ouverture du calendrier des tâches : vous gardez toujours un an d'avance sans rien faire.
+Pour une série sans fin, Pomone \textbf{étend automatiquement} la liste à chaque ouverture du calendrier : vous gardez toujours un an d'avance sans rien faire.
 
-\subsubsection*{Modifier ou supprimer une série}
+\subsection*{Modifier ou supprimer une série}
 
 En mode édition d'une occurrence appartenant à une série, un badge « série récurrente » apparaît pour vous le rappeler. Pour cette version (v1.0.0), le formulaire ne permet pas de modifier la règle de récurrence en place : si la série évolue (changement d'unité, de fin), supprimez les occurrences à venir une par une depuis le calendrier et recréez une nouvelle série. Un éditeur de série dédié pourra arriver dans une version future.
 
 \textbf{Note importante} : les calculs respectent les fins de mois. « Tous les 1 mois à partir du 31 mars » donnera 31 mars, 30 avril (et non 1\textsuperscript{er} mai), 31 mai, 30 juin, etc.
 
-\subsection{Gérer les types de tâches}
+\section{Gérer les types de tâches}
 
-Pomone fournit huit types de tâches par défaut (Semis, Repiquage, Récolte, Désherbage, Irrigation, Traitement, Travail du sol, Autre) avec leurs couleurs, modifiables et extensibles. Le bouton \textbf{Gérer les types} dans l'en-tête du Calendrier des tâches ouvre l'écran dédié, divisé en deux zones :
+Pomone fournit huit types de tâches par défaut (Semis, Repiquage, Récolte, Désherbage, Irrigation, Traitement, Travail du sol, Autre) avec leurs couleurs, modifiables et extensibles. Le bouton \textbf{Gérer les types} dans l'en-tête du Calendrier ouvre l'écran dédié, divisé en deux zones :
 
 \begin{itemize}
   \item \textbf{Catalogue} (à gauche) : la liste des types existants avec leur pastille de couleur, leur catégorie et l'indication « Utilisé » lorsqu'au moins une tâche y est rattachée. Chaque ligne porte les boutons \textbf{Modifier} et \textbf{Supprimer}. Le bouton Supprimer est désactivé pour les types « Utilisé » : il faut d'abord supprimer ou réaffecter les tâches concernées.
   \item \textbf{Formulaire} (à droite) : crée un nouveau type ou modifie le type sélectionné.
 \end{itemize}
 
-\subsubsection*{Créer un type}
+\subsection*{Créer un type}
 
 \begin{enumerate}
   \item Saisissez un \textbf{nom} (par exemple « Désherbage thermique »).
@@ -114,16 +123,29 @@ Pomone fournit huit types de tâches par défaut (Semis, Repiquage, Récolte, D�
   \item Cliquez \textbf{Enregistrer}.
 \end{enumerate}
 
-\subsubsection*{Modifier un type}
+\subsection*{Modifier un type}
 
 Cliquez \textbf{Modifier} sur la ligne désirée : le formulaire bascule en mode édition, pré-rempli avec les valeurs actuelles. Vous pouvez changer le \textbf{nom} et la \textbf{couleur} ; la catégorie est verrouillée car elle est structurelle (changer la catégorie de « Semis » risquerait de casser l'auto-génération des tâches). Pour migrer un type vers une autre catégorie, supprimez-le et recréez-en un nouveau.
 
 \textbf{Astuce} : renommer « Semis » en « Semis serre » préserve la catégorie \texttt{Sow} ; l'auto-générateur continue d'utiliser ce type lors de la création d'une nouvelle plantation, sans aucune modification de code.
 
-\subsubsection*{Supprimer un type}
+\subsection*{Supprimer un type}
 
 Cliquez \textbf{Supprimer} sur une ligne dont le type n'est pas « Utilisé ». Si le bouton est désactivé, ouvrez d'abord le calendrier, modifiez ou supprimez les tâches qui utilisent ce type, puis revenez sur l'écran de gestion.
 
-\begin{todobox}
-À venir : filtres par type sur le calendrier des tâches, récurrence (tâches hebdomadaires / mensuelles), drag-and-drop pour reprogrammer, accès à la liste des tâches depuis le détail d'une plantation.
-\end{todobox}
+\chapter{Tâches}
+\label{chap:taches}
+
+L'écran \emph{Tâches} (raccourci \texttt{Ctrl+4}) complète le calendrier par une \textbf{liste à plat} de toutes les tâches, triées par date décroissante (les plus récentes en haut), tâches terminées comprises. C'est la vue « à faire » quand on veut une liste linéaire plutôt qu'une grille mensuelle.
+
+Chaque ligne porte :
+
+\begin{itemize}
+  \item la pastille de couleur et le libellé du type de tâche ;
+  \item la plantation rattachée le cas échéant ;
+  \item la date prévue ;
+  \item un badge \textbf{En retard} (rouge) pour une tâche non faite dont la date est passée, ou \textbf{Aujourd'hui} (vert) pour une tâche prévue le jour même ;
+  \item une opacité réduite pour les tâches déjà terminées.
+\end{itemize}
+
+Cliquer sur une ligne ouvre le formulaire de tâche (le même que depuis le calendrier) pour la modifier, la marquer faite ou la supprimer.

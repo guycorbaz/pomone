@@ -17,21 +17,30 @@ Une \emph{plantation} (\emph{planting}) représente la mise en culture d'une var
 
 \section{Créer une plantation}
 
-\begin{todobox}
-À détailler : formulaire de création, sélection variété/lieu, dates clés (semis serre, mise en place, retrait), surface, nombre de plants.
-\end{todobox}
+Le formulaire de création, en bas de l'écran Plantations, s'adapte à la variété choisie :
+
+\begin{enumerate}
+  \item Choisissez la \textbf{variété} (la liste affiche « \emph{Culture} · \emph{Variété} ») et le \textbf{lieu}.
+  \item Pour une variété \textbf{annuelle}, indiquez la \textbf{date de semis} : Pomone en déduit les dates de repiquage, de début et de fin de récolte à partir du profil de la variété (DTT, DTM, fenêtre de récolte). Pour une variété \textbf{pluriannuelle}, indiquez la \textbf{date de plantation} (mise en place) et, optionnellement, l'\textbf{arrachage prévu}.
+  \item Renseignez la \textbf{surface} (m²) et le \textbf{nombre de plants}, puis validez.
+\end{enumerate}
+
+À la création, Pomone génère automatiquement les tâches correspondantes (voir chapitre \ref{chap:calendrier}).
 
 \section{Vue détail d'une plantation}
 
-\begin{todobox}
-À détailler : informations affichées (variété, lieu, surface, calendrier, état), boutons d'action.
-\end{todobox}
+Cliquer sur une plantation (dans la liste ou sur une barre du Gantt) ouvre sa \textbf{vue détail} : variété, lieu, surface, nombre de plants, calendrier de culture, notes, et la liste des \textbf{tâches rattachées}. Pour les plantations pluriannuelles s'ajoute le tableau des récoltes annuelles (voir ci-dessous).
+
+\subsection{Cycle de vie et suppression}
+\label{sec:cycle-vie-plantation}
+
+Chaque plantation porte un \textbf{statut de cycle de vie} : \emph{En cours} (par défaut), \emph{Terminée}, \emph{Échouée} ou \emph{Abandonnée}. Le statut se change depuis l'encart \textbf{Cycle de vie} de la vue détail ; il apparaît en badge sur la liste des plantations (pour les états autres qu'« En cours ») et dans l'en-tête du détail.
+
+La \textbf{suppression définitive} n'est possible que pour une plantation \emph{sans activité enregistrée} (aucune tâche terminée, aucune heure de travail saisie) — utile pour effacer une saisie erronée. Dès qu'une plantation a une histoire, Pomone refuse de la supprimer pour ne pas détruire les données d'analyse ; marquez-la plutôt \emph{Terminée}, \emph{Échouée} ou \emph{Abandonnée}.
 
 \section{Récoltes annuelles pour plantations pluriannuelles}
 
-\begin{todobox}
-À détailler : tableau des récoltes par année, ajout d'une récolte, comparaison estimé/réalisé.
-\end{todobox}
+Pour une plantation pluriannuelle, la vue détail affiche un \textbf{tableau des récoltes par année} et un formulaire d'ajout. Chaque entrée enregistre l'année, le rendement \textbf{attendu} et \textbf{réel} (kg) et des notes ; l'écart estimé/réalisé est calculé automatiquement. Ré-enregistrer la même année met l'entrée à jour.
 
 \section{Vue Gantt des plantations}
 
@@ -49,6 +58,4 @@ Une ligne verticale terracotta marque le jour courant. Cliquer sur une barre ouv
 Les plantations \emph{pluriannuelles} (vergers, petits fruits, vivaces) ne sont pas affichées dans la Gantt : leur cycle dépasse l'axe annuel et leurs données vivent sur la vue détail. Les plantations dont la première récolte tombe dans une autre année que l'année courante sont également masquées pour garder la ligne du jour cohérente.
 \end{notebox}
 
-\begin{todobox}
-À venir : drag-and-drop pour réorganiser les plantations sur l'axe, superposition des tâches (semis, repiquage, désherbage), filtre par lieu / famille botanique.
-\end{todobox}
+Les tâches (semis, repiquage, récolte…) et les jalons de culture se superposent quant à eux dans le \textbf{Calendrier} (chapitre \ref{chap:calendrier}), où ils peuvent être replanifiés par glisser-déposer. Un filtre par lieu / famille botanique sur la frise des plantations pourra arriver dans une version future.
