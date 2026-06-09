@@ -38,8 +38,8 @@ pub async fn generate_tasks_for_planting(
     let types = repo.task_type_list().await?;
     let triggers = phase_dates(planting);
     let mut created = Vec::with_capacity(triggers.len());
-    for (category, date) in triggers {
-        match find_type(&types, category) {
+    for (trigger, date) in triggers {
+        match resolve_type(&types, trigger) {
             Some(tt) => {
                 let task = Task::new(
                     Some(planting.id),
@@ -58,8 +58,8 @@ pub async fn generate_tasks_for_planting(
             }
             None => {
                 tracing::warn!(
-                    ?category, planting_id = %planting.id,
-                    "no TaskType seeded for category — skipping auto-generated task",
+                    ?trigger, planting_id = %planting.id,
+                    "no TaskType available for trigger — skipping auto-generated task",
                 );
             }
         }
@@ -67,10 +67,28 @@ pub async fn generate_tasks_for_planting(
     Ok(created)
 }
 
-/// The (category, date) pairs we want to materialize for a given planting.
+/// What kind of operation a planting's schedule implies, used to pick the
+/// right task type. `Transplant` (raised seedlings) and `Plant` (bought
+/// stock / perennial establishment) both map to the Transplant category but
+/// to different task types so the calendar reads correctly (establishment
+/// methods).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Trigger {
+    Sow,
+    Transplant,
+    Plant,
+    Harvest,
+}
+
+/// The (trigger, date) pairs we want to materialize for a given planting.
 /// Pure — no DB access — so it's easy to unit-test the rules.
-fn phase_dates(planting: &Planting) -> Vec<(TaskCategory, NaiveDate)> {
-    let mut out: Vec<(TaskCategory, NaiveDate)> = Vec::new();
+///
+/// Methods are inferred from which dates the `Cycle` carries: a sowing date
+/// implies `Sow`; a transplant date *with* a sowing date is a `Transplant`
+/// (you raised the plants), *without* a sowing date is a `Plant` (bought
+/// plants). Perennials are always `Plant` at establishment.
+fn phase_dates(planting: &Planting) -> Vec<(Trigger, NaiveDate)> {
+    let mut out: Vec<(Trigger, NaiveDate)> = Vec::new();
     match planting.schedule {
         PlantingSchedule::Cycle {
             sown_on,
@@ -79,20 +97,46 @@ fn phase_dates(planting: &Planting) -> Vec<(TaskCategory, NaiveDate)> {
             ..
         } => {
             if let Some(d) = sown_on {
-                out.push((TaskCategory::Sow, d));
+                out.push((Trigger::Sow, d));
             }
             if let Some(d) = transplanted_on {
-                out.push((TaskCategory::Transplant, d));
+                out.push((
+                    if sown_on.is_some() {
+                        Trigger::Transplant
+                    } else {
+                        Trigger::Plant
+                    },
+                    d,
+                ));
             }
-            out.push((TaskCategory::Harvest, first_harvest_on));
+            out.push((Trigger::Harvest, first_harvest_on));
         }
-        PlantingSchedule::Perennial { .. } => {
-            // No auto task at establishment: perennials are typically planted
-            // from bought stock, so there is nothing to "transplant" (the user
-            // adds a task manually if they want one). Issue: spurious Repiquage.
+        PlantingSchedule::Perennial { established_on, .. } => {
+            // Bought stock put in the ground → a Plantation task (issue: a tree
+            // is planted, not transplanted from a nursery you raised).
+            out.push((Trigger::Plant, established_on));
         }
     }
     out
+}
+
+/// Resolve the task type for a trigger. Sow/Harvest/Transplant use the first
+/// type of their category (as before). `Plant` prefers the "Plantation" type
+/// (a Transplant-category type) and falls back to the first Transplant type
+/// for databases seeded before it existed.
+fn resolve_type(types: &[TaskType], trigger: Trigger) -> Option<&TaskType> {
+    match trigger {
+        Trigger::Sow => find_type(types, TaskCategory::Sow),
+        Trigger::Harvest => find_type(types, TaskCategory::Harvest),
+        Trigger::Transplant => types
+            .iter()
+            .find(|t| t.category == TaskCategory::Transplant && t.name != "Plantation")
+            .or_else(|| find_type(types, TaskCategory::Transplant)),
+        Trigger::Plant => types
+            .iter()
+            .find(|t| t.category == TaskCategory::Transplant && t.name == "Plantation")
+            .or_else(|| find_type(types, TaskCategory::Transplant)),
+    }
 }
 
 fn find_type(types: &[TaskType], category: TaskCategory) -> Option<&TaskType> {
@@ -158,9 +202,9 @@ mod tests {
         assert_eq!(
             triggers,
             vec![
-                (TaskCategory::Sow, d(2026, 3, 1)),
-                (TaskCategory::Transplant, d(2026, 5, 1)),
-                (TaskCategory::Harvest, d(2026, 7, 1)),
+                (Trigger::Sow, d(2026, 3, 1)),
+                (Trigger::Transplant, d(2026, 5, 1)),
+                (Trigger::Harvest, d(2026, 7, 1)),
             ]
         );
     }
@@ -172,26 +216,28 @@ mod tests {
         assert_eq!(
             triggers,
             vec![
-                (TaskCategory::Sow, d(2026, 3, 1)),
-                (TaskCategory::Harvest, d(2026, 6, 1)),
+                (Trigger::Sow, d(2026, 3, 1)),
+                (Trigger::Harvest, d(2026, 6, 1)),
             ]
         );
     }
 
     #[test]
-    fn cycle_with_only_harvest_dates_yields_a_single_harvest_trigger() {
-        // E.g. a bought-as-plants planting where no sowing was tracked.
-        let p = cycle_planting(None, None, d(2026, 6, 1), d(2026, 7, 1));
+    fn bought_plants_cycle_yields_plant_then_harvest() {
+        // No sowing tracked + a planting date → Plant (not Transplant).
+        let p = cycle_planting(None, Some(d(2026, 5, 1)), d(2026, 6, 1), d(2026, 7, 1));
         assert_eq!(
             phase_dates(&p),
-            vec![(TaskCategory::Harvest, d(2026, 6, 1))]
+            vec![
+                (Trigger::Plant, d(2026, 5, 1)),
+                (Trigger::Harvest, d(2026, 6, 1)),
+            ]
         );
     }
 
     #[test]
-    fn perennial_yields_no_trigger() {
-        // Bought stock → no auto task at establishment.
+    fn perennial_yields_a_plant_trigger_at_establishment() {
         let p = perennial_planting(d(2026, 3, 15));
-        assert!(phase_dates(&p).is_empty());
+        assert_eq!(phase_dates(&p), vec![(Trigger::Plant, d(2026, 3, 15))]);
     }
 }

@@ -131,6 +131,11 @@ export component PlantingsPage inherits Rectangle {
     in property <string> placeholder-count;
     in property <string> create-button-text;
     in property <string> label-strata;
+    // Establishment method (annual only): the selector + the alternate date
+    // label used when the method is "bought plants".
+    in property <string> label-method;
+    in property <string> label-planting-date;
+    in property <[string]> method-labels;
     in property <[string]> variety-labels;
     in property <[string]> location-labels;
     in property <[string]> strata-labels;
@@ -141,6 +146,7 @@ export component PlantingsPage inherits Rectangle {
     in-out property <int> variety-index: 0;
     in-out property <int> location-index: 0;
     in-out property <int> strata-index: 0;
+    in-out property <int> method-index: 0;
     in-out property <string> sown-on-text;
     in-out property <string> established-on-text;
     in-out property <string> removal-on-text;
@@ -299,11 +305,28 @@ export component PlantingsPage inherits Rectangle {
                 // Perennial: establishment + expected removal (optional).
                 if selected-variety-is-annual: HorizontalLayout {
                     spacing: Theme.space-md;
+                    // Establishment method (issue: direct sow / raise+transplant
+                    // / bought plants). Index 2 = bought plants → the date is a
+                    // planting date, otherwise a sowing date.
                     VerticalLayout {
                         spacing: Theme.space-xs;
                         horizontal-stretch: 1;
                         Text {
-                            text: label-sown-on;
+                            text: label-method;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedComboBox {
+                            model: method-labels;
+                            current-index <=> method-index;
+                            enabled: method-labels.length > 0;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: method-index == 2 ? label-planting-date : label-sown-on;
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }

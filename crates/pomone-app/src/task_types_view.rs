@@ -190,7 +190,9 @@ mod tests {
     async fn list_admin_marks_used_types() {
         let repo = fresh().await;
         let rows_before = list_task_types_admin(&repo).await.unwrap();
-        assert_eq!(rows_before.len(), 8);
+        // 8 base categories + the "Plantation" type (Transplant) added for
+        // establishment methods.
+        assert_eq!(rows_before.len(), 9);
         assert!(rows_before.iter().all(|r| !r.in_use));
 
         let harvest_id = rows_before
