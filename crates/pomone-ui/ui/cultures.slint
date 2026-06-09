@@ -138,19 +138,19 @@ component VarietyRowView inherits Card {
                 wrap: word-wrap;
             }
         }
-        VerticalLayout {
-            alignment: center;
-            spacing: Theme.space-xs;
-            SecondaryButton {
-                text: delete-text;
-                enabled: !entry.in-use;
-                clicked => { delete(entry.id); }
-            }
+        HorizontalLayout {
+            spacing: Theme.space-sm;
+            alignment: end;
             if entry.in-use: Text {
                 text: in-use-text;
                 color: Palette.text-secondary;
                 font-size: Theme.font-size-label;
-                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            SecondaryButton {
+                text: delete-text;
+                enabled: !entry.in-use;
+                clicked => { delete(entry.id); }
             }
         }
     }
