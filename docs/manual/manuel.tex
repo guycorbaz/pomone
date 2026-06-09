@@ -200,8 +200,12 @@
     \color{pomonecream}
     \begin{center}
       \vspace*{4cm}
-      {\sffamily\fontsize{16pt}{18pt}\selectfont\textls[150]{LOGICIEL LIBRE DE PLANIFICATION}}\\[0.4cm]
-      {\sffamily\fontsize{14pt}{16pt}\selectfont\textls[100]{maraîchage \textbullet{} grandes cultures \textbullet{} arboriculture \textbullet{} agroforesterie}}\\[3cm]
+      % Letter-spacing via fontspec (LetterSpace, % of font size) rather than
+      % microtype's \textls: microtype letterspacing errors out under xetex on
+      % the older texlive shipped by apt (used by the packaging hook), while
+      % fontspec's LetterSpace works on every texlive. ~150/1000 em → 15%.
+      {\sffamily\fontsize{16pt}{18pt}\selectfont\addfontfeatures{LetterSpace=15.0}LOGICIEL LIBRE DE PLANIFICATION}\\[0.4cm]
+      {\sffamily\fontsize{14pt}{16pt}\selectfont\addfontfeatures{LetterSpace=10.0}maraîchage \textbullet{} grandes cultures \textbullet{} arboriculture \textbullet{} agroforesterie}\\[3cm]
       {\sffamily\fontsize{96pt}{100pt}\selectfont\textbf{Pomone}}\\[1cm]
       {\sffamily\fontsize{22pt}{24pt}\selectfont Manuel utilisateur}\\
       \vspace*{4.5cm}
