@@ -18,11 +18,15 @@ export struct LocationItem {
     parent-label: string,
     full-path: string,
     depth: int,
+    in-use: bool,
 }
 
 component LocationRowView inherits Card {
     in property <LocationItem> entry;
     in property <length> indent-step: 24px;
+    in property <string> delete-text;
+    in property <string> in-use-text;
+    callback delete(string);
     height: 80px;
 
     HorizontalLayout {
@@ -50,6 +54,23 @@ component LocationRowView inherits Card {
                       + (entry.parent-label != "" ? "  ↳ " + entry.parent-label : "");
                 color: Palette.text-muted;
                 font-size: Theme.font-size-label;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.space-xs;
+            SecondaryButton {
+                text: delete-text;
+                // A location with child locations or plantings can't be
+                // deleted (FK RESTRICT) — disable and explain.
+                enabled: !entry.in-use;
+                clicked => { delete(entry.id); }
+            }
+            if entry.in-use: Text {
+                text: in-use-text;
+                color: Palette.text-secondary;
+                font-size: Theme.font-size-label;
+                horizontal-alignment: center;
             }
         }
     }
@@ -88,6 +109,9 @@ export component LocationsPage inherits Rectangle {
     in-out property <string> new-loc-notes;
     in property <string> create-loc-button-text;
     callback create-location();
+    in property <string> location-delete-text;
+    in property <string> location-in-use-text;
+    callback delete-location(string);
 
     in property <string> status-text;
     in property <bool> status-is-error: false;
@@ -136,7 +160,10 @@ export component LocationsPage inherits Rectangle {
                         ListView {
                             for item in locations: LocationRowView {
                                 entry: item;
+                                delete-text: location-delete-text;
+                                in-use-text: location-in-use-text;
                                 width: list-area.width;
+                                delete(id) => { delete-location(id); }
                             }
                         }
                     }

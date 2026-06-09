@@ -14,13 +14,13 @@ use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use fluent::FluentArgs;
 use pomone_app::{
     bed_usage_series, create_crop, create_location, create_recurring_task, create_strata,
-    create_task, create_task_type, create_variety, delete_crop, delete_strata, delete_task,
-    delete_task_type, extend_series_if_needed, get_crop_for_edit, get_planting_detail,
-    get_task_for_edit, get_task_type_for_edit, list_agenda, list_calendar_entries,
-    list_crop_map_lanes, list_crops, list_family_options, list_location_kind_options,
-    list_location_options, list_locations_tree, list_parent_options, list_planting_choices,
-    list_planting_tasks, list_plantings, list_strata_options, list_strata_rows,
-    list_task_category_options, list_task_type_options, list_task_types_admin,
+    create_task, create_task_type, create_variety, delete_crop, delete_location, delete_strata,
+    delete_task, delete_task_type, delete_variety, extend_series_if_needed, get_crop_for_edit,
+    get_planting_detail, get_task_for_edit, get_task_type_for_edit, list_agenda,
+    list_calendar_entries, list_crop_map_lanes, list_crops, list_family_options,
+    list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
+    list_planting_choices, list_planting_tasks, list_plantings, list_strata_options,
+    list_strata_rows, list_task_category_options, list_task_type_options, list_task_types_admin,
     list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting,
     move_planting_to_location, parse_id, planting_status_key, recurrence_unit_str, reschedule_task,
     services, split_planting, test_backend, update_crop, update_task, update_task_type,
@@ -77,6 +77,10 @@ enum PendingDelete {
     Planting(String),
     /// Crop id (a row in the Cultures catalog).
     Crop(String),
+    /// Variety id (a row in the Cultures varieties panel).
+    Variety(String),
+    /// Location id (a row in the Lieux tree).
+    Location(String),
 }
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -495,6 +499,20 @@ fn main() -> Result<()> {
             reset_crop_form_to_create(&window, &mut state.borrow_mut());
         });
     }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_delete_variety(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            s.pending_delete = Some(PendingDelete::Variety(id.to_string()));
+            window
+                .set_confirm_message(SharedString::from(s.app.i18n().t("confirm-delete-variety")));
+            window.set_confirm_visible(true);
+        });
+    }
 
     // --- Locations navigation ---
     {
@@ -539,6 +557,23 @@ fn main() -> Result<()> {
                     window.set_status_is_error(is_err);
                 }
             }
+        });
+    }
+
+    // --- Delete a location (Lieux screen) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_delete_location(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            s.pending_delete = Some(PendingDelete::Location(id.to_string()));
+            window.set_confirm_message(SharedString::from(
+                s.app.i18n().t("confirm-delete-location"),
+            ));
+            window.set_confirm_visible(true);
         });
     }
 
@@ -621,6 +656,8 @@ fn main() -> Result<()> {
                 Some(PendingDelete::TaskType(id)) => do_delete_task_type(&window, &mut s, &id),
                 Some(PendingDelete::Planting(id)) => do_delete_planting(&window, &mut s, &id),
                 Some(PendingDelete::Crop(id)) => do_delete_crop(&window, &mut s, &id),
+                Some(PendingDelete::Variety(id)) => do_delete_variety(&window, &mut s, &id),
+                Some(PendingDelete::Location(id)) => do_delete_location(&window, &mut s, &id),
                 None => {}
             }
         });
@@ -2292,6 +2329,7 @@ fn variety_to_slint(row: AppVarietyRow) -> SlintVarietyRow {
         name: SharedString::from(row.name),
         description: SharedString::from(row.description),
         profile_label: SharedString::from(row.profile_label),
+        in_use: row.in_use,
     }
 }
 
@@ -2462,6 +2500,66 @@ fn do_delete_crop(window: &MainWindow, s: &mut UiState, id: &str) {
     }
 }
 
+/// Execute a confirmed variety deletion. Blocked (localized) when a planting
+/// uses the variety; otherwise refresh the crop's variety list + the catalog
+/// counts.
+fn do_delete_variety(window: &MainWindow, s: &mut UiState, id: &str) {
+    let result: Result<(), AppError> = s
+        .runtime
+        .block_on(async { delete_variety(s.app.repo(), id).await });
+    match result {
+        Ok(()) => {
+            window.set_status_text(SharedString::from(s.app.i18n().t("status-variety-deleted")));
+            window.set_status_is_error(false);
+            if let Err(e) = refresh_varieties_of_selected_crop(window, s) {
+                tracing::error!(error = %e, "failed to refresh varieties after delete");
+            }
+            // Variety counts on the crop rows change too.
+            if let Err(e) = refresh_cultures(window, s) {
+                tracing::error!(error = %e, "failed to refresh cultures after variety delete");
+            }
+        }
+        Err(AppError::Inconsistent(ref msg)) if msg == "variety_in_use" => {
+            window.set_status_text(SharedString::from(s.app.i18n().t("error-variety-in-use")));
+            window.set_status_is_error(true);
+        }
+        Err(e) => {
+            let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
+            window.set_status_text(text);
+            window.set_status_is_error(is_err);
+        }
+    }
+}
+
+/// Execute a confirmed location deletion (Lieux screen). Blocked (localized)
+/// when the location holds child locations or plantings; otherwise refresh the
+/// tree.
+fn do_delete_location(window: &MainWindow, s: &mut UiState, id: &str) {
+    let result: Result<(), AppError> = s
+        .runtime
+        .block_on(async { delete_location(s.app.repo(), id).await });
+    match result {
+        Ok(()) => {
+            window.set_status_text(SharedString::from(
+                s.app.i18n().t("status-location-deleted"),
+            ));
+            window.set_status_is_error(false);
+            if let Err(e) = refresh_locations(window, s) {
+                tracing::error!(error = %e, "failed to refresh locations after delete");
+            }
+        }
+        Err(AppError::Inconsistent(ref msg)) if msg == "location_in_use" => {
+            window.set_status_text(SharedString::from(s.app.i18n().t("error-location-in-use")));
+            window.set_status_is_error(true);
+        }
+        Err(e) => {
+            let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
+            window.set_status_text(text);
+            window.set_status_is_error(is_err);
+        }
+    }
+}
+
 fn try_create_variety(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
     let i18n = state.app.i18n();
     let idx = window.get_selected_crop_index();
@@ -2616,6 +2714,7 @@ fn location_to_slint(item: LocationListItem) -> SlintLocationItem {
         parent_label: SharedString::from(item.parent_label),
         full_path: SharedString::from(item.full_path),
         depth: usize_to_i32(item.depth as usize),
+        in_use: item.in_use,
     }
 }
 

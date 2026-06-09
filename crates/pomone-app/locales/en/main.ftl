@@ -83,6 +83,9 @@ button-create-crop = Create crop
 button-create-variety = Create variety
 status-crop-created = Crop created
 status-variety-created = Variety created
+status-variety-deleted = Variety deleted
+confirm-delete-variety = Delete this variety? This cannot be undone.
+error-variety-in-use = This variety is used by a planting; delete those plantings first.
 status-crop-updated = Crop updated
 status-crop-deleted = Crop deleted
 button-edit = Edit
@@ -231,6 +234,9 @@ placeholder-loc-notes = east-west orientation, south-facing…
 button-create-location = Create location
 parent-none = (root — no parent)
 status-location-created = Location created
+status-location-deleted = Location deleted
+confirm-delete-location = Delete this location? This cannot be undone.
+error-location-in-use = This location holds child locations or plantings; delete those first.
 
 ## Common nouns
 crop = Crop

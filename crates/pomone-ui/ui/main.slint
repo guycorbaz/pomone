@@ -168,6 +168,8 @@ export component MainWindow inherits Window {
     callback edit-crop(string);
     callback delete-crop(string);
     callback cancel-crop-edit();
+    callback delete-variety(string);
+    callback delete-location(string);
 
     in property <string> varieties-title;
     in property <string> empty-varieties-text;
@@ -999,6 +1001,9 @@ export component MainWindow inherits Window {
                 edit-crop(id) => { edit-crop(id); }
                 delete-crop(id) => { delete-crop(id); }
                 cancel-crop-edit => { cancel-crop-edit(); }
+                variety-delete-text: crop-delete-text;
+                variety-in-use-text: crop-in-use-text;
+                delete-variety(id) => { delete-variety(id); }
             }
 
             // ------- Settings -------
@@ -1271,7 +1276,10 @@ export component MainWindow inherits Window {
                 create-loc-button-text: create-loc-button-text;
                 status-text: status-text;
                 status-is-error: status-is-error;
+                location-delete-text: crop-delete-text;
+                location-in-use-text: crop-in-use-text;
                 create-location => { create-location(); }
+                delete-location(id) => { delete-location(id); }
             }
         }
     }
