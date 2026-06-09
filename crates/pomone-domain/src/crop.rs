@@ -5,7 +5,7 @@
 //! recorded.
 
 use crate::error::{DomainError, DomainResult};
-use crate::ids::{CropId, FamilyId, StrataId};
+use crate::ids::{CropId, FamilyId};
 use crate::validation::{normalize_optional, require_name};
 use serde::{Deserialize, Serialize};
 
@@ -136,7 +136,6 @@ impl Lifespan {
 pub struct Crop {
     pub id: CropId,
     pub family_id: FamilyId,
-    pub strata_id: StrataId,
     pub name: String,
     pub latin_name: Option<String>,
     pub lifespan: Lifespan,
@@ -146,7 +145,6 @@ pub struct Crop {
 impl Crop {
     pub fn new(
         family_id: FamilyId,
-        strata_id: StrataId,
         name: impl Into<String>,
         latin_name: Option<String>,
         lifespan: Lifespan,
@@ -155,7 +153,6 @@ impl Crop {
         Ok(Self {
             id: CropId::new(),
             family_id,
-            strata_id,
             name: require_name(name)?,
             latin_name: normalize_optional(latin_name),
             lifespan,
@@ -246,7 +243,6 @@ mod tests {
     fn crop_construction_normalizes_fields() {
         let crop = Crop::new(
             FamilyId::new(),
-            StrataId::new(),
             "  Pommier  ",
             Some("  Malus domestica  ".to_owned()),
             Lifespan::perennial(40, 3).unwrap(),
@@ -262,7 +258,6 @@ mod tests {
     fn crop_with_empty_name_rejected() {
         let res = Crop::new(
             FamilyId::new(),
-            StrataId::new(),
             "",
             None,
             Lifespan::annual(),

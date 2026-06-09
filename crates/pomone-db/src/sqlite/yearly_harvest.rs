@@ -112,7 +112,7 @@ mod tests {
         repo.strata_create(&s).await.unwrap();
         repo.location_kind_create(&k).await.unwrap();
         let lifespan = Lifespan::perennial(40, 3).unwrap();
-        let crop = Crop::new(f.id, s.id, "Pommier", None, lifespan, PruningSeason::Winter).unwrap();
+        let crop = Crop::new(f.id, "Pommier", None, lifespan, PruningSeason::Winter).unwrap();
         repo.crop_create(&crop).await.unwrap();
         let v = Variety::new(
             crop.id,
@@ -130,6 +130,7 @@ mod tests {
         let p = Planting::new(
             v.id,
             loc.id,
+            s.id,
             lifespan,
             dec!(2000),
             50,

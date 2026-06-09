@@ -90,7 +90,6 @@ mod tests {
         repo.location_kind_create(&k).await.unwrap();
         let crop = Crop::new(
             f.id,
-            s.id,
             "Pommier",
             None,
             Lifespan::perennial(40, 3).unwrap(),
@@ -115,6 +114,7 @@ mod tests {
             &repo,
             variety.id,
             location.id,
+            s.id,
             NaiveDate::from_ymd_opt(2026, 3, 15).unwrap(),
             None,
             dec!(100),

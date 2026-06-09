@@ -258,7 +258,7 @@ mod tests {
     use super::*;
     use crate::services::create_annual_planting_from_sowing;
     use crate::test_helpers::seed_test_data;
-    use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, VarietyRepo};
+    use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, StrataRepo, VarietyRepo};
     use rust_decimal_macros::dec;
 
     async fn fresh_repo() -> SqliteRepository {
@@ -289,10 +289,12 @@ mod tests {
         let varieties = repo.variety_list().await.unwrap();
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        let strata = repo.strata_list().await.unwrap()[0].id;
         create_annual_planting_from_sowing(
             &repo,
             varieties[0].id,
             bed.id,
+            strata,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -321,10 +323,12 @@ mod tests {
         let varieties = repo.variety_list().await.unwrap();
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        let strata = repo.strata_list().await.unwrap()[0].id;
         create_annual_planting_from_sowing(
             &repo,
             varieties[0].id,
             bed.id,
+            strata,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -351,10 +355,12 @@ mod tests {
         let varieties = repo.variety_list().await.unwrap();
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        let strata = repo.strata_list().await.unwrap()[0].id;
         create_annual_planting_from_sowing(
             &repo,
             varieties[0].id,
             bed.id,
+            strata,
             d(2026, 4, 1),
             dec!(20),
             100,
@@ -367,6 +373,7 @@ mod tests {
             &repo,
             varieties[1].id,
             bed.id,
+            strata,
             d(2026, 3, 1),
             dec!(20),
             100,

@@ -250,6 +250,7 @@ pub async fn split_planting(
         let fresh = Planting::new(
             source.variety_id,
             target_ids[idx],
+            source.strata_id,
             crop.lifespan,
             p.area_m2,
             p.plants_count,
@@ -323,7 +324,7 @@ mod tests {
     use super::*;
     use crate::services::create_annual_planting_from_sowing;
     use crate::test_helpers::seed_test_data;
-    use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, VarietyRepo};
+    use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, StrataRepo, VarietyRepo};
     use rust_decimal_macros::dec;
 
     async fn fresh_with_planting() -> (SqliteRepository, String, String, String) {
@@ -350,6 +351,7 @@ mod tests {
             &repo,
             varieties[0].id,
             bed_a.id,
+            repo.strata_list().await.unwrap()[0].id,
             NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
             dec!(20),
             100,

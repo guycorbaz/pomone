@@ -35,7 +35,7 @@ use pomone_app::{
     VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{
-    LocationId, PlantingId, PlantingStatus, PruningSeason, RecurrenceUnit, VarietyId,
+    LocationId, PlantingId, PlantingStatus, PruningSeason, RecurrenceUnit, StrataId, VarietyId,
 };
 use rust_decimal::Decimal;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
@@ -93,7 +93,8 @@ struct UiState {
     location_ids: Vec<String>,
     /// Stringified `FamilyId`s, parallel to the Cultures page `family-labels`.
     family_ids: Vec<String>,
-    /// Stringified `StrataId`s, parallel to the Cultures page `strata-labels`.
+    /// Stringified `StrataId`s, parallel to the Plantings page `strata-labels`
+    /// (strata moved from crop to planting — issue #86).
     strata_ids: Vec<String>,
     /// Stringified `CropId`s, parallel to the Cultures page `crops` model
     /// (so a row click index resolves to a typed `CropId`).
@@ -1714,7 +1715,9 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_label_crop_latin(SharedString::from(i18n.t("label-crop-latin")));
     window.set_placeholder_crop_latin(SharedString::from(i18n.t("placeholder-crop-latin")));
     window.set_label_crop_family(SharedString::from(i18n.t("label-crop-family")));
-    window.set_label_crop_strata(SharedString::from(i18n.t("label-crop-strata")));
+    // Strata now lives on the planting (issue #86): the label feeds the
+    // Plantings form, reusing the existing "Strate" string.
+    window.set_label_planting_strata(SharedString::from(i18n.t("label-crop-strata")));
     window.set_label_lifespan(SharedString::from(i18n.t("label-lifespan")));
     window.set_label_lifespan_years(SharedString::from(i18n.t("label-lifespan-years")));
     window.set_placeholder_lifespan_years(SharedString::from(i18n.t("placeholder-lifespan-years")));
@@ -1904,6 +1907,7 @@ fn polyline_path(series: &[AppBedUsagePoint], value: impl Fn(&AppBedUsagePoint) 
 struct PlantingsSnapshot {
     varieties: Vec<VarietyOption>,
     locations: Vec<LocationOption>,
+    strata: Vec<StrataOption>,
     plantings: Vec<AppPlantingRow>,
 }
 
@@ -1913,10 +1917,12 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
     let snapshot: Result<PlantingsSnapshot, AppError> = state.runtime.block_on(async {
         let varieties = list_variety_options(state.app.repo()).await?;
         let locations = list_location_options(state.app.repo()).await?;
+        let strata = list_strata_options(state.app.repo()).await?;
         let plantings = list_plantings(state.app.repo()).await?;
         Ok(PlantingsSnapshot {
             varieties,
             locations,
+            strata,
             plantings,
         })
     });
@@ -1925,6 +1931,7 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
     state.variety_ids = snapshot.varieties.iter().map(|v| v.id.clone()).collect();
     state.variety_is_annuals_plantings = snapshot.varieties.iter().map(|v| v.is_annual).collect();
     state.location_ids = snapshot.locations.iter().map(|l| l.id.clone()).collect();
+    state.strata_ids = snapshot.strata.iter().map(|s| s.id.clone()).collect();
 
     let variety_labels: Vec<SharedString> = snapshot
         .varieties
@@ -1941,6 +1948,13 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
         .map(|l| SharedString::from(l.label))
         .collect();
     window.set_location_labels(ModelRc::new(VecModel::from(location_labels)));
+
+    let strata_labels: Vec<SharedString> = snapshot
+        .strata
+        .into_iter()
+        .map(|s| SharedString::from(s.label))
+        .collect();
+    window.set_strata_labels(ModelRc::new(VecModel::from(strata_labels)));
 
     // Build the Gantt model alongside the list. Only annuals (Cycle schedule)
     // and only those whose first-harvest year matches today's year — winter-sow
@@ -1970,6 +1984,9 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
     }
     if i32_to_usize(window.get_location_index()) >= locations_len {
         window.set_location_index(0);
+    }
+    if i32_to_usize(window.get_strata_index()) >= state.strata_ids.len() {
+        window.set_strata_index(0);
     }
 
     Ok(())
@@ -2041,6 +2058,7 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
     let i18n = state.app.i18n();
     let variety_idx = i32_to_usize(window.get_variety_index());
     let location_idx = i32_to_usize(window.get_location_index());
+    let strata_idx = i32_to_usize(window.get_strata_index());
     let variety_id_str = state
         .variety_ids
         .get(variety_idx)
@@ -2049,6 +2067,10 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
         .location_ids
         .get(location_idx)
         .ok_or_else(|| FormError::Service(AppError::Inconsistent("no location selected".into())))?;
+    let strata_id_str = state
+        .strata_ids
+        .get(strata_idx)
+        .ok_or_else(|| FormError::Service(AppError::Inconsistent("no strata selected".into())))?;
     let is_annual = state
         .variety_is_annuals_plantings
         .get(variety_idx)
@@ -2057,6 +2079,7 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
 
     let variety_id: VarietyId = parse_id(variety_id_str).map_err(FormError::Service)?;
     let location_id: LocationId = parse_id(location_id_str).map_err(FormError::Service)?;
+    let strata_id: StrataId = parse_id(strata_id_str).map_err(FormError::Service)?;
     let area_m2 = validate_positive_decimal(&window.get_area_text(), i18n)?;
     let plants_count = validate_positive_count(&window.get_count_text(), i18n)?;
 
@@ -2067,6 +2090,7 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
                 state.app.repo(),
                 variety_id,
                 location_id,
+                strata_id,
                 sown_on,
                 area_m2,
                 plants_count,
@@ -2089,6 +2113,7 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
                 state.app.repo(),
                 variety_id,
                 location_id,
+                strata_id,
                 established_on,
                 expected_removal_on,
                 area_m2,
@@ -2130,7 +2155,6 @@ fn optional_text(s: &str) -> Option<String> {
 struct CulturesSnapshot {
     crops: Vec<AppCropRow>,
     families: Vec<FamilyOption>,
-    strata: Vec<StrataOption>,
 }
 
 /// Reload crops + dropdown options. Also refreshes the right-side varieties
@@ -2139,19 +2163,13 @@ fn refresh_cultures(window: &MainWindow, state: &mut UiState) -> Result<()> {
     let snapshot: Result<CulturesSnapshot, AppError> = state.runtime.block_on(async {
         let crops = list_crops(state.app.repo()).await?;
         let families = list_family_options(state.app.repo()).await?;
-        let strata = list_strata_options(state.app.repo()).await?;
-        Ok(CulturesSnapshot {
-            crops,
-            families,
-            strata,
-        })
+        Ok(CulturesSnapshot { crops, families })
     });
     let snapshot = snapshot.context("failed to load cultures data")?;
 
     state.crop_ids = snapshot.crops.iter().map(|c| c.id.clone()).collect();
     state.crop_is_annuals = snapshot.crops.iter().map(|c| c.is_annual).collect();
     state.family_ids = snapshot.families.iter().map(|f| f.id.clone()).collect();
-    state.strata_ids = snapshot.strata.iter().map(|s| s.id.clone()).collect();
 
     let crop_rows: Vec<SlintCropRow> = snapshot.crops.into_iter().map(crop_to_slint).collect();
     window.set_crops(ModelRc::new(VecModel::from(crop_rows)));
@@ -2163,19 +2181,9 @@ fn refresh_cultures(window: &MainWindow, state: &mut UiState) -> Result<()> {
         .collect();
     window.set_family_labels(ModelRc::new(VecModel::from(family_labels)));
 
-    let strata_labels: Vec<SharedString> = snapshot
-        .strata
-        .into_iter()
-        .map(|s| SharedString::from(s.label))
-        .collect();
-    window.set_strata_labels(ModelRc::new(VecModel::from(strata_labels)));
-
     // Clamp form dropdowns; keep selected-crop-index if still valid.
     if i32_to_usize(window.get_family_index()) >= state.family_ids.len() {
         window.set_family_index(0);
-    }
-    if i32_to_usize(window.get_strata_index()) >= state.strata_ids.len() {
-        window.set_strata_index(0);
     }
     let selected_idx = window.get_selected_crop_index();
     if selected_idx < 0 || i32_to_usize(selected_idx) >= state.crop_ids.len() {
@@ -2210,7 +2218,6 @@ fn crop_to_slint(row: AppCropRow) -> SlintCropRow {
         id: SharedString::from(row.id),
         name: SharedString::from(row.name),
         family_label: SharedString::from(row.family_label),
-        strata_label: SharedString::from(row.strata_label),
         lifespan_label: SharedString::from(row.lifespan_label),
         pruning_label: SharedString::from(row.pruning_label),
         variety_count: usize_to_i32(row.variety_count as usize),
@@ -2253,16 +2260,10 @@ fn pruning_from_index(idx: i32) -> Result<PruningSeason, AppError> {
 fn try_create_crop(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
     let i18n = state.app.i18n();
     let family_idx = i32_to_usize(window.get_family_index());
-    let strata_idx = i32_to_usize(window.get_strata_index());
     let family_id_str = state
         .family_ids
         .get(family_idx)
         .ok_or_else(|| FormError::Service(AppError::Inconsistent("no family selected".into())))?
-        .clone();
-    let strata_id_str = state
-        .strata_ids
-        .get(strata_idx)
-        .ok_or_else(|| FormError::Service(AppError::Inconsistent("no strata selected".into())))?
         .clone();
     let name = validate_required_name(&window.get_new_crop_name(), i18n)?;
     let latin_name = optional_text(&window.get_new_crop_latin());
@@ -2298,7 +2299,6 @@ fn try_create_crop(window: &MainWindow, state: &mut UiState) -> Result<(), FormE
                 state.app.repo(),
                 CropInput {
                     family_id_str,
-                    strata_id_str,
                     name,
                     latin_name,
                     lifespan_kind,

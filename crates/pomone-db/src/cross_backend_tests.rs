@@ -44,7 +44,6 @@ async fn scenario_full_perennial_chain(repo: &dyn Repository) {
     let lifespan = Lifespan::perennial(40, 3).unwrap();
     let crop = Crop::new(
         family.id,
-        strata.id,
         "Pommier",
         Some("Malus domestica".into()),
         lifespan,
@@ -71,6 +70,7 @@ async fn scenario_full_perennial_chain(repo: &dyn Repository) {
     let planting = Planting::new(
         variety.id,
         location.id,
+        strata.id,
         lifespan,
         dec!(2000),
         50,
@@ -116,7 +116,6 @@ async fn scenario_annual_cycle_with_full_dates(repo: &dyn Repository) {
 
     let crop = Crop::new(
         family.id,
-        strata.id,
         "Tomate",
         None,
         Lifespan::Annual,
@@ -141,6 +140,7 @@ async fn scenario_annual_cycle_with_full_dates(repo: &dyn Repository) {
     let planting = Planting::new(
         variety.id,
         location.id,
+        strata.id,
         Lifespan::Annual,
         dec!(20.5),
         100,
@@ -168,7 +168,6 @@ async fn scenario_fk_cascade_on_crop_delete(repo: &dyn Repository) {
     repo.strata_create(&strata).await.unwrap();
     let crop = Crop::new(
         family.id,
-        strata.id,
         "Crop",
         None,
         Lifespan::Annual,
@@ -196,15 +195,7 @@ async fn scenario_fk_restrict_on_family_delete(repo: &dyn Repository) {
     let strata = Strata::new("Held", None, None, None, 0).unwrap();
     repo.family_create(&family).await.unwrap();
     repo.strata_create(&strata).await.unwrap();
-    let crop = Crop::new(
-        family.id,
-        strata.id,
-        "C",
-        None,
-        Lifespan::Annual,
-        PruningSeason::None,
-    )
-    .unwrap();
+    let crop = Crop::new(family.id, "C", None, Lifespan::Annual, PruningSeason::None).unwrap();
     repo.crop_create(&crop).await.unwrap();
 
     // Family is RESTRICT-referenced by Crop → deletion should fail

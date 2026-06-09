@@ -7,8 +7,8 @@ use crate::error::{AppError, AppResult};
 use chrono::NaiveDate;
 use pomone_db::Repository;
 use pomone_domain::{
-    date_calc, LocationId, Planting, PlantingId, PlantingSchedule, PlantingStatus, VarietyId,
-    VarietyProfile, YearlyHarvest,
+    date_calc, LocationId, Planting, PlantingId, PlantingSchedule, PlantingStatus, StrataId,
+    VarietyId, VarietyProfile, YearlyHarvest,
 };
 use rust_decimal::Decimal;
 
@@ -17,10 +17,12 @@ use rust_decimal::Decimal;
 ///
 /// Returns an `Inconsistent` error if the variety has a `PluriannualProfile`
 /// (callers must use a different code path for perennial establishments).
+#[allow(clippy::too_many_arguments)]
 pub async fn create_annual_planting_from_sowing(
     repo: &dyn Repository,
     variety_id: VarietyId,
     location_id: LocationId,
+    strata_id: StrataId,
     sown_on: NaiveDate,
     area_m2: Decimal,
     plants_count: u32,
@@ -59,6 +61,7 @@ pub async fn create_annual_planting_from_sowing(
     let planting = Planting::new(
         variety_id,
         location_id,
+        strata_id,
         crop.lifespan,
         area_m2,
         plants_count,
@@ -79,10 +82,12 @@ pub async fn create_annual_planting_from_sowing(
 /// Create a perennial planting (a long-lived productive plant tracked by
 /// yearly harvests). Rejects annual varieties — the caller must use
 /// [`create_annual_planting_from_sowing`] for those.
+#[allow(clippy::too_many_arguments)]
 pub async fn create_perennial_planting(
     repo: &dyn Repository,
     variety_id: VarietyId,
     location_id: LocationId,
+    strata_id: StrataId,
     established_on: NaiveDate,
     expected_removal_on: Option<NaiveDate>,
     area_m2: Decimal,
@@ -113,6 +118,7 @@ pub async fn create_perennial_planting(
     let planting = Planting::new(
         variety_id,
         location_id,
+        strata_id,
         crop.lifespan,
         area_m2,
         plants_count,
@@ -265,7 +271,7 @@ mod tests {
 
     /// Build a fully populated test repo with a single annual variety
     /// (Tomate Marmande) ready for planting.
-    async fn setup_annual() -> (SqliteRepository, VarietyId, LocationId) {
+    async fn setup_annual() -> (SqliteRepository, VarietyId, LocationId, StrataId) {
         let repo = SqliteRepository::in_memory().await.unwrap();
         let f = Family::new("Solanaceae", None, None).unwrap();
         let s = Strata::new("Herbacée", None, None, None, 40).unwrap();
@@ -273,15 +279,7 @@ mod tests {
         repo.family_create(&f).await.unwrap();
         repo.strata_create(&s).await.unwrap();
         repo.location_kind_create(&k).await.unwrap();
-        let crop = Crop::new(
-            f.id,
-            s.id,
-            "Tomate",
-            None,
-            Lifespan::Annual,
-            PruningSeason::None,
-        )
-        .unwrap();
+        let crop = Crop::new(f.id, "Tomate", None, Lifespan::Annual, PruningSeason::None).unwrap();
         repo.crop_create(&crop).await.unwrap();
         let variety = Variety::new(
             crop.id,
@@ -294,11 +292,11 @@ mod tests {
         repo.variety_create(&variety).await.unwrap();
         let loc = Location::new(k.id, "Planche A", dec!(25), dec!(0.8), None, None).unwrap();
         repo.location_create(&loc).await.unwrap();
-        (repo, variety.id, loc.id)
+        (repo, variety.id, loc.id, s.id)
     }
 
     /// Build a perennial setup (Pommier Reine des Reinettes).
-    async fn setup_perennial() -> (SqliteRepository, VarietyId, LocationId) {
+    async fn setup_perennial() -> (SqliteRepository, VarietyId, LocationId, StrataId) {
         let repo = SqliteRepository::in_memory().await.unwrap();
         let f = Family::new("Rosaceae", None, None).unwrap();
         let s = Strata::new("Sous-étage", None, None, None, 20).unwrap();
@@ -307,7 +305,7 @@ mod tests {
         repo.strata_create(&s).await.unwrap();
         repo.location_kind_create(&k).await.unwrap();
         let lifespan = Lifespan::perennial(40, 3).unwrap();
-        let crop = Crop::new(f.id, s.id, "Pommier", None, lifespan, PruningSeason::Winter).unwrap();
+        let crop = Crop::new(f.id, "Pommier", None, lifespan, PruningSeason::Winter).unwrap();
         repo.crop_create(&crop).await.unwrap();
         let variety = Variety::new(
             crop.id,
@@ -322,7 +320,7 @@ mod tests {
         repo.variety_create(&variety).await.unwrap();
         let loc = Location::new(k.id, "Verger nord", dec!(50), dec!(40), None, None).unwrap();
         repo.location_create(&loc).await.unwrap();
-        (repo, variety.id, loc.id)
+        (repo, variety.id, loc.id, s.id)
     }
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
@@ -331,11 +329,12 @@ mod tests {
 
     #[tokio::test]
     async fn annual_planting_inferred_dates() {
-        let (repo, vid, lid) = setup_annual().await;
+        let (repo, vid, lid, sid) = setup_annual().await;
         let p = create_annual_planting_from_sowing(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -367,11 +366,12 @@ mod tests {
 
     #[tokio::test]
     async fn annual_planting_creation_rejects_pluriannual_variety() {
-        let (repo, vid, lid) = setup_perennial().await;
+        let (repo, vid, lid, sid) = setup_perennial().await;
         let err = create_annual_planting_from_sowing(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 1),
             dec!(20),
             10,
@@ -395,6 +395,7 @@ mod tests {
             &repo,
             VarietyId::new(),
             loc.id,
+            StrataId::new(),
             d(2026, 3, 1),
             dec!(10),
             5,
@@ -414,11 +415,12 @@ mod tests {
 
     #[tokio::test]
     async fn validate_consistency_passes_for_well_formed_planting() {
-        let (repo, vid, lid) = setup_annual().await;
+        let (repo, vid, lid, sid) = setup_annual().await;
         let p = create_annual_planting_from_sowing(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -432,7 +434,7 @@ mod tests {
 
     #[tokio::test]
     async fn validate_consistency_unknown_planting() {
-        let (repo, _, _) = setup_annual().await;
+        let (repo, _, _, _) = setup_annual().await;
         let err = validate_planting_consistency(&repo, PlantingId::new())
             .await
             .unwrap_err();
@@ -447,11 +449,12 @@ mod tests {
 
     #[tokio::test]
     async fn create_perennial_planting_persists_with_recurring_variety() {
-        let (repo, vid, lid) = setup_perennial().await;
+        let (repo, vid, lid, sid) = setup_perennial().await;
         let p = create_perennial_planting(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 15),
             Some(d(2056, 12, 31)),
             dec!(2000),
@@ -476,11 +479,12 @@ mod tests {
 
     #[tokio::test]
     async fn create_perennial_planting_rejects_annual_variety() {
-        let (repo, vid, lid) = setup_annual().await;
+        let (repo, vid, lid, sid) = setup_annual().await;
         let err = create_perennial_planting(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 15),
             None,
             dec!(10),
@@ -495,11 +499,12 @@ mod tests {
 
     #[tokio::test]
     async fn record_yearly_harvest_on_perennial_planting() {
-        let (repo, vid, lid) = setup_perennial().await;
+        let (repo, vid, lid, sid) = setup_perennial().await;
         let lifespan = Lifespan::perennial(40, 3).unwrap();
         let p = Planting::new(
             vid,
             lid,
+            sid,
             lifespan,
             dec!(2000),
             50,
@@ -527,11 +532,12 @@ mod tests {
 
     #[tokio::test]
     async fn record_yearly_harvest_rejects_annual_planting() {
-        let (repo, vid, lid) = setup_annual().await;
+        let (repo, vid, lid, sid) = setup_annual().await;
         let p = create_annual_planting_from_sowing(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -550,13 +556,14 @@ mod tests {
 
     #[tokio::test]
     async fn creating_annual_planting_autogenerates_tasks() {
-        let (repo, vid, lid) = setup_annual().await;
+        let (repo, vid, lid, sid) = setup_annual().await;
         // Seed the default TaskTypes so the auto-generator finds matches.
         seed_defaults(&repo).await.unwrap();
         let p = create_annual_planting_from_sowing(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -585,12 +592,13 @@ mod tests {
 
     #[tokio::test]
     async fn creating_perennial_planting_autogenerates_transplant_task() {
-        let (repo, vid, lid) = setup_perennial().await;
+        let (repo, vid, lid, sid) = setup_perennial().await;
         seed_defaults(&repo).await.unwrap();
         let p = create_perennial_planting(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 15),
             None,
             dec!(2000),
@@ -615,11 +623,12 @@ mod tests {
     #[tokio::test]
     async fn planting_without_seeded_types_still_saves_logs_only() {
         // No seed_defaults call here → task_type list is empty.
-        let (repo, vid, lid) = setup_annual().await;
+        let (repo, vid, lid, sid) = setup_annual().await;
         let p = create_annual_planting_from_sowing(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -638,12 +647,13 @@ mod tests {
 
     #[tokio::test]
     async fn delete_planting_succeeds_without_activity() {
-        let (repo, vid, lid) = setup_annual().await;
+        let (repo, vid, lid, sid) = setup_annual().await;
         seed_defaults(&repo).await.unwrap();
         let p = create_annual_planting_from_sowing(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -663,12 +673,13 @@ mod tests {
 
     #[tokio::test]
     async fn delete_planting_refused_when_a_task_is_completed() {
-        let (repo, vid, lid) = setup_annual().await;
+        let (repo, vid, lid, sid) = setup_annual().await;
         seed_defaults(&repo).await.unwrap();
         let p = create_annual_planting_from_sowing(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -690,12 +701,13 @@ mod tests {
 
     #[tokio::test]
     async fn delete_planting_refused_when_labor_hours_logged() {
-        let (repo, vid, lid) = setup_annual().await;
+        let (repo, vid, lid, sid) = setup_annual().await;
         seed_defaults(&repo).await.unwrap();
         let p = create_annual_planting_from_sowing(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -716,7 +728,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_planting_unknown_id_is_not_found() {
-        let (repo, _, _) = setup_annual().await;
+        let (repo, _, _, _) = setup_annual().await;
         let err = delete_planting(&repo, PlantingId::new()).await.unwrap_err();
         assert!(matches!(
             err,
@@ -729,12 +741,13 @@ mod tests {
 
     #[tokio::test]
     async fn set_planting_status_persists() {
-        let (repo, vid, lid) = setup_annual().await;
+        let (repo, vid, lid, sid) = setup_annual().await;
         seed_defaults(&repo).await.unwrap();
         let p = create_annual_planting_from_sowing(
             &repo,
             vid,
             lid,
+            sid,
             d(2026, 3, 1),
             dec!(20),
             100,

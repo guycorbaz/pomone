@@ -8,13 +8,13 @@ use crate::error::{DbError, DbResult};
 use crate::repository::PlantingRepo;
 use crate::sqlite::SqliteRepository;
 use async_trait::async_trait;
-use pomone_domain::{LocationId, Planting, PlantingId, VarietyId};
+use pomone_domain::{LocationId, Planting, PlantingId, StrataId, VarietyId};
 use sqlx::Row;
 use uuid::Uuid;
 
 const COLUMNS: &str = "id, variety_id, location_id, area_m2, plants_count, name, notes, \
                        schedule_kind, sown_on, transplanted_on, first_harvest_on, \
-                       last_harvest_on, established_on, expected_removal_on, status";
+                       last_harvest_on, established_on, expected_removal_on, status, strata_id";
 
 #[async_trait]
 impl PlantingRepo for SqliteRepository {
@@ -49,8 +49,8 @@ impl PlantingRepo for SqliteRepository {
         sqlx::query(
             "INSERT INTO planting (id, variety_id, location_id, area_m2, plants_count, name, \
              notes, schedule_kind, sown_on, transplanted_on, first_harvest_on, last_harvest_on, \
-             established_on, expected_removal_on, status) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+             established_on, expected_removal_on, status, strata_id) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         )
         .bind(p.id.as_uuid())
         .bind(p.variety_id.as_uuid())
@@ -67,6 +67,7 @@ impl PlantingRepo for SqliteRepository {
         .bind(s.established_on)
         .bind(s.expected_removal_on)
         .bind(encode_planting_status(p.status))
+        .bind(p.strata_id.as_uuid())
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -78,7 +79,8 @@ impl PlantingRepo for SqliteRepository {
             "UPDATE planting SET variety_id = ?2, location_id = ?3, area_m2 = ?4, \
              plants_count = ?5, name = ?6, notes = ?7, schedule_kind = ?8, sown_on = ?9, \
              transplanted_on = ?10, first_harvest_on = ?11, last_harvest_on = ?12, \
-             established_on = ?13, expected_removal_on = ?14, status = ?15 WHERE id = ?1",
+             established_on = ?13, expected_removal_on = ?14, status = ?15, \
+             strata_id = ?16 WHERE id = ?1",
         )
         .bind(p.id.as_uuid())
         .bind(p.variety_id.as_uuid())
@@ -95,6 +97,7 @@ impl PlantingRepo for SqliteRepository {
         .bind(s.established_on)
         .bind(s.expected_removal_on)
         .bind(encode_planting_status(p.status))
+        .bind(p.strata_id.as_uuid())
         .execute(&self.pool)
         .await?;
         if result.rows_affected() == 0 {
@@ -140,10 +143,12 @@ fn row_to_planting(row: sqlx::sqlite::SqliteRow) -> DbResult<Planting> {
         row.try_get("expected_removal_on")?,
     )?;
     let status: String = row.try_get("status")?;
+    let strata_id: Uuid = row.try_get("strata_id")?;
     Ok(Planting {
         id: PlantingId::from(id),
         variety_id: VarietyId::from(variety_id),
         location_id: LocationId::from(location_id),
+        strata_id: StrataId::from(strata_id),
         area_m2: decimal_from_text(&area_text)?,
         plants_count,
         schedule,
@@ -168,7 +173,7 @@ mod tests {
 
     /// Sets up a fully populated repo with one crop+variety and one location,
     /// for the given `lifespan`. Returns (repo, variety_id, location_id).
-    async fn setup(lifespan: Lifespan) -> (SqliteRepository, VarietyId, LocationId) {
+    async fn setup(lifespan: Lifespan) -> (SqliteRepository, VarietyId, LocationId, StrataId) {
         let repo = SqliteRepository::in_memory().await.unwrap();
         let f = Family::new("F", None, None).unwrap();
         let s = Strata::new("S", None, None, None, 0).unwrap();
@@ -176,7 +181,7 @@ mod tests {
         repo.family_create(&f).await.unwrap();
         repo.strata_create(&s).await.unwrap();
         repo.location_kind_create(&k).await.unwrap();
-        let crop = Crop::new(f.id, s.id, "C", None, lifespan, PruningSeason::None).unwrap();
+        let crop = Crop::new(f.id, "C", None, lifespan, PruningSeason::None).unwrap();
         repo.crop_create(&crop).await.unwrap();
         let profile = match lifespan {
             Lifespan::Annual | Lifespan::Pluriannual { .. } if lifespan.is_annual() => {
@@ -191,7 +196,7 @@ mod tests {
         repo.variety_create(&variety).await.unwrap();
         let location = Location::new(k.id, "L", dec!(10), dec!(10), None, None).unwrap();
         repo.location_create(&location).await.unwrap();
-        (repo, variety.id, location.id)
+        (repo, variety.id, location.id, s.id)
     }
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
@@ -200,10 +205,11 @@ mod tests {
 
     #[tokio::test]
     async fn cycle_planting_roundtrip() {
-        let (repo, vid, lid) = setup(Lifespan::Annual).await;
+        let (repo, vid, lid, sid) = setup(Lifespan::Annual).await;
         let p = Planting::new(
             vid,
             lid,
+            sid,
             Lifespan::Annual,
             dec!(20),
             100,
@@ -226,10 +232,11 @@ mod tests {
     #[tokio::test]
     async fn perennial_planting_roundtrip() {
         let lifespan = Lifespan::perennial(40, 3).unwrap();
-        let (repo, vid, lid) = setup(lifespan).await;
+        let (repo, vid, lid, sid) = setup(lifespan).await;
         let p = Planting::new(
             vid,
             lid,
+            sid,
             lifespan,
             dec!(50),
             10,
@@ -245,7 +252,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_for_location_filters() {
-        let (repo, vid, lid) = setup(Lifespan::Annual).await;
+        let (repo, vid, lid, sid) = setup(Lifespan::Annual).await;
         // Second location
         let kind_id = repo.location_kind_list().await.unwrap()[0].id;
         let l2 = Location::new(kind_id, "L2", dec!(10), dec!(5), None, None).unwrap();
@@ -255,6 +262,7 @@ mod tests {
             let p = Planting::new(
                 vid,
                 loc,
+                sid,
                 Lifespan::Annual,
                 dec!(10),
                 5,
