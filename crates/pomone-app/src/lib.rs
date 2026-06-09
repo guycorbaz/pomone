@@ -43,9 +43,9 @@ pub use crop_map_view::{
     SplitPart,
 };
 pub use cultures_view::{
-    create_crop, create_variety, list_crops, list_family_options, list_strata_options,
-    list_varieties_for_crop, CropInput, CropRow, FamilyOption, LifespanKind, StrataOption,
-    VarietyInput, VarietyProfileKind, VarietyRow,
+    create_crop, create_variety, delete_crop, get_crop_for_edit, list_crops, list_family_options,
+    list_strata_options, list_varieties_for_crop, update_crop, CropEditForm, CropInput, CropRow,
+    FamilyOption, LifespanKind, StrataOption, VarietyInput, VarietyProfileKind, VarietyRow,
 };
 pub use demo::{seed_demo_data, DemoSummary};
 pub use error::{AppError, AppResult};

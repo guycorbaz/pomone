@@ -39,6 +39,7 @@ empty-varieties = No varieties for this crop.
 no-crop-selected = Pick a crop to see and create its varieties.
 new-crop-section = New annual crop
 new-variety-section = New annual variety
+new-variety-section-pluriannual = New pluriannual variety
 label-crop-name = Name
 placeholder-crop-name = Tomato
 label-crop-latin = Latin name (optional)
@@ -82,6 +83,15 @@ button-create-crop = Create crop
 button-create-variety = Create variety
 status-crop-created = Crop created
 status-variety-created = Variety created
+status-crop-updated = Crop updated
+status-crop-deleted = Crop deleted
+button-edit = Edit
+button-save-crop = Save
+button-cancel-crop-edit = Cancel
+crop-form-section-edit = Edit crop
+crop-in-use = In use
+confirm-delete-crop = Delete this crop? Its varieties are deleted too. Not possible if a variety is already planted.
+error-crop-in-use = This crop has a planted variety; delete those plantings first.
 
 ## Planting detail screen
 title-planting-detail = Planting detail

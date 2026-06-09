@@ -157,6 +157,17 @@ export component MainWindow inherits Window {
     in property <string> create-crop-button-text;
     callback create-crop();
     callback select-crop(int);
+    // Crop edit / delete (Cultures screen)
+    in property <string> crop-edit-text;
+    in property <string> crop-delete-text;
+    in property <string> crop-in-use-text;
+    in property <string> crop-form-section-edit;
+    in property <string> crop-cancel-text;
+    in property <string> crop-save-text;
+    in property <bool> crop-is-edit-mode: false;
+    callback edit-crop(string);
+    callback delete-crop(string);
+    callback cancel-crop-edit();
 
     in property <string> varieties-title;
     in property <string> empty-varieties-text;
@@ -165,6 +176,7 @@ export component MainWindow inherits Window {
     in-out property <bool> selected-crop-is-annual: true;
 
     in property <string> new-variety-section;
+    in property <string> new-variety-section-pluriannual;
     in property <string> label-variety-name;
     in property <string> placeholder-variety-name;
     in property <string> label-variety-description;
@@ -940,6 +952,7 @@ export component MainWindow inherits Window {
                 varieties: varieties;
                 selected-crop-is-annual: selected-crop-is-annual;
                 new-variety-section: new-variety-section;
+                new-variety-section-pluriannual: new-variety-section-pluriannual;
                 label-variety-name: label-variety-name;
                 placeholder-variety-name: placeholder-variety-name;
                 label-variety-description: label-variety-description;
@@ -973,9 +986,19 @@ export component MainWindow inherits Window {
                 create-variety-button-text: create-variety-button-text;
                 status-text: status-text;
                 status-is-error: status-is-error;
+                crop-edit-text: crop-edit-text;
+                crop-delete-text: crop-delete-text;
+                crop-in-use-text: crop-in-use-text;
+                crop-form-section-edit: crop-form-section-edit;
+                crop-cancel-text: crop-cancel-text;
+                crop-save-text: crop-save-text;
+                crop-is-edit-mode: crop-is-edit-mode;
                 create-crop => { create-crop(); }
                 create-variety => { create-variety(); }
                 select-crop(idx) => { select-crop(idx); }
+                edit-crop(id) => { edit-crop(id); }
+                delete-crop(id) => { delete-crop(id); }
+                cancel-crop-edit => { cancel-crop-edit(); }
             }
 
             // ------- Settings -------
