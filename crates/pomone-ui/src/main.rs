@@ -21,20 +21,22 @@ use pomone_app::{
     list_planting_choices, list_planting_tasks, list_plantings, list_strata_options,
     list_strata_rows, list_task_category_options, list_task_type_options, list_task_types_admin,
     list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting,
-    move_planting_to_location, parse_id, recurrence_unit_str, reschedule_task, services,
-    split_planting, test_backend, update_task, update_task_type, AgendaRow as AppAgendaRow, App,
-    AppConfig, AppError, BackendConfig, BedUsagePoint as AppBedUsagePoint,
-    CalendarEntry as AppCalendarEntry, CalendarEntryKind, CalendarEventKind, CropInput,
-    CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates,
-    FamilyOption, Lang, LifespanKind, LocationInput, LocationKindOption, LocationListItem,
-    LocationOption, MigrationReport, ParentLocationOption, PlantingChoice,
-    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
+    move_planting_to_location, parse_id, planting_status_key, recurrence_unit_str, reschedule_task,
+    services, split_planting, test_backend, update_task, update_task_type,
+    AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
+    BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry, CalendarEntryKind,
+    CalendarEventKind, CropInput, CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane,
+    CropRow as AppCropRow, CycleDates, FamilyOption, Lang, LifespanKind, LocationInput,
+    LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
+    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
     PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
     StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
     TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption, VarietyProfileKind,
     VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
-use pomone_domain::{LocationId, PlantingId, PruningSeason, RecurrenceUnit, VarietyId};
+use pomone_domain::{
+    LocationId, PlantingId, PlantingStatus, PruningSeason, RecurrenceUnit, VarietyId,
+};
 use rust_decimal::Decimal;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::path::PathBuf;
@@ -70,6 +72,8 @@ enum PendingDelete {
     /// Task id (the one open in the edit form).
     Task(String),
     TaskType(String),
+    /// Planting id (the one open in the detail page). Issue #63.
+    Planting(String),
 }
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -564,6 +568,7 @@ fn main() -> Result<()> {
                 Some(PendingDelete::Strata(id)) => do_delete_strata(&window, &mut s, &id),
                 Some(PendingDelete::Task(id)) => do_delete_task(&window, &mut s, &id),
                 Some(PendingDelete::TaskType(id)) => do_delete_task_type(&window, &mut s, &id),
+                Some(PendingDelete::Planting(id)) => do_delete_planting(&window, &mut s, &id),
                 None => {}
             }
         });
@@ -871,6 +876,61 @@ fn main() -> Result<()> {
             window.set_current_page(SharedString::from(target));
             window.set_status_text(SharedString::from(""));
             window.set_status_is_error(false);
+        });
+    }
+
+    // --- Detail: change planting life-cycle status (issue #63) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_detail_change_status(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let id = s.detail_planting_id.clone();
+            let status = status_from_index(window.get_detail_status_index());
+            let result: Result<(), AppError> = s.runtime.block_on(async {
+                let pid: PlantingId = parse_id(&id)?;
+                services::set_planting_status(s.app.repo(), pid, status).await
+            });
+            match result {
+                Ok(()) => {
+                    if let Err(e) = refresh_planting_detail(&window, &mut s, &id) {
+                        tracing::error!(error = %e, "refresh detail after status change");
+                    }
+                    window.set_detail_lifecycle_status_text(SharedString::from(
+                        s.app.i18n().t("status-planting-status-updated"),
+                    ));
+                    window.set_detail_lifecycle_status_is_error(false);
+                }
+                Err(e) => {
+                    let msg = localize_app_error(s.app.i18n(), &e);
+                    window.set_detail_lifecycle_status_text(SharedString::from(msg));
+                    window.set_detail_lifecycle_status_is_error(true);
+                }
+            }
+        });
+    }
+
+    // --- Detail: request planting deletion (issue #63) ---
+    // Routed through the shared confirmation dialog; the activity guard lives
+    // in the service, so a planting with history is refused with a localized
+    // message rather than silently wiped.
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_detail_delete_planting(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let id = s.detail_planting_id.clone();
+            s.pending_delete = Some(PendingDelete::Planting(id));
+            window.set_confirm_message(SharedString::from(
+                s.app.i18n().t("confirm-delete-planting"),
+            ));
+            window.set_confirm_visible(true);
         });
     }
 
@@ -1726,6 +1786,24 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_detail_tasks_overdue_badge(SharedString::from(i18n.t("task-badge-overdue")));
     window.set_detail_tasks_done_badge(SharedString::from(i18n.t("task-badge-done")));
 
+    // Life-cycle status & delete (issue #63). The options model is parallel to
+    // `status_from_index` / `status_to_index`: active, completed, failed,
+    // abandoned. The current value/index is set per-planting in refresh.
+    window.set_detail_status_section_text(SharedString::from(i18n.t("section-planting-lifecycle")));
+    window.set_detail_status_field_label(SharedString::from(i18n.t("label-status")));
+    window.set_detail_change_status_text(SharedString::from(i18n.t("button-change-status")));
+    window.set_detail_delete_button_text(SharedString::from(i18n.t("button-delete-planting")));
+    let status_options: Vec<SharedString> = [
+        PlantingStatus::Active,
+        PlantingStatus::Completed,
+        PlantingStatus::Failed,
+        PlantingStatus::Abandoned,
+    ]
+    .into_iter()
+    .map(|st| SharedString::from(i18n.t(planting_status_key(st))))
+    .collect();
+    window.set_detail_status_options(ModelRc::new(VecModel::from(status_options)));
+
     // Yearly-harvest section labels — content rows come from refresh_planting_detail.
     window.set_harvest_section_title(SharedString::from(i18n.t("section-yearly-harvest")));
     window.set_harvest_empty_text(SharedString::from(i18n.t("empty-yearly-harvest")));
@@ -1876,7 +1954,12 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
         .collect();
     window.set_gantt_bars(ModelRc::new(VecModel::from(gantt_bars)));
 
-    let rows: Vec<SlintPlantingRow> = snapshot.plantings.into_iter().map(to_slint_row).collect();
+    let i18n = state.app.i18n();
+    let rows: Vec<SlintPlantingRow> = snapshot
+        .plantings
+        .into_iter()
+        .map(|r| to_slint_row(r, i18n))
+        .collect();
     window.set_plantings(ModelRc::new(VecModel::from(rows)));
 
     // Clamp selected indices to stay valid after a refresh.
@@ -1892,7 +1975,7 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
     Ok(())
 }
 
-fn to_slint_row(row: AppPlantingRow) -> SlintPlantingRow {
+fn to_slint_row(row: AppPlantingRow, i18n: &pomone_app::I18n) -> SlintPlantingRow {
     SlintPlantingRow {
         id: SharedString::from(row.id),
         variety_label: SharedString::from(row.variety_label),
@@ -1900,6 +1983,8 @@ fn to_slint_row(row: AppPlantingRow) -> SlintPlantingRow {
         schedule_summary: SharedString::from(row.schedule_summary),
         area_label: SharedString::from(row.area_label),
         plants_count: usize_to_i32(row.plants_count as usize),
+        status_label: SharedString::from(i18n.t(planting_status_key(row.status))),
+        status_active: row.status == PlantingStatus::Active,
     }
 }
 
@@ -2753,6 +2838,7 @@ fn localize_app_error(i18n: &pomone_app::I18n, err: &AppError) -> String {
             i18n.t_args("error-not-found", &args)
         }
         AppError::MigrationTargetNotEmpty => i18n.t("settings-migrate-target-not-empty"),
+        AppError::PlantingHasActivity => i18n.t("error-planting-has-activity"),
         AppError::Inconsistent(_)
         | AppError::Io(_)
         | AppError::TomlSerialize(_)
@@ -2893,6 +2979,62 @@ fn do_delete_task_type(window: &MainWindow, s: &mut UiState, id: &str) {
             let (text, is_err) = render_task_type_form_error(s.app.i18n(), FormError::Service(e));
             window.set_task_types_status_text(text);
             window.set_task_types_status_is_error(is_err);
+        }
+    }
+}
+
+/// Map the life-cycle status combo index to a [`PlantingStatus`] (issue #63).
+/// Parallel to the `detail-status-options` model built at startup. Out-of-range
+/// indices fall back to `Active`.
+fn status_from_index(index: i32) -> PlantingStatus {
+    match index {
+        1 => PlantingStatus::Completed,
+        2 => PlantingStatus::Failed,
+        3 => PlantingStatus::Abandoned,
+        _ => PlantingStatus::Active,
+    }
+}
+
+/// Inverse of [`status_from_index`].
+fn status_to_index(status: PlantingStatus) -> i32 {
+    match status {
+        PlantingStatus::Active => 0,
+        PlantingStatus::Completed => 1,
+        PlantingStatus::Failed => 2,
+        PlantingStatus::Abandoned => 3,
+    }
+}
+
+/// Execute a confirmed planting deletion (issue #63). The service refuses if
+/// the planting carries real activity, so on success we return to the list and
+/// on the activity guard we surface the localized message in the detail's
+/// life-cycle status line (the planting stays open).
+fn do_delete_planting(window: &MainWindow, s: &mut UiState, id: &str) {
+    let result: Result<(), AppError> = s.runtime.block_on(async {
+        let pid: PlantingId = parse_id(id)?;
+        services::delete_planting(s.app.repo(), pid).await
+    });
+    match result {
+        Ok(()) => {
+            let target = s.detail_previous_page.clone();
+            if target == "tasks" {
+                if let Err(e) = refresh_task_calendar(window, s) {
+                    tracing::error!(error = %e, "refresh calendar after planting delete");
+                }
+            } else if let Err(e) = refresh_plantings(window, s) {
+                tracing::error!(error = %e, "refresh plantings after planting delete");
+            }
+            refresh_bed_usage(window, &s.app, &s.runtime);
+            window.set_current_page(SharedString::from(target));
+            window.set_status_text(SharedString::from(
+                s.app.i18n().t("status-planting-deleted"),
+            ));
+            window.set_status_is_error(false);
+        }
+        Err(e) => {
+            let msg = localize_app_error(s.app.i18n(), &e);
+            window.set_detail_lifecycle_status_text(SharedString::from(msg));
+            window.set_detail_lifecycle_status_is_error(true);
         }
     }
 }
@@ -3111,6 +3253,14 @@ fn refresh_planting_detail(
     window.set_detail_plants_count(usize_to_i32(detail.plants_count as usize));
     window.set_detail_name_value(SharedString::from(detail.name.unwrap_or_default()));
     window.set_detail_notes_value(SharedString::from(detail.notes.unwrap_or_default()));
+    // Life-cycle status (issue #63): the header badge + the selector's current
+    // value. The action message is cleared on each (re)load.
+    window.set_detail_status_label(SharedString::from(
+        i18n.t(planting_status_key(detail.status)),
+    ));
+    window.set_detail_status_index(status_to_index(detail.status));
+    window.set_detail_lifecycle_status_text(SharedString::from(""));
+    window.set_detail_lifecycle_status_is_error(false);
     let task_rows: Vec<SlintPlantingTaskRow> = tasks
         .into_iter()
         .map(|t| SlintPlantingTaskRow {

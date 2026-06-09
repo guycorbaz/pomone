@@ -8,8 +8,8 @@
 use crate::error::{DbError, DbResult};
 use chrono::NaiveDate;
 use pomone_domain::{
-    AnnualProfile, Lifespan, PlantingSchedule, PluriannualProfile, ProductivePattern,
-    PruningSeason, VarietyProfile,
+    AnnualProfile, Lifespan, PlantingSchedule, PlantingStatus, PluriannualProfile,
+    ProductivePattern, PruningSeason, VarietyProfile,
 };
 use rust_decimal::Decimal;
 
@@ -317,6 +317,30 @@ pub(crate) fn decode_planting_schedule(
 }
 
 // ============================================================
+// PlantingStatus
+// ============================================================
+
+/// `PlantingStatus` ↔ DB string, mirroring its `#[serde(rename_all = "snake_case")]`.
+pub(crate) fn encode_planting_status(status: PlantingStatus) -> &'static str {
+    match status {
+        PlantingStatus::Active => "active",
+        PlantingStatus::Completed => "completed",
+        PlantingStatus::Failed => "failed",
+        PlantingStatus::Abandoned => "abandoned",
+    }
+}
+
+pub(crate) fn decode_planting_status(s: &str) -> DbResult<PlantingStatus> {
+    Ok(match s {
+        "active" => PlantingStatus::Active,
+        "completed" => PlantingStatus::Completed,
+        "failed" => PlantingStatus::Failed,
+        "abandoned" => PlantingStatus::Abandoned,
+        other => return Err(DbError::Malformed(format!("planting status={other}"))),
+    })
+}
+
+// ============================================================
 // Decimal <-> TEXT (sqlx-sqlite has no native Decimal support)
 // ============================================================
 
@@ -517,5 +541,26 @@ mod tests {
         )
         .unwrap();
         assert_eq!(back, s);
+    }
+
+    #[test]
+    fn planting_status_roundtrip_all_variants() {
+        for status in [
+            PlantingStatus::Active,
+            PlantingStatus::Completed,
+            PlantingStatus::Failed,
+            PlantingStatus::Abandoned,
+        ] {
+            let s = encode_planting_status(status);
+            assert_eq!(decode_planting_status(s).unwrap(), status);
+        }
+    }
+
+    #[test]
+    fn planting_status_rejects_unknown() {
+        assert!(matches!(
+            decode_planting_status("archived"),
+            Err(DbError::Malformed(_))
+        ));
     }
 }

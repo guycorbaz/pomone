@@ -17,6 +17,10 @@ export struct PlantingRow {
     schedule-summary: string,
     area-label: string,
     plants-count: int,
+    // Life-cycle status (issue #63): localized label + whether it's the
+    // default "active" state (the badge is hidden when active to avoid noise).
+    status-label: string,
+    status-active: bool,
 }
 
 // One row in the list. Clickable: emits `clicked` with the planting id so
@@ -46,6 +50,26 @@ component PlantingRowView inherits Card {
                     font-size: Theme.font-size-h3;
                     font-weight: Theme.font-weight-semibold;
                     horizontal-stretch: 1;
+                }
+                // Status badge — only for terminal states (issue #63).
+                if !entry.status-active: Rectangle {
+                    background: Palette.surface-alt;
+                    border-radius: Theme.radius-sm;
+                    border-width: 1px;
+                    border-color: Palette.border;
+                    HorizontalLayout {
+                        padding-left: Theme.space-sm;
+                        padding-right: Theme.space-sm;
+                        padding-top: 2px;
+                        padding-bottom: 2px;
+                        Text {
+                            text: entry.status-label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            vertical-alignment: center;
+                        }
+                    }
                 }
                 Text {
                     text: entry.location-label;

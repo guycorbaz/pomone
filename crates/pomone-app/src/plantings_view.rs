@@ -8,7 +8,7 @@
 use crate::error::{AppError, AppResult};
 use chrono::NaiveDate;
 use pomone_db::Repository;
-use pomone_domain::{Location, LocationId};
+use pomone_domain::{Location, LocationId, PlantingStatus};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -47,6 +47,22 @@ pub struct PlantingRow {
     pub area_label: String,
     pub plants_count: u32,
     pub cycle_dates: Option<CycleDates>,
+    /// Life-cycle status (issue #63). The UI host turns it into a localized
+    /// badge via [`planting_status_key`].
+    pub status: PlantingStatus,
+}
+
+/// Fluent key for a planting life-cycle status, so the UI host can localize it
+/// (`i18n.t(planting_status_key(status))`). Kept here next to the DTO that
+/// carries the status, mirroring the `label_key` convention of the detail view.
+#[must_use]
+pub fn planting_status_key(status: PlantingStatus) -> &'static str {
+    match status {
+        PlantingStatus::Active => "planting-status-active",
+        PlantingStatus::Completed => "planting-status-completed",
+        PlantingStatus::Failed => "planting-status-failed",
+        PlantingStatus::Abandoned => "planting-status-abandoned",
+    }
 }
 
 /// Raw dates from `PlantingSchedule::Cycle`, surfaced so the UI's Gantt
@@ -206,6 +222,7 @@ pub async fn list_plantings(repo: &dyn Repository) -> AppResult<Vec<PlantingRow>
                 area_label: format_area(p.area_m2),
                 plants_count: p.plants_count,
                 cycle_dates,
+                status: p.status,
             }
         })
         .collect();

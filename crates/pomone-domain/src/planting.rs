@@ -141,6 +141,27 @@ impl PlantingSchedule {
     }
 }
 
+/// Where a planting stands in its life cycle.
+///
+/// A planting always starts `Active`. The three terminal states record *why* a
+/// planting ended so the history stays meaningful for yield/cost analysis: a
+/// normal end of cycle (`Completed`), a loss (`Failed`, e.g. disease or
+/// weather), or a deliberate early stop (`Abandoned`). Terminal plantings are
+/// kept, not deleted (see issue #63).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlantingStatus {
+    /// Still growing / in production. The default for any new planting.
+    #[default]
+    Active,
+    /// Cycle finished normally.
+    Completed,
+    /// Lost before producing as expected (disease, weather, pest…).
+    Failed,
+    /// Stopped on purpose before its natural end.
+    Abandoned,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Planting {
     pub id: PlantingId,
@@ -149,6 +170,7 @@ pub struct Planting {
     pub area_m2: Decimal,
     pub plants_count: u32,
     pub schedule: PlantingSchedule,
+    pub status: PlantingStatus,
     pub name: Option<String>,
     pub notes: Option<String>,
 }
@@ -183,6 +205,7 @@ impl Planting {
             area_m2: require_positive_area(area_m2)?,
             plants_count: require_positive_count(plants_count)?,
             schedule,
+            status: PlantingStatus::default(),
             name,
             notes: normalize_optional(notes),
         })

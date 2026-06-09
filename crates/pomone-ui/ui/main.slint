@@ -245,6 +245,19 @@ export component MainWindow inherits Window {
     in property <[DetailLine]> detail-schedule-lines;
     callback detail-go-back();
 
+    // Life-cycle status & delete (issue #63)
+    in property <string> detail-status-label;
+    in property <string> detail-status-section-text;
+    in property <string> detail-status-field-label;
+    in property <[string]> detail-status-options;
+    in-out property <int> detail-status-index;
+    in property <string> detail-change-status-text;
+    in property <string> detail-delete-button-text;
+    in property <string> detail-lifecycle-status-text;
+    in property <bool> detail-lifecycle-status-is-error: false;
+    callback detail-change-status();
+    callback detail-delete-planting();
+
     // ------- Tasks attached to the planting (detail page) -------
     in property <string> detail-tasks-section-text;
     in property <string> detail-tasks-empty-text;
@@ -849,6 +862,17 @@ export component MainWindow inherits Window {
                 tasks-done-badge: detail-tasks-done-badge;
                 task-rows: detail-task-rows;
                 task-clicked(id) => { detail-task-clicked(id); }
+                status-label: detail-status-label;
+                status-section-text: detail-status-section-text;
+                status-field-label: detail-status-field-label;
+                status-options: detail-status-options;
+                status-index <=> detail-status-index;
+                change-status-text: detail-change-status-text;
+                delete-button-text: detail-delete-button-text;
+                lifecycle-status-text: detail-lifecycle-status-text;
+                lifecycle-status-is-error: detail-lifecycle-status-is-error;
+                change-status => { detail-change-status(); }
+                delete-planting => { detail-delete-planting(); }
                 is-perennial: detail-is-perennial;
                 harvest-section-title: harvest-section-title;
                 harvest-empty-text: harvest-empty-text;

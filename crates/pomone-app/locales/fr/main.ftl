@@ -233,6 +233,12 @@ strata = Strate
 variety = Variété
 yearly-harvest = Récolte annuelle
 
+## Planting life-cycle status (issue #63)
+planting-status-active = En cours
+planting-status-completed = Terminée
+planting-status-failed = Échouée
+planting-status-abandoned = Abandonnée
+
 ## Errors
 error-config = Erreur de configuration : { $message }
 error-database = Erreur de base de données
@@ -272,6 +278,15 @@ confirm-cancel = Annuler
 confirm-delete-strata = Supprimer cette strate ? Cette action est irréversible.
 confirm-delete-task = Supprimer cette tâche ? Cette action est irréversible.
 confirm-delete-task-type = Supprimer ce type de tâche ? Cette action est irréversible.
+confirm-delete-planting = Supprimer cette plantation ? Cette action est irréversible. Elle n'est possible que si aucune activité n'a été enregistrée.
+
+## Planting life cycle (issue #63)
+section-planting-lifecycle = Cycle de vie
+label-status = Statut
+button-change-status = Changer le statut
+button-delete-planting = Supprimer la plantation
+status-planting-status-updated = Statut mis à jour
+status-planting-deleted = Plantation supprimée
 agenda-overdue-title = En retard
 agenda-today-title = Aujourd'hui
 
@@ -381,6 +396,7 @@ crop-map-split-confirm = Diviser
 crop-map-split-cancel = Annuler
 error-no-planting-selected = Aucune plantation sélectionnée.
 error-location-required = Le lieu de destination est requis.
+error-planting-has-activity = Cette plantation a une activité enregistrée (tâches faites ou heures saisies) ; elle ne peut pas être supprimée. Marquez-la plutôt comme terminée, échouée ou abandonnée.
 
 ## Bed-usage curve (home)
 bed-usage-legend-open = Plein champ
