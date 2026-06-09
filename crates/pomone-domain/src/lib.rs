@@ -47,7 +47,7 @@ pub use ids::{
 };
 pub use location::Location;
 pub use location_kind::LocationKind;
-pub use planting::{Planting, PlantingSchedule};
+pub use planting::{Planting, PlantingSchedule, PlantingStatus};
 pub use strata::Strata;
 pub use task::Task;
 pub use task_series::{RecurrenceRule, RecurrenceUnit, TaskSeries};

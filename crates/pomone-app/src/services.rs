@@ -7,8 +7,8 @@ use crate::error::{AppError, AppResult};
 use chrono::NaiveDate;
 use pomone_db::Repository;
 use pomone_domain::{
-    date_calc, LocationId, Planting, PlantingId, PlantingSchedule, VarietyId, VarietyProfile,
-    YearlyHarvest,
+    date_calc, LocationId, Planting, PlantingId, PlantingSchedule, PlantingStatus, VarietyId,
+    VarietyProfile, YearlyHarvest,
 };
 use rust_decimal::Decimal;
 
@@ -159,6 +159,66 @@ pub async fn validate_planting_consistency(
         })?;
     planting.schedule.check_compatible(crop.lifespan)?;
     variety.profile.check_compatible(crop.lifespan)?;
+    Ok(())
+}
+
+/// Whether a planting carries *real* activity — a completed task or logged
+/// labor hours. Future, not-yet-done auto-generated tasks (sow / transplant /
+/// harvest reminders) don't count: they hold no history worth keeping.
+///
+/// This is the gate for [`delete_planting`]: a planting with activity is kept
+/// (and marked terminal instead), while a freshly-created mistake can still be
+/// removed cleanly.
+pub async fn planting_has_activity(
+    repo: &dyn Repository,
+    planting_id: PlantingId,
+) -> AppResult<bool> {
+    let tasks = repo.task_list_for_planting(planting_id).await?;
+    Ok(tasks
+        .iter()
+        .any(|t| t.completed_on.is_some() || t.labor_hours.is_some_and(|h| h > Decimal::ZERO)))
+}
+
+/// Delete a planting, but only if it has no recorded activity.
+///
+/// Deleting a planting cascades to its tasks and task series (FK
+/// `ON DELETE CASCADE`). That is harmless for a planting that was just created
+/// by mistake — only future reminders disappear — but it would silently wipe
+/// real history. So we refuse with [`AppError::PlantingHasActivity`] whenever
+/// [`planting_has_activity`] is true; the caller should set a terminal status
+/// via [`set_planting_status`] instead (issue #63).
+pub async fn delete_planting(repo: &dyn Repository, planting_id: PlantingId) -> AppResult<()> {
+    // Surface a clear NotFound rather than a silent no-op if the id is stale.
+    if repo.planting_get(planting_id).await?.is_none() {
+        return Err(AppError::NotFound {
+            kind: "planting",
+            id: planting_id.to_string(),
+        });
+    }
+    if planting_has_activity(repo, planting_id).await? {
+        return Err(AppError::PlantingHasActivity);
+    }
+    repo.planting_delete(planting_id).await?;
+    Ok(())
+}
+
+/// Set a planting's life-cycle status (Active / Completed / Failed /
+/// Abandoned). This is the non-destructive alternative to deletion for a
+/// planting that has already happened (issue #63).
+pub async fn set_planting_status(
+    repo: &dyn Repository,
+    planting_id: PlantingId,
+    status: PlantingStatus,
+) -> AppResult<()> {
+    let mut planting = repo
+        .planting_get(planting_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound {
+            kind: "planting",
+            id: planting_id.to_string(),
+        })?;
+    planting.status = status;
+    repo.planting_update(&planting).await?;
     Ok(())
 }
 
@@ -572,5 +632,123 @@ mod tests {
         assert!(repo.planting_get(p.id).await.unwrap().is_some());
         // No tasks created.
         assert!(repo.task_list_for_planting(p.id).await.unwrap().is_empty());
+    }
+
+    // ----- Life-cycle status & protected delete (issue #63) --------------
+
+    #[tokio::test]
+    async fn delete_planting_succeeds_without_activity() {
+        let (repo, vid, lid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting_from_sowing(
+            &repo,
+            vid,
+            lid,
+            d(2026, 3, 1),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        // Auto-generated tasks exist but none is completed → no real activity.
+        assert!(!repo.task_list_for_planting(p.id).await.unwrap().is_empty());
+        assert!(!planting_has_activity(&repo, p.id).await.unwrap());
+        delete_planting(&repo, p.id).await.unwrap();
+        assert!(repo.planting_get(p.id).await.unwrap().is_none());
+        // The future reminders cascaded away with it.
+        assert!(repo.task_list_for_planting(p.id).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn delete_planting_refused_when_a_task_is_completed() {
+        let (repo, vid, lid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting_from_sowing(
+            &repo,
+            vid,
+            lid,
+            d(2026, 3, 1),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let task = repo.task_list_for_planting(p.id).await.unwrap().remove(0);
+        repo.task_update(&task.mark_completed(d(2026, 3, 2)))
+            .await
+            .unwrap();
+        assert!(planting_has_activity(&repo, p.id).await.unwrap());
+        let err = delete_planting(&repo, p.id).await.unwrap_err();
+        assert!(matches!(err, AppError::PlantingHasActivity));
+        // Still there — history preserved.
+        assert!(repo.planting_get(p.id).await.unwrap().is_some());
+    }
+
+    #[tokio::test]
+    async fn delete_planting_refused_when_labor_hours_logged() {
+        let (repo, vid, lid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting_from_sowing(
+            &repo,
+            vid,
+            lid,
+            d(2026, 3, 1),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let mut task = repo.task_list_for_planting(p.id).await.unwrap().remove(0);
+        task.labor_hours = Some(dec!(1.5));
+        repo.task_update(&task).await.unwrap();
+        assert!(planting_has_activity(&repo, p.id).await.unwrap());
+        assert!(matches!(
+            delete_planting(&repo, p.id).await.unwrap_err(),
+            AppError::PlantingHasActivity
+        ));
+    }
+
+    #[tokio::test]
+    async fn delete_planting_unknown_id_is_not_found() {
+        let (repo, _, _) = setup_annual().await;
+        let err = delete_planting(&repo, PlantingId::new()).await.unwrap_err();
+        assert!(matches!(
+            err,
+            AppError::NotFound {
+                kind: "planting",
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn set_planting_status_persists() {
+        let (repo, vid, lid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting_from_sowing(
+            &repo,
+            vid,
+            lid,
+            d(2026, 3, 1),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        // Fresh plantings start Active.
+        assert_eq!(p.status, PlantingStatus::Active);
+        set_planting_status(&repo, p.id, PlantingStatus::Failed)
+            .await
+            .unwrap();
+        let got = repo.planting_get(p.id).await.unwrap().unwrap();
+        assert_eq!(got.status, PlantingStatus::Failed);
     }
 }
