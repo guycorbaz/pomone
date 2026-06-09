@@ -19,6 +19,7 @@ export struct CropRow {
     pruning-label: string,
     variety-count: int,
     is-annual: bool,
+    in-use: bool,
 }
 
 export struct VarietyRow {
@@ -32,7 +33,12 @@ export struct VarietyRow {
 component CropRowView inherits Rectangle {
     in property <CropRow> entry;
     in property <bool> selected;
+    in property <string> edit-text;
+    in property <string> delete-text;
+    in property <string> in-use-text;
     callback clicked();
+    callback edit(string);
+    callback delete(string);
 
     height: 84px;
     background: selected ? Palette.surface-alt
@@ -67,13 +73,34 @@ component CropRowView inherits Rectangle {
                     font-weight: Theme.font-weight-semibold;
                     vertical-alignment: center;
                 }
+                SecondaryButton {
+                    text: edit-text;
+                    clicked => { edit(entry.id); }
+                }
+                SecondaryButton {
+                    text: delete-text;
+                    // Deletion is blocked while a variety of this crop is
+                    // planted (FK); show why and disable the control.
+                    enabled: !entry.in-use;
+                    clicked => { delete(entry.id); }
+                }
             }
-            Text {
-                text: entry.family-label
-                      + " · " + entry.lifespan-label + " · " + entry.pruning-label;
-                color: Palette.text-muted;
-                font-size: Theme.font-size-label;
-                wrap: word-wrap;
+            HorizontalLayout {
+                spacing: Theme.space-md;
+                Text {
+                    text: entry.family-label
+                          + " · " + entry.lifespan-label + " · " + entry.pruning-label;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-label;
+                    wrap: word-wrap;
+                    horizontal-stretch: 1;
+                }
+                if entry.in-use: Text {
+                    text: in-use-text;
+                    color: Palette.text-secondary;
+                    font-size: Theme.font-size-label;
+                    vertical-alignment: center;
+                }
             }
         }
     }
@@ -148,6 +175,20 @@ export component CulturesPage inherits Rectangle {
     in property <string> create-crop-button-text;
     callback create-crop();
 
+    // Crop edit / delete
+    in property <string> crop-edit-text;
+    in property <string> crop-delete-text;
+    in property <string> crop-in-use-text;
+    in property <string> crop-form-section-edit;
+    in property <string> crop-cancel-text;
+    in property <string> crop-save-text;
+    // True while the crop form edits an existing crop (set by Rust). Drives the
+    // form title, the submit button label, and the Cancel button.
+    in property <bool> crop-is-edit-mode: false;
+    callback edit-crop(string);
+    callback delete-crop(string);
+    callback cancel-crop-edit();
+
     // Varieties side
     in property <string> varieties-title;
     in property <string> empty-varieties-text;
@@ -155,6 +196,7 @@ export component CulturesPage inherits Rectangle {
     in property <[VarietyRow]> varieties;
 
     in property <string> new-variety-section;
+    in property <string> new-variety-section-pluriannual;
     in property <string> label-variety-name;
     in property <string> placeholder-variety-name;
     in property <string> label-variety-description;
@@ -247,14 +289,19 @@ export component CulturesPage inherits Rectangle {
                             for crop[idx] in crops: CropRowView {
                                 entry: crop;
                                 selected: idx == selected-crop-index;
+                                edit-text: crop-edit-text;
+                                delete-text: crop-delete-text;
+                                in-use-text: crop-in-use-text;
                                 width: crop-list.width;
                                 clicked => { select-crop(idx); }
+                                edit(id) => { edit-crop(id); }
+                                delete(id) => { delete-crop(id); }
                             }
                         }
                     }
 
                     Rectangle { height: Theme.space-xs; background: Palette.border; }
-                    SectionHeader { text: new-crop-section; }
+                    SectionHeader { text: crop-is-edit-mode ? crop-form-section-edit : new-crop-section; }
 
                     VerticalLayout {
                         spacing: Theme.space-xs;
@@ -362,10 +409,17 @@ export component CulturesPage inherits Rectangle {
                             }
                         }
                     }
-                    PrimaryButton {
-                        text: create-crop-button-text;
-                        enabled: family-labels.length > 0;
-                        clicked => { create-crop(); }
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        PrimaryButton {
+                            text: crop-is-edit-mode ? crop-save-text : create-crop-button-text;
+                            enabled: family-labels.length > 0;
+                            clicked => { create-crop(); }
+                        }
+                        if crop-is-edit-mode: SecondaryButton {
+                            text: crop-cancel-text;
+                            clicked => { cancel-crop-edit(); }
+                        }
                     }
                 }
             }
@@ -413,7 +467,7 @@ export component CulturesPage inherits Rectangle {
                     }
 
                     Rectangle { height: Theme.space-xs; background: Palette.border; }
-                    SectionHeader { text: new-variety-section; }
+                    SectionHeader { text: selected-crop-is-annual ? new-variety-section : new-variety-section-pluriannual; }
 
                     VerticalLayout {
                         spacing: Theme.space-xs;

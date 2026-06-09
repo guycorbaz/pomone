@@ -14,23 +14,24 @@ use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use fluent::FluentArgs;
 use pomone_app::{
     bed_usage_series, create_crop, create_location, create_recurring_task, create_strata,
-    create_task, create_task_type, create_variety, delete_strata, delete_task, delete_task_type,
-    extend_series_if_needed, get_planting_detail, get_task_for_edit, get_task_type_for_edit,
-    list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops, list_family_options,
-    list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
-    list_planting_choices, list_planting_tasks, list_plantings, list_strata_options,
-    list_strata_rows, list_task_category_options, list_task_type_options, list_task_types_admin,
+    create_task, create_task_type, create_variety, delete_crop, delete_strata, delete_task,
+    delete_task_type, extend_series_if_needed, get_crop_for_edit, get_planting_detail,
+    get_task_for_edit, get_task_type_for_edit, list_agenda, list_calendar_entries,
+    list_crop_map_lanes, list_crops, list_family_options, list_location_kind_options,
+    list_location_options, list_locations_tree, list_parent_options, list_planting_choices,
+    list_planting_tasks, list_plantings, list_strata_options, list_strata_rows,
+    list_task_category_options, list_task_type_options, list_task_types_admin,
     list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting,
     move_planting_to_location, parse_id, planting_status_key, recurrence_unit_str, reschedule_task,
-    services, split_planting, test_backend, update_task, update_task_type,
+    services, split_planting, test_backend, update_crop, update_task, update_task_type,
     AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
     BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry, CalendarEntryKind,
-    CalendarEventKind, CropInput, CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane,
-    CropRow as AppCropRow, CycleDates, FamilyOption, Lang, LifespanKind, LocationInput,
-    LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
-    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
-    PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
-    StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
+    CalendarEventKind, CropEditForm, CropInput, CropMapBar as AppCropMapBar,
+    CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyOption, Lang,
+    LifespanKind, LocationInput, LocationKindOption, LocationListItem, LocationOption,
+    MigrationReport, ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
+    PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput,
+    StrataOption, StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
     TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption, VarietyProfileKind,
     VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
@@ -74,6 +75,8 @@ enum PendingDelete {
     TaskType(String),
     /// Planting id (the one open in the detail page). Issue #63.
     Planting(String),
+    /// Crop id (a row in the Cultures catalog).
+    Crop(String),
 }
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -139,6 +142,9 @@ struct UiState {
     /// Stringified `TaskTypeId` currently being edited in the catalog
     /// form; empty in create mode.
     editing_task_type_id: String,
+    /// Stringified `CropId` currently edited in the Cultures crop form; empty
+    /// in create mode.
+    editing_crop_id: String,
     /// Active categories on the Task Calendar's per-category filter row.
     /// Stored as stable string keys (`"sow"`, `"transplant"`, …) so the
     /// UI doesn't depend on the enum variant order. When this set holds
@@ -245,6 +251,7 @@ fn main() -> Result<()> {
         task_type_admin_ids: Vec::new(),
         task_type_category_keys: Vec::new(),
         editing_task_type_id: String::new(),
+        editing_crop_id: String::new(),
         task_filter_categories: all_category_keys().into_iter().collect(),
         show_milestones: true,
         task_form_recurrence_unit_keys: Vec::new(),
@@ -426,15 +433,20 @@ fn main() -> Result<()> {
                 return;
             };
             let mut s = state.borrow_mut();
-            match try_create_crop(&window, &mut s) {
+            let was_edit = window.get_crop_is_edit_mode();
+            match try_save_crop(&window, &mut s) {
                 Ok(()) => {
-                    let i18n = s.app.i18n();
-                    window.set_status_text(SharedString::from(i18n.t("status-crop-created")));
+                    let key = if was_edit {
+                        "status-crop-updated"
+                    } else {
+                        "status-crop-created"
+                    };
+                    window.set_status_text(SharedString::from(s.app.i18n().t(key)));
                     window.set_status_is_error(false);
-                    window.set_new_crop_name(SharedString::from(""));
-                    window.set_new_crop_latin(SharedString::from(""));
+                    // Back to a clean create form (also clears edit mode).
+                    reset_crop_form_to_create(&window, &mut s);
                     if let Err(e) = refresh_cultures(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh cultures after create");
+                        tracing::error!(error = %e, "failed to refresh cultures after save");
                     }
                 }
                 Err(e) => {
@@ -443,6 +455,44 @@ fn main() -> Result<()> {
                     window.set_status_is_error(is_err);
                 }
             }
+        });
+    }
+
+    // --- Edit / delete / cancel-edit a crop (Cultures screen) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_edit_crop(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            if let Err(e) = open_crop_form_for_edit(&window, &mut s, &id) {
+                tracing::error!(error = %e, "failed to open crop edit form");
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_delete_crop(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            s.pending_delete = Some(PendingDelete::Crop(id.to_string()));
+            window.set_confirm_message(SharedString::from(s.app.i18n().t("confirm-delete-crop")));
+            window.set_confirm_visible(true);
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_cancel_crop_edit(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            reset_crop_form_to_create(&window, &mut state.borrow_mut());
         });
     }
 
@@ -570,6 +620,7 @@ fn main() -> Result<()> {
                 Some(PendingDelete::Task(id)) => do_delete_task(&window, &mut s, &id),
                 Some(PendingDelete::TaskType(id)) => do_delete_task_type(&window, &mut s, &id),
                 Some(PendingDelete::Planting(id)) => do_delete_planting(&window, &mut s, &id),
+                Some(PendingDelete::Crop(id)) => do_delete_crop(&window, &mut s, &id),
                 None => {}
             }
         });
@@ -1710,6 +1761,9 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_no_crop_selected_text(SharedString::from(i18n.t("no-crop-selected")));
     window.set_new_crop_section(SharedString::from(i18n.t("new-crop-section")));
     window.set_new_variety_section(SharedString::from(i18n.t("new-variety-section")));
+    window.set_new_variety_section_pluriannual(SharedString::from(
+        i18n.t("new-variety-section-pluriannual"),
+    ));
     window.set_label_crop_name(SharedString::from(i18n.t("label-crop-name")));
     window.set_placeholder_crop_name(SharedString::from(i18n.t("placeholder-crop-name")));
     window.set_label_crop_latin(SharedString::from(i18n.t("label-crop-latin")));
@@ -1771,6 +1825,12 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_placeholder_dtm(SharedString::from(i18n.t("placeholder-dtm")));
     window.set_placeholder_window(SharedString::from(i18n.t("placeholder-window")));
     window.set_create_crop_button_text(SharedString::from(i18n.t("button-create-crop")));
+    window.set_crop_edit_text(SharedString::from(i18n.t("button-edit")));
+    window.set_crop_delete_text(SharedString::from(i18n.t("button-delete")));
+    window.set_crop_in_use_text(SharedString::from(i18n.t("crop-in-use")));
+    window.set_crop_form_section_edit(SharedString::from(i18n.t("crop-form-section-edit")));
+    window.set_crop_cancel_text(SharedString::from(i18n.t("button-cancel-crop-edit")));
+    window.set_crop_save_text(SharedString::from(i18n.t("button-save-crop")));
     window.set_create_variety_button_text(SharedString::from(i18n.t("button-create-variety")));
 
     // Planting detail page — static labels only; per-planting data is
@@ -2222,6 +2282,7 @@ fn crop_to_slint(row: AppCropRow) -> SlintCropRow {
         pruning_label: SharedString::from(row.pruning_label),
         variety_count: usize_to_i32(row.variety_count as usize),
         is_annual: row.is_annual,
+        in_use: row.in_use,
     }
 }
 
@@ -2257,7 +2318,9 @@ fn pruning_from_index(idx: i32) -> Result<PruningSeason, AppError> {
     }
 }
 
-fn try_create_crop(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+/// Build the `CropInput` from the crop form, then create or update depending
+/// on the form's edit mode (the crop being edited is `state.editing_crop_id`).
+fn try_save_crop(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
     let i18n = state.app.i18n();
     let family_idx = i32_to_usize(window.get_family_index());
     let family_id_str = state
@@ -2292,25 +2355,111 @@ fn try_create_crop(window: &MainWindow, state: &mut UiState) -> Result<(), FormE
         ),
     };
 
+    let input = CropInput {
+        family_id_str,
+        name,
+        latin_name,
+        lifespan_kind,
+        lifespan_years,
+        years_to_first_yield,
+        pruning_season,
+    };
+    let editing_id = state.editing_crop_id.clone();
     state
         .runtime
         .block_on(async {
-            create_crop(
-                state.app.repo(),
-                CropInput {
-                    family_id_str,
-                    name,
-                    latin_name,
-                    lifespan_kind,
-                    lifespan_years,
-                    years_to_first_yield,
-                    pruning_season,
-                },
-            )
-            .await
-            .map(|_| ())
+            if editing_id.is_empty() {
+                create_crop(state.app.repo(), input).await.map(|_| ())
+            } else {
+                update_crop(state.app.repo(), &editing_id, input).await
+            }
         })
         .map_err(FormError::Service)
+}
+
+/// Clear the crop form and drop back to create mode.
+fn reset_crop_form_to_create(window: &MainWindow, state: &mut UiState) {
+    state.editing_crop_id.clear();
+    window.set_crop_is_edit_mode(false);
+    window.set_new_crop_name(SharedString::from(""));
+    window.set_new_crop_latin(SharedString::from(""));
+    window.set_new_crop_lifespan_index(0);
+    window.set_new_crop_pruning_index(0);
+    window.set_new_crop_lifespan_years(SharedString::from("30"));
+    window.set_new_crop_years_to_first_yield(SharedString::from("3"));
+}
+
+/// Load one crop into the crop form and switch it to edit mode.
+fn open_crop_form_for_edit(window: &MainWindow, state: &mut UiState, id: &str) -> Result<()> {
+    let form: CropEditForm = state
+        .runtime
+        .block_on(async { get_crop_for_edit(state.app.repo(), id).await })
+        .context("failed to load crop for edit")?;
+
+    let family_idx = state
+        .family_ids
+        .iter()
+        .position(|f| f == &form.family_id_str)
+        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
+    let lifespan_idx = match form.lifespan_kind {
+        LifespanKind::Annual => 0,
+        LifespanKind::PluriannualSingleCycle => 1,
+        LifespanKind::PluriannualRecurring => 2,
+    };
+    let pruning_idx = match form.pruning_season {
+        PruningSeason::None => 0,
+        PruningSeason::Winter => 1,
+        PruningSeason::Summer => 2,
+        PruningSeason::Both => 3,
+    };
+
+    state.editing_crop_id.clone_from(&form.id);
+    window.set_crop_is_edit_mode(true);
+    window.set_family_index(family_idx);
+    window.set_new_crop_name(SharedString::from(form.name));
+    window.set_new_crop_latin(SharedString::from(form.latin_name));
+    window.set_new_crop_lifespan_index(lifespan_idx);
+    window.set_new_crop_pruning_index(pruning_idx);
+    window.set_new_crop_lifespan_years(SharedString::from(form.lifespan_years.to_string()));
+    window.set_new_crop_years_to_first_yield(SharedString::from(
+        form.years_to_first_yield.to_string(),
+    ));
+    window.set_status_text(SharedString::from(""));
+    window.set_status_is_error(false);
+    Ok(())
+}
+
+/// Execute a confirmed crop deletion (issue #86 follow-up). On the FK guard
+/// (`crop_in_use`) we show a localized message; otherwise we refresh and, if we
+/// were editing the deleted crop, drop back to create mode.
+fn do_delete_crop(window: &MainWindow, s: &mut UiState, id: &str) {
+    let result: Result<(), AppError> = s
+        .runtime
+        .block_on(async { delete_crop(s.app.repo(), id).await });
+    match result {
+        Ok(()) => {
+            window.set_status_text(SharedString::from(s.app.i18n().t("status-crop-deleted")));
+            window.set_status_is_error(false);
+            if s.editing_crop_id == id {
+                reset_crop_form_to_create(window, s);
+            }
+            if window.get_selected_crop_index() >= 0 {
+                window.set_selected_crop_index(-1);
+            }
+            if let Err(e) = refresh_cultures(window, s) {
+                tracing::error!(error = %e, "failed to refresh cultures after crop delete");
+            }
+        }
+        Err(AppError::Inconsistent(ref msg)) if msg == "crop_in_use" => {
+            window.set_status_text(SharedString::from(s.app.i18n().t("error-crop-in-use")));
+            window.set_status_is_error(true);
+        }
+        Err(e) => {
+            let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
+            window.set_status_text(text);
+            window.set_status_is_error(is_err);
+        }
+    }
 }
 
 fn try_create_variety(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {

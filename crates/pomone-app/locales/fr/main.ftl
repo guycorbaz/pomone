@@ -41,6 +41,7 @@ empty-varieties = Aucune variété pour cette culture.
 no-crop-selected = Sélectionnez une culture pour voir et créer ses variétés.
 new-crop-section = Nouvelle culture annuelle
 new-variety-section = Nouvelle variété annuelle
+new-variety-section-pluriannual = Nouvelle variété pluriannuelle
 label-crop-name = Nom
 placeholder-crop-name = Tomate
 label-crop-latin = Nom latin (optionnel)
@@ -84,6 +85,15 @@ button-create-crop = Créer la culture
 button-create-variety = Créer la variété
 status-crop-created = Culture créée
 status-variety-created = Variété créée
+status-crop-updated = Culture mise à jour
+status-crop-deleted = Culture supprimée
+button-edit = Modifier
+button-save-crop = Enregistrer
+button-cancel-crop-edit = Annuler
+crop-form-section-edit = Modifier la culture
+crop-in-use = Utilisée
+confirm-delete-crop = Supprimer cette culture ? Ses variétés seront aussi supprimées. Impossible si une variété est déjà plantée.
+error-crop-in-use = Cette culture a une variété déjà plantée ; supprimez d'abord ces plantations.
 
 ## Planting detail screen
 title-planting-detail = Détail de la plantation

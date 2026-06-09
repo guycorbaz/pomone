@@ -7,11 +7,11 @@
 use crate::error::{AppError, AppResult};
 use pomone_db::Repository;
 use pomone_domain::{
-    AnnualProfile, Crop, FamilyId, Lifespan, PluriannualProfile, PruningSeason, Variety,
-    VarietyProfile,
+    AnnualProfile, Crop, CropId, FamilyId, Lifespan, PluriannualProfile, ProductivePattern,
+    PruningSeason, Variety, VarietyProfile,
 };
 use rust_decimal::Decimal;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// What kind of lifespan the UI selected for a new crop. Maps directly to
 /// the three concrete `pomone_domain::Lifespan` constructors.
@@ -45,6 +45,9 @@ pub struct CropRow {
     pub pruning_label: String,
     pub variety_count: u32,
     pub is_annual: bool,
+    /// True when at least one of the crop's varieties is used by a planting —
+    /// the UI disables Delete (deletion would be blocked by the planting FK).
+    pub in_use: bool,
 }
 
 /// One row of the Varieties list (always shown filtered by a parent crop).
@@ -79,12 +82,20 @@ pub async fn list_crops(repo: &dyn Repository) -> AppResult<Vec<CropRow>> {
 
     let families = repo.family_list().await?;
     let varieties = repo.variety_list().await?;
+    let plantings = repo.planting_list().await?;
 
     let family_by_id: HashMap<_, _> = families.iter().map(|f| (f.id, f)).collect();
+    let crop_of_variety: HashMap<_, _> = varieties.iter().map(|v| (v.id, v.crop_id)).collect();
     let mut variety_count: HashMap<_, u32> = HashMap::new();
     for v in &varieties {
         *variety_count.entry(v.crop_id).or_insert(0) += 1;
     }
+    // Crops with at least one planting (through their varieties): deleting them
+    // would be blocked by the planting → variety → crop foreign keys.
+    let crops_in_use: HashSet<_> = plantings
+        .iter()
+        .filter_map(|p| crop_of_variety.get(&p.variety_id).copied())
+        .collect();
 
     let rows = crops
         .into_iter()
@@ -97,6 +108,7 @@ pub async fn list_crops(repo: &dyn Repository) -> AppResult<Vec<CropRow>> {
             pruning_label: pruning_label(c.pruning_season),
             variety_count: *variety_count.get(&c.id).unwrap_or(&0),
             is_annual: c.lifespan.is_annual(),
+            in_use: crops_in_use.contains(&c.id),
             name: c.name,
         })
         .collect();
@@ -186,6 +198,107 @@ pub async fn create_crop(repo: &dyn Repository, input: CropInput) -> AppResult<C
     )?;
     repo.crop_create(&crop).await?;
     Ok(crop)
+}
+
+/// Flattened crop fields for prefilling the edit form. `latin_name` is empty
+/// when unset; the lifespan is split back into the UI's kind + the two year
+/// fields so the same form can edit it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CropEditForm {
+    pub id: String,
+    pub family_id_str: String,
+    pub name: String,
+    pub latin_name: String,
+    pub lifespan_kind: LifespanKind,
+    pub lifespan_years: u8,
+    pub years_to_first_yield: u8,
+    pub pruning_season: PruningSeason,
+}
+
+/// Load one crop and flatten it for the edit form. `NotFound` if the id is
+/// unknown (the UI should only pass ids it just listed).
+pub async fn get_crop_for_edit(repo: &dyn Repository, id_str: &str) -> AppResult<CropEditForm> {
+    let id: CropId = crate::plantings_view::parse_id(id_str)?;
+    let crop = repo.crop_get(id).await?.ok_or_else(|| AppError::NotFound {
+        kind: "crop",
+        id: id_str.to_owned(),
+    })?;
+    let (lifespan_kind, lifespan_years, years_to_first_yield) = match crop.lifespan {
+        Lifespan::Annual => (LifespanKind::Annual, 0, 0),
+        Lifespan::Pluriannual {
+            pattern: ProductivePattern::SingleCycle,
+            lifespan_years,
+        } => (LifespanKind::PluriannualSingleCycle, lifespan_years, 0),
+        Lifespan::Pluriannual {
+            pattern:
+                ProductivePattern::Recurring {
+                    years_to_first_yield,
+                },
+            lifespan_years,
+        } => (
+            LifespanKind::PluriannualRecurring,
+            lifespan_years,
+            years_to_first_yield,
+        ),
+    };
+    Ok(CropEditForm {
+        id: crop.id.to_string(),
+        family_id_str: crop.family_id.to_string(),
+        name: crop.name,
+        latin_name: crop.latin_name.unwrap_or_default(),
+        lifespan_kind,
+        lifespan_years,
+        years_to_first_yield,
+        pruning_season: crop.pruning_season,
+    })
+}
+
+/// Update an existing crop from the same `CropInput` the create form produces.
+/// Reuses `Crop::new` for field validation, then keeps the original id.
+pub async fn update_crop(repo: &dyn Repository, id_str: &str, input: CropInput) -> AppResult<()> {
+    let id: CropId = crate::plantings_view::parse_id(id_str)?;
+    // Confirm it exists for a clean NotFound rather than a silent no-op update.
+    if repo.crop_get(id).await?.is_none() {
+        return Err(AppError::NotFound {
+            kind: "crop",
+            id: id_str.to_owned(),
+        });
+    }
+    let family_id: FamilyId = crate::plantings_view::parse_id(&input.family_id_str)?;
+    let lifespan = match input.lifespan_kind {
+        LifespanKind::Annual => Lifespan::Annual,
+        LifespanKind::PluriannualSingleCycle => {
+            Lifespan::pluriannual_single_cycle(input.lifespan_years)?
+        }
+        LifespanKind::PluriannualRecurring => {
+            Lifespan::perennial(input.lifespan_years, input.years_to_first_yield)?
+        }
+    };
+    let mut crop = Crop::new(
+        family_id,
+        input.name,
+        input.latin_name,
+        lifespan,
+        input.pruning_season,
+    )?;
+    crop.id = id;
+    repo.crop_update(&crop).await?;
+    Ok(())
+}
+
+/// Delete a crop. Its varieties cascade away with it; but if any variety is
+/// referenced by a planting the FK blocks the cascade — surfaced as a
+/// dedicated `Inconsistent("crop_in_use")` sentinel the UI re-keys to a
+/// localized message (same convention as task-type deletion).
+pub async fn delete_crop(repo: &dyn Repository, id_str: &str) -> AppResult<()> {
+    let id: CropId = crate::plantings_view::parse_id(id_str)?;
+    match repo.crop_delete(id).await {
+        Ok(()) => Ok(()),
+        Err(e) if e.is_foreign_key_violation() => {
+            Err(AppError::Inconsistent("crop_in_use".to_owned()))
+        }
+        Err(other) => Err(AppError::Db(other)),
+    }
 }
 
 /// Payload for `create_variety`. Holds the union of fields for both profile
@@ -616,5 +729,116 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, AppError::Inconsistent(_)));
+    }
+
+    // ----- Crop edit / delete (cultures screen, follow-up to #86) --------
+
+    #[tokio::test]
+    async fn update_crop_changes_name_and_lifespan() {
+        let repo = fresh_repo().await; // seeded annual "Tomate"
+        let families = list_family_options(&repo).await.unwrap();
+        let tomate_id = list_crops(&repo).await.unwrap()[0].id.clone();
+        update_crop(
+            &repo,
+            &tomate_id,
+            CropInput {
+                lifespan_kind: LifespanKind::PluriannualRecurring,
+                lifespan_years: 30,
+                years_to_first_yield: 3,
+                ..annual_crop_input(&solanaceae_id_str(&families), "Tomate-arbre")
+            },
+        )
+        .await
+        .unwrap();
+        let row = list_crops(&repo)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == tomate_id)
+            .unwrap();
+        assert_eq!(row.name, "Tomate-arbre");
+        assert!(!row.is_annual);
+    }
+
+    #[tokio::test]
+    async fn get_crop_for_edit_roundtrips_recurring_lifespan() {
+        let repo = fresh_repo().await;
+        let families = list_family_options(&repo).await.unwrap();
+        let rosacees = families
+            .iter()
+            .find(|f| f.label.contains("Rosacées"))
+            .unwrap()
+            .id
+            .clone();
+        let crop = create_crop(
+            &repo,
+            CropInput {
+                lifespan_kind: LifespanKind::PluriannualRecurring,
+                lifespan_years: 40,
+                years_to_first_yield: 3,
+                pruning_season: PruningSeason::Winter,
+                ..annual_crop_input(&rosacees, "Pommier")
+            },
+        )
+        .await
+        .unwrap();
+        let form = get_crop_for_edit(&repo, &crop.id.to_string())
+            .await
+            .unwrap();
+        assert_eq!(form.name, "Pommier");
+        assert_eq!(form.lifespan_kind, LifespanKind::PluriannualRecurring);
+        assert_eq!(form.lifespan_years, 40);
+        assert_eq!(form.years_to_first_yield, 3);
+        assert_eq!(form.pruning_season, PruningSeason::Winter);
+    }
+
+    #[tokio::test]
+    async fn delete_crop_removes_crop_and_cascades_varieties() {
+        let repo = fresh_repo().await; // Tomate + 2 varieties, no plantings
+        let tomate_id = list_crops(&repo).await.unwrap()[0].id.clone();
+        delete_crop(&repo, &tomate_id).await.unwrap();
+        assert!(list_crops(&repo).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn delete_crop_refused_when_a_variety_is_planted() {
+        use crate::services::create_annual_planting_from_sowing;
+        use chrono::NaiveDate;
+        use pomone_db::{LocationRepo, StrataRepo, VarietyRepo};
+        let repo = fresh_repo().await;
+        let crops = list_crops(&repo).await.unwrap();
+        let variety = repo.variety_list().await.unwrap()[0].id;
+        let bed = repo
+            .location_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.parent_id.is_some())
+            .unwrap()
+            .id;
+        let strata = repo.strata_list().await.unwrap()[0].id;
+        create_annual_planting_from_sowing(
+            &repo,
+            variety,
+            bed,
+            strata,
+            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+            rust_decimal_macros::dec!(10),
+            10,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        // The crop is now "in use" through its planted variety.
+        let row = list_crops(&repo)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|r| r.id == crops[0].id)
+            .unwrap();
+        assert!(row.in_use);
+        let err = delete_crop(&repo, &crops[0].id).await.unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(msg) if msg == "crop_in_use"));
     }
 }
