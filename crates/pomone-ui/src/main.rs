@@ -35,7 +35,7 @@ use pomone_app::{
     PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput,
     StrataOption, StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
     TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption, VarietyProfileKind,
-    VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
+    VarietyRow as AppVarietyRow, WindowGeometry, YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{
     LocationId, PlantingId, PlantingStatus, PruningSeason, RecurrenceUnit, StrataId, VarietyId,
@@ -103,6 +103,10 @@ struct UiState {
     /// Parallel to `variety_ids`: tells the planting form which date fields
     /// to show (sowing for annuals, establishment + removal for perennials).
     variety_is_annuals_plantings: Vec<bool>,
+    /// Active sort column for the Plantings table (`"variety"`, `"location"`,
+    /// `"area"`, `"plants"`, `"status"`) and its direction.
+    plantings_sort_column: String,
+    plantings_sort_asc: bool,
     /// Stringified `LocationId`s, parallel to the Plantings page `location-labels`.
     location_ids: Vec<String>,
     /// Stringified `FamilyId`s, parallel to the Cultures page `family-labels`.
@@ -250,6 +254,8 @@ fn main() -> Result<()> {
         runtime,
         variety_ids: Vec::new(),
         variety_is_annuals_plantings: Vec::new(),
+        plantings_sort_column: "variety".to_owned(),
+        plantings_sort_asc: true,
         location_ids: Vec::new(),
         family_ids: Vec::new(),
         strata_ids: Vec::new(),
@@ -958,6 +964,29 @@ fn main() -> Result<()> {
         });
     }
 
+    // --- Plantings table: click a column header to sort (toggle direction on
+    //     the active column, else switch to the new column ascending) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_plantings_sort(move |column| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let column = column.to_string();
+            if s.plantings_sort_column == column {
+                s.plantings_sort_asc = !s.plantings_sort_asc;
+            } else {
+                s.plantings_sort_column = column;
+                s.plantings_sort_asc = true;
+            }
+            if let Err(e) = refresh_plantings(&window, &mut s) {
+                tracing::error!(error = %e, "failed to refresh plantings after sort");
+            }
+        });
+    }
+
     // --- Record yearly harvest from the detail screen ---
     {
         let state = Rc::clone(&state);
@@ -1624,8 +1653,43 @@ fn main() -> Result<()> {
         });
     }
 
+    // Restore the last window size (falls back to the .slint default on first
+    // launch); persist it again when the event loop exits.
+    restore_window_geometry(&window);
     window.run().context("Slint event loop failed")?;
+    save_window_geometry(&window);
     Ok(())
+}
+
+/// Resize the window to the last saved geometry, if any. Clamps to the minimum
+/// so a corrupt/tiny value can't make the window unusable.
+#[allow(clippy::cast_precision_loss)]
+fn restore_window_geometry(window: &MainWindow) {
+    if let Some(geom) = WindowGeometry::load() {
+        let w = geom.width.max(880) as f32;
+        let h = geom.height.max(600) as f32;
+        window.window().set_size(slint::LogicalSize::new(w, h));
+    }
+}
+
+/// Persist the current window size on exit (logical px, DPI-independent).
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+fn save_window_geometry(window: &MainWindow) {
+    let size = window.window().size();
+    let scale = window.window().scale_factor();
+    if scale > 0.0 && size.width > 0 && size.height > 0 {
+        let geom = WindowGeometry {
+            width: (size.width as f32 / scale).round() as u32,
+            height: (size.height as f32 / scale).round() as u32,
+        };
+        if let Err(e) = geom.save() {
+            tracing::warn!(error = %e, "failed to save window geometry");
+        }
+    }
 }
 
 /// Refresh every string the UI displays based on the active language.
@@ -1935,6 +1999,12 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_families_in_use_text(SharedString::from(i18n.t("family-in-use")));
 
     // Plantings page
+    window.set_plantings_col_variety(SharedString::from(i18n.t("plantings-col-variety")));
+    window.set_plantings_col_location(SharedString::from(i18n.t("plantings-col-location")));
+    window.set_plantings_col_schedule(SharedString::from(i18n.t("plantings-col-schedule")));
+    window.set_plantings_col_area(SharedString::from(i18n.t("plantings-col-area")));
+    window.set_plantings_col_plants(SharedString::from(i18n.t("plantings-col-plants")));
+    window.set_plantings_col_status(SharedString::from(i18n.t("plantings-col-status")));
     window.set_plantings_title_text(SharedString::from(i18n.t("title-plantings")));
     window.set_empty_state_text(SharedString::from(i18n.t("empty-plantings")));
     window.set_section_new_text(SharedString::from(i18n.t("section-new-planting")));
@@ -2241,9 +2311,18 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
         .collect();
     window.set_gantt_bars(ModelRc::new(VecModel::from(gantt_bars)));
 
+    // Apply the active table sort before converting to Slint rows.
+    let mut app_rows = snapshot.plantings;
+    sort_planting_rows(
+        &mut app_rows,
+        &state.plantings_sort_column,
+        state.plantings_sort_asc,
+    );
+    window.set_plantings_sort_column(SharedString::from(state.plantings_sort_column.clone()));
+    window.set_plantings_sort_asc(state.plantings_sort_asc);
+
     let i18n = state.app.i18n();
-    let rows: Vec<SlintPlantingRow> = snapshot
-        .plantings
+    let rows: Vec<SlintPlantingRow> = app_rows
         .into_iter()
         .map(|r| to_slint_row(r, i18n))
         .collect();
@@ -2265,10 +2344,37 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
     Ok(())
 }
 
+/// Sort the plantings table in place by the active column + direction. Unknown
+/// columns fall back to the variety label so the list is always deterministic.
+fn sort_planting_rows(rows: &mut [AppPlantingRow], column: &str, ascending: bool) {
+    match column {
+        "location" => rows.sort_by(|a, b| {
+            a.location_label
+                .to_lowercase()
+                .cmp(&b.location_label.to_lowercase())
+        }),
+        "area" => rows.sort_by_key(|r| r.area_m2),
+        "plants" => rows.sort_by_key(|r| r.plants_count),
+        "status" => {
+            rows.sort_by(|a, b| planting_status_key(a.status).cmp(planting_status_key(b.status)));
+        }
+        _ => rows.sort_by(|a, b| {
+            a.variety_label
+                .to_lowercase()
+                .cmp(&b.variety_label.to_lowercase())
+        }),
+    }
+    if !ascending {
+        rows.reverse();
+    }
+}
+
 fn to_slint_row(row: AppPlantingRow, i18n: &pomone_app::I18n) -> SlintPlantingRow {
     SlintPlantingRow {
         id: SharedString::from(row.id),
         variety_label: SharedString::from(row.variety_label),
+        crop_initials: SharedString::from(row.crop_initials),
+        family_color: parse_hex_color(&row.family_color),
         location_label: SharedString::from(row.location_label),
         schedule_summary: SharedString::from(row.schedule_summary),
         area_label: SharedString::from(row.area_label),

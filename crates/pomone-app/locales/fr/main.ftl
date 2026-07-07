@@ -37,6 +37,12 @@ plants-suffix = plants
 section-new-planting = Nouvelle plantation annuelle
 title-plantings = Plantations
 empty-plantings = Aucune plantation pour l'instant. Renseignez le formulaire ci-dessous pour en créer une.
+plantings-col-variety = Variété
+plantings-col-location = Lieu
+plantings-col-schedule = Calendrier
+plantings-col-area = Surface
+plantings-col-plants = Plants
+plantings-col-status = Statut
 status-planting-created = Plantation créée
 status-planting-failed = Échec de la création : { $message }
 

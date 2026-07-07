@@ -35,6 +35,12 @@ plants-suffix = plants
 section-new-planting = New annual planting
 title-plantings = Plantings
 empty-plantings = No plantings yet. Fill in the form below to create one.
+plantings-col-variety = Variety
+plantings-col-location = Location
+plantings-col-schedule = Schedule
+plantings-col-area = Area
+plantings-col-plants = Plants
+plantings-col-status = Status
 status-planting-created = Planting created
 status-planting-failed = Creation failed: { $message }
 

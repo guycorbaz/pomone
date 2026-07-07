@@ -38,7 +38,7 @@ pub use app::{test_backend, App};
 pub use backup::{backup_path_for, backup_sqlite, restore_sqlite};
 pub use bed_usage_view::{bed_usage_series, BedUsage, BedUsagePoint};
 pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
-pub use config::{default_config_path, AppConfig, BackendConfig};
+pub use config::{default_config_path, AppConfig, BackendConfig, WindowGeometry};
 pub use crop_map_view::{
     list_crop_map_lanes, move_planting_to_location, split_planting, CropMapBar, CropMapLane,
     SplitPart,

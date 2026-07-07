@@ -27,8 +27,10 @@ export { PlantingRow, CropRow, VarietyRow, LocationItem, TaskCalendarDay, TaskRo
 
 export component MainWindow inherits Window {
     title: "Pomone";
-    preferred-width: 1320px;
-    preferred-height: 860px;
+    // Default size on first launch; overridden at runtime by the last saved
+    // window size (window.toml) when present.
+    preferred-width: 1600px;
+    preferred-height: 1000px;
     min-width: 880px;
     min-height: 600px;
     background: Palette.background;
@@ -97,6 +99,16 @@ export component MainWindow inherits Window {
     in property <string> empty-state-text;
     in property <[PlantingRow]> plantings;
     in property <string> plants-suffix;
+    // Plantings table column headers + sort state.
+    in property <string> plantings-col-variety;
+    in property <string> plantings-col-location;
+    in property <string> plantings-col-schedule;
+    in property <string> plantings-col-area;
+    in property <string> plantings-col-plants;
+    in property <string> plantings-col-status;
+    in property <string> plantings-sort-column;
+    in property <bool> plantings-sort-asc: true;
+    callback plantings-sort(string);
     in property <string> section-new-text;
     in property <string> label-variety;
     in property <string> label-location;
@@ -910,6 +922,15 @@ export component MainWindow inherits Window {
                 empty-state-text: empty-state-text;
                 plantings: plantings;
                 plants-suffix: plants-suffix;
+                col-variety: plantings-col-variety;
+                col-location: plantings-col-location;
+                col-schedule: plantings-col-schedule;
+                col-area: plantings-col-area;
+                col-plants: plantings-col-plants;
+                col-status: plantings-col-status;
+                sort-column: plantings-sort-column;
+                sort-asc: plantings-sort-asc;
+                sort(k) => { plantings-sort(k); }
                 section-new-text: section-new-text;
                 label-variety: label-variety;
                 label-location: label-location;

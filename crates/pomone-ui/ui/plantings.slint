@@ -13,6 +13,9 @@ import { Timeline, GanttBar } from "components/timeline.slint";
 export struct PlantingRow {
     id: string,
     variety-label: string,
+    // Two-letter crop initials + family colour for the coloured pastille.
+    crop-initials: string,
+    family-color: color,
     location-label: string,
     schedule-summary: string,
     area-label: string,
@@ -23,82 +26,163 @@ export struct PlantingRow {
     status-active: bool,
 }
 
-// One row in the list. Clickable: emits `clicked` with the planting id so
-// the host can open the detail screen. Hover lifts the surface tone to
-// signal interactivity.
-component PlantingRowView inherits Card {
+// Family-coloured crop pastille — a rounded square with two white initials,
+// mirroring Qrop's crop disk. Tinted by botanical family.
+component CropPastille inherits Rectangle {
+    in property <string> initials;
+    in property <color> tint;
+    width: 30px;
+    height: 30px;
+    border-radius: Theme.radius-sm;
+    background: tint;
+    Text {
+        text: root.initials;
+        color: Palette.text-on-primary;
+        font-size: Theme.font-size-label;
+        font-weight: Theme.font-weight-bold;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        width: 100%;
+        height: 100%;
+    }
+}
+
+// A clickable, sortable column header. Shows a ▲/▼ indicator when it is the
+// active sort column.
+component ColHeader inherits Rectangle {
+    in property <string> label;
+    in property <string> sort-key;
+    in property <string> active-key;
+    in property <bool> asc;
+    in property <bool> right-align: false;
+    in property <int> stretch: 1;
+    in property <length> fixed-width: 0px;
+    callback sort(string);
+
+    property <bool> active: sort-key == active-key && sort-key != "";
+    horizontal-stretch: fixed-width > 0px ? 0 : stretch;
+    min-width: fixed-width;
+    height: 100%;
+
+    touch := TouchArea {
+        mouse-cursor: sort-key != "" ? pointer : default;
+        clicked => { if (sort-key != "") { root.sort(sort-key); } }
+        HorizontalLayout {
+            spacing: 2px;
+            alignment: right-align ? end : start;
+            Text {
+                text: root.label;
+                color: root.active ? Palette.primary : Palette.text-secondary;
+                font-size: Theme.font-size-label;
+                font-weight: Theme.font-weight-semibold;
+                vertical-alignment: center;
+            }
+            if root.active: Text {
+                text: root.asc ? "▲" : "▼";
+                color: Palette.primary;
+                font-size: Theme.font-size-label - 3px;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+// One dense table row. Clickable: emits `clicked` with the planting id so the
+// host can open the detail screen. Hover lifts the surface tone.
+component PlantingTableRow inherits Rectangle {
     in property <PlantingRow> entry;
-    in property <string> plants-suffix;     // localized "plants" / "plants"
+    in property <string> plants-suffix;
     callback clicked(string);
-    height: 124px;
-    background: touch.has-hover ? Palette.surface-alt : Palette.surface;
+    height: Theme.row-height;
+    background: touch.has-hover ? Palette.surface-alt : transparent;
     animate background { duration: Theme.transition-fast; }
+
+    // Bottom divider.
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Palette.border;
+    }
 
     touch := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.clicked(entry.id); }
 
-        VerticalLayout {
-            padding: Theme.space-lg;
-            spacing: Theme.space-xs;
+        HorizontalLayout {
+            padding-left: Theme.space-md;
+            padding-right: Theme.space-md;
+            spacing: Theme.space-md;
 
-            HorizontalLayout {
-                spacing: Theme.space-md;
-                Text {
-                    text: entry.variety-label;
-                    color: Palette.text-primary;
-                    font-size: Theme.font-size-h3;
-                    font-weight: Theme.font-weight-semibold;
-                    horizontal-stretch: 1;
-                }
-                // Status badge — only for terminal states (issue #63).
-                if !entry.status-active: Rectangle {
-                    background: Palette.surface-alt;
-                    border-radius: Theme.radius-sm;
-                    border-width: 1px;
-                    border-color: Palette.border;
-                    HorizontalLayout {
-                        padding-left: Theme.space-sm;
-                        padding-right: Theme.space-sm;
-                        padding-top: 2px;
-                        padding-bottom: 2px;
-                        Text {
-                            text: entry.status-label;
-                            color: Palette.text-secondary;
-                            font-size: Theme.font-size-label;
-                            font-weight: Theme.font-weight-semibold;
-                            vertical-alignment: center;
-                        }
-                    }
-                }
-                Text {
-                    text: entry.location-label;
-                    color: Palette.text-secondary;
-                    font-size: Theme.font-size-body;
-                    horizontal-alignment: right;
-                    vertical-alignment: center;
-                }
+            CropPastille {
+                initials: entry.crop-initials;
+                tint: entry.family-color;
+                y: (parent.height - self.height) / 2;
             }
-
             Text {
-                text: entry.schedule-summary;
+                text: entry.variety-label;
+                color: Palette.text-primary;
+                font-size: Theme.font-size-body;
+                font-weight: Theme.font-weight-medium;
+                vertical-alignment: center;
+                horizontal-stretch: 3;
+                overflow: elide;
+            }
+            Text {
+                text: entry.location-label;
                 color: Palette.text-secondary;
                 font-size: Theme.font-size-body;
+                vertical-alignment: center;
+                horizontal-stretch: 2;
+                overflow: elide;
             }
-
-            HorizontalLayout {
-                spacing: Theme.space-md;
-                Text {
-                    text: entry.area-label;
-                    color: Palette.text-muted;
-                    font-size: Theme.font-size-label;
-                    horizontal-stretch: 1;
-                }
-                Text {
-                    text: entry.plants-count + " " + plants-suffix;
-                    color: Palette.text-muted;
-                    font-size: Theme.font-size-label;
-                    horizontal-alignment: right;
+            Text {
+                text: entry.schedule-summary;
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+                vertical-alignment: center;
+                horizontal-stretch: 3;
+                overflow: elide;
+            }
+            Text {
+                text: entry.area-label;
+                color: Palette.text-secondary;
+                font-size: Theme.font-size-label;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                width: 90px;
+            }
+            Text {
+                text: entry.plants-count;
+                color: Palette.text-secondary;
+                font-size: Theme.font-size-label;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+                width: 64px;
+            }
+            // Status: a small badge for terminal states, blank when active.
+            Rectangle {
+                width: 96px;
+                HorizontalLayout {
+                    alignment: end;
+                    if !entry.status-active: Rectangle {
+                        background: Palette.surface-alt;
+                        border-radius: Theme.radius-pill;
+                        border-width: 1px;
+                        border-color: Palette.border;
+                        y: (parent.height - self.height) / 2;
+                        height: 22px;
+                        HorizontalLayout {
+                            padding-left: Theme.space-sm;
+                            padding-right: Theme.space-sm;
+                            Text {
+                                text: entry.status-label;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label - 1px;
+                                font-weight: Theme.font-weight-semibold;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -115,6 +199,17 @@ export component PlantingsPage inherits Rectangle {
     // List
     in property <[PlantingRow]> plantings;
     in property <string> plants-suffix;
+    // Table column headers + current sort state (host owns the sorting).
+    in property <string> col-variety;
+    in property <string> col-location;
+    in property <string> col-schedule;
+    in property <string> col-area;
+    in property <string> col-plants;
+    in property <string> col-status;
+    in property <string> sort-column;
+    in property <bool> sort-asc: true;
+    // Emitted when a sortable header is clicked (carries the column key).
+    callback sort(string);
 
     // Form section
     in property <string> section-new-text;
@@ -229,16 +324,82 @@ export component PlantingsPage inherits Rectangle {
                 }
             }
         }
-        if plantings.length > 0: list-area := Rectangle {
-            min-height: 120px;
-            preferred-height: 240px;
+        if plantings.length > 0: Card {
+            clip: true;
             vertical-stretch: 1;
-            ListView {
-                for item in plantings: PlantingRowView {
-                    entry: item;
-                    plants-suffix: plants-suffix;
-                    width: list-area.width;
-                    clicked(pid) => { row-clicked(pid); }
+            VerticalLayout {
+                // Sortable header row.
+                Rectangle {
+                    height: 40px;
+                    background: Palette.surface-alt;
+                    HorizontalLayout {
+                        padding-left: Theme.space-md;
+                        padding-right: Theme.space-md;
+                        spacing: Theme.space-md;
+                        // Spacer above the pastille column.
+                        Rectangle { width: 30px; }
+                        ColHeader {
+                            label: col-variety;
+                            sort-key: "variety";
+                            stretch: 3;
+                            active-key: sort-column;
+                            asc: sort-asc;
+                            sort(k) => { sort(k); }
+                        }
+                        ColHeader {
+                            label: col-location;
+                            sort-key: "location";
+                            stretch: 2;
+                            active-key: sort-column;
+                            asc: sort-asc;
+                            sort(k) => { sort(k); }
+                        }
+                        // Schedule is display-only (not sortable).
+                        ColHeader {
+                            label: col-schedule;
+                            sort-key: "";
+                            stretch: 3;
+                        }
+                        ColHeader {
+                            label: col-area;
+                            sort-key: "area";
+                            fixed-width: 90px;
+                            right-align: true;
+                            active-key: sort-column;
+                            asc: sort-asc;
+                            sort(k) => { sort(k); }
+                        }
+                        ColHeader {
+                            label: col-plants;
+                            sort-key: "plants";
+                            fixed-width: 64px;
+                            right-align: true;
+                            active-key: sort-column;
+                            asc: sort-asc;
+                            sort(k) => { sort(k); }
+                        }
+                        ColHeader {
+                            label: col-status;
+                            sort-key: "status";
+                            fixed-width: 96px;
+                            active-key: sort-column;
+                            asc: sort-asc;
+                            sort(k) => { sort(k); }
+                        }
+                    }
+                }
+                list-area := Rectangle {
+                    min-height: 160px;
+                    preferred-height: 320px;
+                    vertical-stretch: 1;
+                    ListView {
+                        for item in plantings: PlantingTableRow {
+                            entry: item;
+                            plants-suffix: plants-suffix;
+                            width: list-area.width;
+                            clicked(pid) => { row-clicked(pid); }
+                        }
+                    }
                 }
             }
         }
