@@ -10,6 +10,9 @@ welcome-user = Bienvenue, { $name } !
 welcome-summary = Pomone gère vos cultures annuelles et pluriannuelles : maraîchage, grandes cultures, arboriculture et agroforesterie.
 button-switch-language = English
 button-create-planting = Créer la plantation
+nav-group-planning = Planification
+nav-group-catalog = Catalogue
+nav-group-system = Système
 nav-home = Accueil
 nav-plantings = Plantations
 nav-cultures = Cultures
@@ -386,6 +389,33 @@ error-task-type-edit-id-missing = Identifiant du type manquant pour l'édition.
 error-task-type-category-required = La catégorie est requise.
 error-task-type-in-use = Ce type est utilisé par des tâches existantes. Supprimez ou réaffectez ces tâches avant de pouvoir supprimer le type.
 status-task-type-failed = Échec de l'opération sur le type : { $message }
+
+## Familles (catalogue)
+nav-families = Familles
+title-families = Familles
+confirm-delete-family = Supprimer cette famille ? Cette action est irréversible.
+families-list-title = Catalogue
+families-empty = Aucune famille définie. Utilisez le formulaire à droite pour en ajouter une.
+families-form-section-create = Nouvelle famille
+families-form-section-edit = Modifier la famille
+label-family-name = Nom
+placeholder-family-name = Solanacées, Rosacées…
+label-family-latin = Nom latin
+placeholder-family-latin = Solanaceae
+label-family-description = Description
+placeholder-family-description = tomate, pomme de terre, poivron…
+label-family-color = Couleur
+placeholder-family-color = #B85C38
+hint-family-color = Format hexadécimal : « #RVB » ou « #RRVVBB ». Teinte les plantations et la carte des cultures par famille.
+btn-family-save = Enregistrer
+btn-family-cancel = Annuler la modification
+btn-family-edit = Modifier
+btn-family-delete = Supprimer
+family-in-use = Utilisée
+error-family-color-required = La couleur est requise.
+error-family-edit-id-missing = Identifiant de famille manquant pour la modification.
+error-family-in-use = Cette famille est utilisée par des cultures existantes. Réaffectez ou supprimez ces cultures avant de supprimer la famille.
+status-family-failed = Échec de l'opération sur la famille : { $message }
 
 ## Task categories (stable enum labels)
 category-sow = Semis

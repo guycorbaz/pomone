@@ -8,6 +8,9 @@ welcome-user = Welcome, { $name }!
 welcome-summary = Pomone manages your annual and pluriannual crops: market gardening, field crops, orcharding and agroforestry.
 button-switch-language = Français
 button-create-planting = Create planting
+nav-group-planning = Planning
+nav-group-catalog = Catalog
+nav-group-system = System
 nav-home = Home
 nav-plantings = Plantings
 nav-cultures = Crops
@@ -384,6 +387,33 @@ error-task-type-edit-id-missing = Missing type ID for editing.
 error-task-type-category-required = Category is required.
 error-task-type-in-use = This type is used by existing tasks. Delete or reassign those tasks before deleting the type.
 status-task-type-failed = Type operation failed: { $message }
+
+## Families catalog
+nav-families = Families
+title-families = Families
+confirm-delete-family = Delete this family? This cannot be undone.
+families-list-title = Catalog
+families-empty = No families defined yet. Use the form on the right to add one.
+families-form-section-create = New family
+families-form-section-edit = Edit family
+label-family-name = Name
+placeholder-family-name = Solanaceae, Rosaceae…
+label-family-latin = Latin name
+placeholder-family-latin = Solanaceae
+label-family-description = Description
+placeholder-family-description = tomato, potato, pepper…
+label-family-color = Color
+placeholder-family-color = #B85C38
+hint-family-color = Hexadecimal format: "#RGB" or "#RRGGBB". Tints plantings and the crop map by family.
+btn-family-save = Save
+btn-family-cancel = Cancel edit
+btn-family-edit = Edit
+btn-family-delete = Delete
+family-in-use = In use
+error-family-color-required = Color is required.
+error-family-edit-id-missing = Missing family ID for editing.
+error-family-in-use = This family is used by existing crops. Reassign or delete those crops before deleting the family.
+status-family-failed = Family operation failed: { $message }
 
 ## Task categories (stable enum labels)
 category-sow = Sowing

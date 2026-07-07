@@ -11,16 +11,18 @@ use uuid::Uuid;
 #[async_trait]
 impl FamilyRepo for SqliteRepository {
     async fn family_get(&self, id: FamilyId) -> DbResult<Option<Family>> {
-        let row = sqlx::query("SELECT id, name, latin_name, description FROM family WHERE id = ?1")
-            .bind(id.as_uuid())
-            .fetch_optional(&self.pool)
-            .await?;
+        let row = sqlx::query(
+            "SELECT id, name, latin_name, description, color FROM family WHERE id = ?1",
+        )
+        .bind(id.as_uuid())
+        .fetch_optional(&self.pool)
+        .await?;
         row.map(row_to_family).transpose()
     }
 
     async fn family_list(&self) -> DbResult<Vec<Family>> {
         let rows = sqlx::query(
-            "SELECT id, name, latin_name, description FROM family ORDER BY name COLLATE NOCASE",
+            "SELECT id, name, latin_name, description, color FROM family ORDER BY name COLLATE NOCASE",
         )
         .fetch_all(&self.pool)
         .await?;
@@ -29,12 +31,13 @@ impl FamilyRepo for SqliteRepository {
 
     async fn family_create(&self, family: &Family) -> DbResult<()> {
         sqlx::query(
-            "INSERT INTO family (id, name, latin_name, description) VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO family (id, name, latin_name, description, color) VALUES (?1, ?2, ?3, ?4, ?5)",
         )
         .bind(family.id.as_uuid())
         .bind(&family.name)
         .bind(family.latin_name.as_deref())
         .bind(family.description.as_deref())
+        .bind(&family.color)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -42,12 +45,13 @@ impl FamilyRepo for SqliteRepository {
 
     async fn family_update(&self, family: &Family) -> DbResult<()> {
         let result = sqlx::query(
-            "UPDATE family SET name = ?2, latin_name = ?3, description = ?4 WHERE id = ?1",
+            "UPDATE family SET name = ?2, latin_name = ?3, description = ?4, color = ?5 WHERE id = ?1",
         )
         .bind(family.id.as_uuid())
         .bind(&family.name)
         .bind(family.latin_name.as_deref())
         .bind(family.description.as_deref())
+        .bind(&family.color)
         .execute(&self.pool)
         .await?;
         if result.rows_affected() == 0 {
@@ -79,11 +83,13 @@ fn row_to_family(row: sqlx::sqlite::SqliteRow) -> DbResult<Family> {
     let name: String = row.try_get("name")?;
     let latin_name: Option<String> = row.try_get("latin_name")?;
     let description: Option<String> = row.try_get("description")?;
+    let color: String = row.try_get("color")?;
     Ok(Family {
         id: FamilyId::from(id),
         name,
         latin_name,
         description,
+        color,
     })
 }
 
@@ -139,12 +145,23 @@ mod tests {
         let updated = Family {
             name: "New".into(),
             description: Some("changed".into()),
+            color: "#123456".into(),
             ..f.clone()
         };
         repo.family_update(&updated).await.unwrap();
         let got = repo.family_get(f.id).await.unwrap().unwrap();
         assert_eq!(got.name, "New");
         assert_eq!(got.description.as_deref(), Some("changed"));
+        assert_eq!(got.color, "#123456");
+    }
+
+    #[tokio::test]
+    async fn color_roundtrips() {
+        let repo = fresh_repo().await;
+        let f = Family::new_with_color("Rosaceae", None, None, "#AB12CD").unwrap();
+        repo.family_create(&f).await.unwrap();
+        let got = repo.family_get(f.id).await.unwrap().unwrap();
+        assert_eq!(got.color, "#AB12CD");
     }
 
     #[tokio::test]

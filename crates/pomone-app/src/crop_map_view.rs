@@ -21,7 +21,9 @@ use crate::error::{AppError, AppResult};
 use crate::plantings_view::parse_id;
 use chrono::{Datelike, NaiveDate};
 use pomone_db::Repository;
-use pomone_domain::{Location, LocationId, Planting, PlantingId, PlantingSchedule, VarietyId};
+use pomone_domain::{
+    Location, LocationId, Planting, PlantingId, PlantingSchedule, VarietyId, DEFAULT_FAMILY_COLOR,
+};
 use rust_decimal::Decimal;
 use std::collections::{HashMap, HashSet};
 
@@ -33,9 +35,9 @@ pub struct CropMapBar {
     pub planting_id: String,
     /// Compact label (`"Crop · Variety"`), trimmed.
     pub label: String,
-    /// Resolved hex color derived deterministically from the variety's
-    /// family id (so the same family is always the same color across
-    /// sessions even though `Family` has no color field).
+    /// Resolved hex colour of the planting's botanical family (the
+    /// user-configured `Family::color`), so plantings are tinted by family
+    /// on the map. Falls back to the neutral default for orphan varieties.
     pub color_hex: String,
     /// `1..=366` — start of the visible span on this lane.
     pub start_doy: i32,
@@ -65,10 +67,14 @@ pub async fn list_crop_map_lanes(repo: &dyn Repository) -> AppResult<Vec<CropMap
     let plantings = repo.planting_list().await?;
     let varieties = repo.variety_list().await?;
     let crops = repo.crop_list().await?;
+    let families = repo.family_list().await?;
 
     let loc_by_id: HashMap<LocationId, &Location> = locations.iter().map(|l| (l.id, l)).collect();
     let var_by_id: HashMap<VarietyId, _> = varieties.iter().map(|v| (v.id, v)).collect();
     let crop_by_id: HashMap<_, _> = crops.iter().map(|c| (c.id, c)).collect();
+    // Family id → user-configured colour. Plantings are tinted by botanical
+    // family (mirrors Qrop's family colouring).
+    let color_by_family: HashMap<_, _> = families.iter().map(|f| (f.id, f.color.clone())).collect();
 
     // Group plantings by location.
     let mut by_location: HashMap<LocationId, Vec<&Planting>> = HashMap::new();
@@ -111,7 +117,9 @@ pub async fn list_crop_map_lanes(repo: &dyn Repository) -> AppResult<Vec<CropMap
                             CropMapBar {
                                 planting_id: p.id.to_string(),
                                 label: format!("{crop_name} · {v_name}"),
-                                color_hex: family_color(family_id),
+                                color_hex: family_id
+                                    .and_then(|fid| color_by_family.get(&fid).cloned())
+                                    .unwrap_or_else(|| DEFAULT_FAMILY_COLOR.to_owned()),
                                 start_doy: start,
                                 end_doy: end,
                             }
@@ -297,25 +305,6 @@ fn doy_span(p: &Planting) -> (i32, i32) {
             (start as i32, end as i32)
         }
         PlantingSchedule::Perennial { .. } => (1, 365),
-    }
-}
-
-/// Deterministic per-family color: small palette indexed by a hash of the
-/// family UUID. When the family is unknown (orphan variety), falls back
-/// to a neutral grey. Hex form so the UI uses the existing `parse_hex_color`.
-fn family_color(family_id: Option<pomone_domain::FamilyId>) -> String {
-    const PALETTE: &[&str] = &[
-        "#3C6E47", "#B85C38", "#6FAF7A", "#B07C25", "#5F9F8B", "#A64238", "#6B5D4D", "#244529",
-        "#C8B89A", "#7A6A5C", "#9A6E5C", "#4F7F8F",
-    ];
-    match family_id {
-        Some(fid) => {
-            let uuid = fid.as_uuid();
-            let bytes = uuid.as_bytes();
-            let idx = (u32::from(bytes[0]) ^ u32::from(bytes[15])) as usize % PALETTE.len();
-            PALETTE[idx].to_owned()
-        }
-        None => "#A09887".to_owned(),
     }
 }
 

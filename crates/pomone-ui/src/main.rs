@@ -13,31 +13,33 @@ use anyhow::{Context, Result};
 use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use fluent::FluentArgs;
 use pomone_app::{
-    bed_usage_series, create_crop, create_location, create_recurring_task, create_strata,
-    create_task, create_task_type, create_variety, delete_crop, delete_location, delete_strata,
-    delete_task, delete_task_type, delete_variety, extend_series_if_needed, get_crop_for_edit,
-    get_location_for_edit, get_planting_detail, get_task_for_edit, get_task_type_for_edit,
-    list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops, list_family_options,
-    list_location_kind_options, list_location_options, list_locations_tree, list_parent_options,
-    list_planting_choices, list_planting_tasks, list_plantings, list_strata_options,
-    list_strata_rows, list_task_category_options, list_task_type_options, list_task_types_admin,
-    list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting,
-    move_planting_to_location, parse_id, planting_status_key, recurrence_unit_str, reschedule_task,
-    services, split_planting, test_backend, update_crop, update_location, update_task,
-    update_task_type, AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
-    BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry, CalendarEntryKind,
-    CalendarEventKind, CropEditForm, CropInput, CropMapBar as AppCropMapBar,
-    CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyOption, Lang,
-    LifespanKind, LocationEditForm, LocationInput, LocationKindOption, LocationListItem,
-    LocationOption, MigrationReport, ParentLocationOption, PlantingChoice,
-    PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
-    PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
-    StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
+    bed_usage_series, create_crop, create_family, create_location, create_recurring_task,
+    create_strata, create_task, create_task_type, create_variety, delete_crop, delete_family,
+    delete_location, delete_strata, delete_task, delete_task_type, delete_variety,
+    extend_series_if_needed, get_crop_for_edit, get_family_for_edit, get_location_for_edit,
+    get_planting_detail, get_task_for_edit, get_task_type_for_edit, list_agenda,
+    list_calendar_entries, list_crop_map_lanes, list_crops, list_families_admin,
+    list_family_options, list_location_kind_options, list_location_options, list_locations_tree,
+    list_parent_options, list_planting_choices, list_planting_tasks, list_plantings,
+    list_strata_options, list_strata_rows, list_task_category_options, list_task_type_options,
+    list_task_types_admin, list_varieties_for_crop, list_variety_options,
+    list_yearly_harvests_for_planting, move_planting_to_location, parse_id, planting_status_key,
+    recurrence_unit_str, reschedule_task, services, split_planting, test_backend, update_crop,
+    update_family, update_location, update_task, update_task_type, AgendaRow as AppAgendaRow, App,
+    AppConfig, AppError, BackendConfig, BedUsagePoint as AppBedUsagePoint,
+    CalendarEntry as AppCalendarEntry, CalendarEntryKind, CalendarEventKind, CropEditForm,
+    CropInput, CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow,
+    CycleDates, FamilyAdminRow, FamilyEditForm, FamilyOption, Lang, LifespanKind, LocationEditForm,
+    LocationInput, LocationKindOption, LocationListItem, LocationOption, MigrationReport,
+    ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
+    PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput,
+    StrataOption, StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
     TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption, VarietyProfileKind,
     VarietyRow as AppVarietyRow, YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{
     LocationId, PlantingId, PlantingStatus, PruningSeason, RecurrenceUnit, StrataId, VarietyId,
+    DEFAULT_FAMILY_COLOR,
 };
 use rust_decimal::Decimal;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
@@ -57,12 +59,14 @@ mod generated {
 use generated::{
     AgendaRow as SlintAgendaRow, CropMapBarItem as SlintCropMapBar,
     CropMapLaneItem as SlintCropMapLane, CropMapLocationOption as SlintCropMapLocationOption,
-    CropRow as SlintCropRow, DetailLine as SlintDetailLine, GanttBar as SlintGanttBar,
-    LocationItem as SlintLocationItem, MainWindow, PlantingRow as SlintPlantingRow,
-    PlantingTaskRow as SlintPlantingTaskRow, StrataItem as SlintStrataItem,
-    TaskCalendarDay as SlintTaskCalendarDay, TaskCategoryChip as SlintTaskCategoryChip,
-    TaskRow as SlintTaskRow, TaskTypeAdminItem as SlintTaskTypeAdminItem,
-    VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
+    CropRow as SlintCropRow, DetailLine as SlintDetailLine,
+    FamilyAdminItem as SlintFamilyAdminItem, GanttBar as SlintGanttBar,
+    LocationItem as SlintLocationItem, MainWindow, PaletteColor as SlintPaletteColor,
+    PlantingRow as SlintPlantingRow, PlantingTaskRow as SlintPlantingTaskRow,
+    StrataItem as SlintStrataItem, TaskCalendarDay as SlintTaskCalendarDay,
+    TaskCategoryChip as SlintTaskCategoryChip, TaskRow as SlintTaskRow,
+    TaskTypeAdminItem as SlintTaskTypeAdminItem, VarietyRow as SlintVarietyRow,
+    YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
 /// A destructive action awaiting the user's confirmation in the shared dialog
@@ -82,6 +86,8 @@ enum PendingDelete {
     Variety(String),
     /// Location id (a row in the Lieux tree).
     Location(String),
+    /// Family id (a row in the Familles catalog).
+    Family(String),
 }
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -147,6 +153,9 @@ struct UiState {
     /// Stringified `TaskTypeId` currently being edited in the catalog
     /// form; empty in create mode.
     editing_task_type_id: String,
+    /// Stringified `FamilyId` currently being edited in the Familles form;
+    /// empty in create mode.
+    editing_family_id: String,
     /// Stringified `CropId` currently edited in the Cultures crop form; empty
     /// in create mode.
     editing_crop_id: String,
@@ -259,6 +268,7 @@ fn main() -> Result<()> {
         task_type_admin_ids: Vec::new(),
         task_type_category_keys: Vec::new(),
         editing_task_type_id: String::new(),
+        editing_family_id: String::new(),
         editing_crop_id: String::new(),
         editing_location_id: String::new(),
         task_filter_categories: all_category_keys().into_iter().collect(),
@@ -701,6 +711,7 @@ fn main() -> Result<()> {
                 Some(PendingDelete::Crop(id)) => do_delete_crop(&window, &mut s, &id),
                 Some(PendingDelete::Variety(id)) => do_delete_variety(&window, &mut s, &id),
                 Some(PendingDelete::Location(id)) => do_delete_location(&window, &mut s, &id),
+                Some(PendingDelete::Family(id)) => do_delete_family(&window, &mut s, &id),
                 None => {}
             }
         });
@@ -1504,6 +1515,86 @@ fn main() -> Result<()> {
         });
     }
 
+    // --- Families: enter the page from the sidebar ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_navigate_families(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            if let Err(e) = open_families_page(&window, &mut s) {
+                tracing::error!(error = %e, "failed to open families page");
+            }
+        });
+    }
+    // --- Families: Save (create OR update based on is_edit_mode) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_families_save(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            match try_save_family_form(&window, &mut s) {
+                Ok(()) => {
+                    if let Err(e) = refresh_families(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh families after save");
+                        return;
+                    }
+                    reset_families_form_to_create(&window, &mut s);
+                }
+                Err(e) => {
+                    let (text, is_err) = render_family_form_error(s.app.i18n(), e);
+                    window.set_families_status_text(text);
+                    window.set_families_status_is_error(is_err);
+                }
+            }
+        });
+    }
+    // --- Families: Cancel edit (return form to create mode) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_families_cancel_edit(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            reset_families_form_to_create(&window, &mut s);
+        });
+    }
+    // --- Families: Edit a row → pre-fill the form in edit mode ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_families_edit_row(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            if let Err(e) = open_family_form_for_edit(&window, &mut s, &id) {
+                tracing::error!(error = %e, "failed to open family edit form");
+            }
+        });
+    }
+    // --- Families: Delete a row (blocked at DB layer if in use) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_families_delete_row(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            s.pending_delete = Some(PendingDelete::Family(id.to_string()));
+            window.set_confirm_message(SharedString::from(s.app.i18n().t("confirm-delete-family")));
+            window.set_confirm_visible(true);
+        });
+    }
+
     // --- Create variety ---
     {
         let state = Rc::clone(&state);
@@ -1575,11 +1666,15 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_gantt_today_day(today_doy);
 
     // Sidebar nav
+    window.set_nav_group_planning_text(SharedString::from(i18n.t("nav-group-planning")));
+    window.set_nav_group_catalog_text(SharedString::from(i18n.t("nav-group-catalog")));
+    window.set_nav_group_system_text(SharedString::from(i18n.t("nav-group-system")));
     window.set_nav_home_text(SharedString::from(i18n.t("nav-home")));
     window.set_nav_plantings_text(SharedString::from(i18n.t("nav-plantings")));
     window.set_nav_cultures_text(SharedString::from(i18n.t("nav-cultures")));
     window.set_nav_locations_text(SharedString::from(i18n.t("nav-locations")));
     window.set_nav_strata_text(SharedString::from(i18n.t("nav-strata")));
+    window.set_nav_families_text(SharedString::from(i18n.t("nav-families")));
     window.set_nav_crop_map_text(SharedString::from(i18n.t("nav-crop-map")));
     window.set_nav_help_text(SharedString::from(i18n.t("nav-help")));
 
@@ -1813,6 +1908,31 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_task_types_edit_text(SharedString::from(i18n.t("btn-task-type-edit")));
     window.set_task_types_delete_text(SharedString::from(i18n.t("btn-task-type-delete")));
     window.set_task_types_in_use_text(SharedString::from(i18n.t("task-type-in-use")));
+
+    // Families catalog
+    window.set_families_title_text(SharedString::from(i18n.t("title-families")));
+    window.set_families_list_title(SharedString::from(i18n.t("families-list-title")));
+    window.set_families_empty_text(SharedString::from(i18n.t("families-empty")));
+    window.set_families_form_section_create(SharedString::from(
+        i18n.t("families-form-section-create"),
+    ));
+    window.set_families_form_section_edit(SharedString::from(i18n.t("families-form-section-edit")));
+    window.set_families_label_name(SharedString::from(i18n.t("label-family-name")));
+    window.set_families_placeholder_name(SharedString::from(i18n.t("placeholder-family-name")));
+    window.set_families_label_latin(SharedString::from(i18n.t("label-family-latin")));
+    window.set_families_placeholder_latin(SharedString::from(i18n.t("placeholder-family-latin")));
+    window.set_families_label_description(SharedString::from(i18n.t("label-family-description")));
+    window.set_families_placeholder_description(SharedString::from(
+        i18n.t("placeholder-family-description"),
+    ));
+    window.set_families_label_color(SharedString::from(i18n.t("label-family-color")));
+    window.set_families_placeholder_color(SharedString::from(i18n.t("placeholder-family-color")));
+    window.set_families_hint_color(SharedString::from(i18n.t("hint-family-color")));
+    window.set_families_btn_save_text(SharedString::from(i18n.t("btn-family-save")));
+    window.set_families_btn_cancel_text(SharedString::from(i18n.t("btn-family-cancel")));
+    window.set_families_edit_text(SharedString::from(i18n.t("btn-family-edit")));
+    window.set_families_delete_text(SharedString::from(i18n.t("btn-family-delete")));
+    window.set_families_in_use_text(SharedString::from(i18n.t("family-in-use")));
 
     // Plantings page
     window.set_plantings_title_text(SharedString::from(i18n.t("title-plantings")));
@@ -4187,6 +4307,7 @@ fn reset_task_types_form_to_create(window: &MainWindow, state: &mut UiState) {
 
 /// First-time entry into the catalog page: load categories + list, blank form.
 fn open_task_types_for_create(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    window.set_task_types_color_palette(ModelRc::new(VecModel::from(color_chooser_palette())));
     populate_task_type_categories(window, state);
     refresh_task_types(window, state)?;
     reset_task_types_form_to_create(window, state);
@@ -4291,6 +4412,184 @@ fn render_task_type_form_error(i18n: &pomone_app::I18n, err: FormError) -> (Shar
         }
     };
     (SharedString::from(msg), true)
+}
+
+/// Reload the Families admin list into the Slint model (colour parsed for the
+/// swatch, raw hex kept for form pre-fill).
+fn refresh_families(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let rows: Vec<FamilyAdminRow> = state
+        .runtime
+        .block_on(async { list_families_admin(state.app.repo()).await })
+        .context("failed to load families")?;
+    let items: Vec<SlintFamilyAdminItem> = rows
+        .into_iter()
+        .map(|r| SlintFamilyAdminItem {
+            id: SharedString::from(r.id),
+            name: SharedString::from(r.name),
+            latin_name: SharedString::from(r.latin_name),
+            color: parse_hex_color(&r.color),
+            color_hex: SharedString::from(r.color),
+            in_use: r.in_use,
+        })
+        .collect();
+    window.set_families_items(ModelRc::new(VecModel::from(items)));
+    Ok(())
+}
+
+/// Reset the Families form to a blank "create" state.
+fn reset_families_form_to_create(window: &MainWindow, state: &mut UiState) {
+    state.editing_family_id.clear();
+    window.set_families_is_edit_mode(false);
+    window.set_families_form_name(SharedString::from(""));
+    window.set_families_form_latin(SharedString::from(""));
+    window.set_families_form_description(SharedString::from(""));
+    window.set_families_form_color(SharedString::from(DEFAULT_FAMILY_COLOR));
+    window.set_families_form_color_preview(parse_hex_color(DEFAULT_FAMILY_COLOR));
+    window.set_families_status_text(SharedString::from(""));
+    window.set_families_status_is_error(false);
+}
+
+/// Curated palette offered by the popup colour chooser (shared by the Families
+/// and Task Types forms). A spread of hues that read on both the light and dark
+/// surfaces; users can still type any custom hex. Kept at a multiple of the
+/// picker's column count for a tidy grid.
+fn color_chooser_palette() -> Vec<SlintPaletteColor> {
+    const HEXES: &[&str] = &[
+        "#B85C38", "#A64238", "#C4622F", "#B07C25", "#C89A3A", "#8A9A2E", "#6FAF7A", "#4E8C5A",
+        "#3C6E47", "#244529", "#5F9F8B", "#4F7F8F", "#3E6B87", "#6B4E8C", "#9A6E5C", "#7A6A5C",
+        "#6B5D4D", "#A0518A",
+    ];
+    HEXES
+        .iter()
+        .map(|hex| SlintPaletteColor {
+            hex: SharedString::from(*hex),
+            color: parse_hex_color(hex),
+        })
+        .collect()
+}
+
+/// First-time entry into the Families page: load the list, blank form.
+fn open_families_page(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    window.set_families_color_palette(ModelRc::new(VecModel::from(color_chooser_palette())));
+    refresh_families(window, state)?;
+    reset_families_form_to_create(window, state);
+    window.set_current_page(SharedString::from("families"));
+    Ok(())
+}
+
+/// Load one family into the form and switch to edit mode.
+fn open_family_form_for_edit(window: &MainWindow, state: &mut UiState, id: &str) -> Result<()> {
+    refresh_families(window, state)?;
+    let form: FamilyEditForm = state
+        .runtime
+        .block_on(async { get_family_for_edit(state.app.repo(), id).await })
+        .context("failed to load family for edit")?;
+    state.editing_family_id.clone_from(&form.id);
+    window.set_families_is_edit_mode(true);
+    window.set_families_form_color_preview(parse_hex_color(&form.color));
+    window.set_families_form_name(SharedString::from(form.name));
+    window.set_families_form_latin(SharedString::from(form.latin_name));
+    window.set_families_form_description(SharedString::from(form.description));
+    window.set_families_form_color(SharedString::from(form.color));
+    window.set_families_status_text(SharedString::from(""));
+    window.set_families_status_is_error(false);
+    Ok(())
+}
+
+/// Persist the Families form (create OR update based on edit mode).
+fn try_save_family_form(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
+    let name = window.get_families_form_name().to_string();
+    if name.trim().is_empty() {
+        return Err(FormError::Validation(i18n.t("error-name-required")));
+    }
+    let latin = window.get_families_form_latin().to_string();
+    let description = window.get_families_form_description().to_string();
+    let color = window.get_families_form_color().to_string();
+    if color.trim().is_empty() {
+        return Err(FormError::Validation(i18n.t("error-family-color-required")));
+    }
+
+    if window.get_families_is_edit_mode() {
+        let id = state.editing_family_id.clone();
+        if id.is_empty() {
+            return Err(FormError::Validation(
+                i18n.t("error-family-edit-id-missing"),
+            ));
+        }
+        state
+            .runtime
+            .block_on(async {
+                update_family(
+                    state.app.repo(),
+                    &id,
+                    name.trim(),
+                    latin.trim(),
+                    description.trim(),
+                    color.trim(),
+                )
+                .await
+            })
+            .map_err(FormError::Service)?;
+    } else {
+        state
+            .runtime
+            .block_on(async {
+                create_family(
+                    state.app.repo(),
+                    name.trim(),
+                    latin.trim(),
+                    description.trim(),
+                    color.trim(),
+                )
+                .await
+                .map(|_| ())
+            })
+            .map_err(FormError::Service)?;
+    }
+    Ok(())
+}
+
+/// Render a Families form error, special-casing the `family_in_use` sentinel.
+fn render_family_form_error(i18n: &pomone_app::I18n, err: FormError) -> (SharedString, bool) {
+    let msg = match err {
+        FormError::Validation(text) => {
+            let mut args = FluentArgs::new();
+            args.set("message", text);
+            i18n.t_args("status-validation-failed", &args)
+        }
+        FormError::Service(AppError::Inconsistent(ref code)) if code == "family_in_use" => {
+            i18n.t("error-family-in-use")
+        }
+        FormError::Service(app_err) => {
+            let mut args = FluentArgs::new();
+            args.set("message", app_err.to_string());
+            i18n.t_args("status-family-failed", &args)
+        }
+    };
+    (SharedString::from(msg), true)
+}
+
+/// Execute a confirmed family deletion.
+fn do_delete_family(window: &MainWindow, s: &mut UiState, id: &str) {
+    let result = s
+        .runtime
+        .block_on(async { delete_family(s.app.repo(), id).await });
+    match result {
+        Ok(()) => {
+            if let Err(e) = refresh_families(window, s) {
+                tracing::error!(error = %e, "failed to refresh families after delete");
+            }
+            if s.editing_family_id == id {
+                reset_families_form_to_create(window, s);
+            }
+        }
+        Err(e) => {
+            let (text, is_err) = render_family_form_error(s.app.i18n(), FormError::Service(e));
+            window.set_families_status_text(text);
+            window.set_families_status_is_error(is_err);
+        }
+    }
 }
 
 /// The eight stable category keys, in the same order as the

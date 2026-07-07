@@ -11,41 +11,48 @@ use uuid::Uuid;
 #[async_trait]
 impl FamilyRepo for MariaDbRepository {
     async fn family_get(&self, id: FamilyId) -> DbResult<Option<Family>> {
-        let row = sqlx::query("SELECT id, name, latin_name, description FROM family WHERE id = ?")
-            .bind(id.as_uuid())
-            .fetch_optional(&self.pool)
-            .await?;
+        let row =
+            sqlx::query("SELECT id, name, latin_name, description, color FROM family WHERE id = ?")
+                .bind(id.as_uuid())
+                .fetch_optional(&self.pool)
+                .await?;
         row.map(row_to_family).transpose()
     }
 
     async fn family_list(&self) -> DbResult<Vec<Family>> {
-        let rows =
-            sqlx::query("SELECT id, name, latin_name, description FROM family ORDER BY name")
-                .fetch_all(&self.pool)
-                .await?;
+        let rows = sqlx::query(
+            "SELECT id, name, latin_name, description, color FROM family ORDER BY name",
+        )
+        .fetch_all(&self.pool)
+        .await?;
         rows.into_iter().map(row_to_family).collect()
     }
 
     async fn family_create(&self, family: &Family) -> DbResult<()> {
-        sqlx::query("INSERT INTO family (id, name, latin_name, description) VALUES (?, ?, ?, ?)")
-            .bind(family.id.as_uuid())
-            .bind(&family.name)
-            .bind(family.latin_name.as_deref())
-            .bind(family.description.as_deref())
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "INSERT INTO family (id, name, latin_name, description, color) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(family.id.as_uuid())
+        .bind(&family.name)
+        .bind(family.latin_name.as_deref())
+        .bind(family.description.as_deref())
+        .bind(&family.color)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
     async fn family_update(&self, family: &Family) -> DbResult<()> {
-        let result =
-            sqlx::query("UPDATE family SET name = ?, latin_name = ?, description = ? WHERE id = ?")
-                .bind(&family.name)
-                .bind(family.latin_name.as_deref())
-                .bind(family.description.as_deref())
-                .bind(family.id.as_uuid())
-                .execute(&self.pool)
-                .await?;
+        let result = sqlx::query(
+            "UPDATE family SET name = ?, latin_name = ?, description = ?, color = ? WHERE id = ?",
+        )
+        .bind(&family.name)
+        .bind(family.latin_name.as_deref())
+        .bind(family.description.as_deref())
+        .bind(&family.color)
+        .bind(family.id.as_uuid())
+        .execute(&self.pool)
+        .await?;
         if result.rows_affected() == 0 {
             return Err(DbError::NotFound {
                 kind: "family",
@@ -77,6 +84,7 @@ fn row_to_family(row: sqlx::mysql::MySqlRow) -> DbResult<Family> {
         name: row.try_get("name")?,
         latin_name: row.try_get("latin_name")?,
         description: row.try_get("description")?,
+        color: row.try_get("color")?,
     })
 }
 
@@ -122,10 +130,13 @@ mod tests {
         repo.family_create(&f).await.unwrap();
         let updated = Family {
             name: "New".into(),
+            color: "#123456".into(),
             ..f.clone()
         };
         repo.family_update(&updated).await.unwrap();
-        assert_eq!(repo.family_get(f.id).await.unwrap().unwrap().name, "New");
+        let got = repo.family_get(f.id).await.unwrap().unwrap();
+        assert_eq!(got.name, "New");
+        assert_eq!(got.color, "#123456");
 
         repo.family_delete(f.id).await.unwrap();
         assert!(repo.family_get(f.id).await.unwrap().is_none());
