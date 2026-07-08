@@ -25,6 +25,20 @@ ignore = [
     # `rustls-pemfile` is unmaintained (no CVE). Pulled transitively by
     # sqlx-tls / testcontainers-bollard. Watching for a maintained fork.
     "RUSTSEC-2025-0134",
+    # `quick-xml` 0.39.3: quadratic run time on duplicate-attribute checks
+    # and unbounded namespace-declaration allocation (both DoS-only, no
+    # memory corruption). Pulled transitively via wayland-scanner ->
+    # smithay-client-toolkit -> winit -> Slint's winit backend. We only
+    # parse trusted, locally-generated Wayland protocol XML at build
+    # time, never untrusted input. No fix available yet: wayland-scanner
+    # pins this quick-xml range.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+    # `ttf-parser` is unmaintained (no CVE). Pulled transitively via
+    # fontdb/usvg/resvg/rustybuzz and owned_ttf_parser, all part of
+    # Slint's rendering stack. No safe upgrade available; revisit if
+    # Slint migrates to `skrifa`.
+    "RUSTSEC-2026-0192",
 ]
 
 [licenses]
