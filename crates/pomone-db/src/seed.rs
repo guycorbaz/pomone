@@ -90,42 +90,75 @@ fn default_location_kinds() -> Vec<LocationKind> {
 /// Common botanical families seen across market gardening, field crops,
 /// orcharding, and agroforestry.
 fn default_families() -> Vec<Family> {
+    // Each family gets a distinct starting colour (users can recolour any of
+    // them in the Families screen). Hues loosely evoke the family — terracotta
+    // for the nightshades, greens for leafy/brassica, browns for the nut trees.
     [
         (
             "Solanacées",
             "Solanaceae",
             "tomate, pomme de terre, poivron, aubergine",
+            "#B85C38",
         ),
         (
             "Brassicacées",
             "Brassicaceae",
             "chou, radis, navet, moutarde, roquette",
+            "#6FAF7A",
         ),
-        ("Apiacées", "Apiaceae", "carotte, persil, céleri, fenouil"),
-        ("Fabacées", "Fabaceae", "haricot, pois, fève, lentille"),
+        (
+            "Apiacées",
+            "Apiaceae",
+            "carotte, persil, céleri, fenouil",
+            "#B07C25",
+        ),
+        (
+            "Fabacées",
+            "Fabaceae",
+            "haricot, pois, fève, lentille",
+            "#5F9F8B",
+        ),
         (
             "Astéracées",
             "Asteraceae",
             "salade, chicorée, topinambour, artichaut",
+            "#3C6E47",
         ),
         (
             "Cucurbitacées",
             "Cucurbitaceae",
             "courge, courgette, concombre, melon",
+            "#4F7F8F",
         ),
-        ("Liliacées", "Liliaceae", "ail, oignon, poireau, asperge"),
+        (
+            "Liliacées",
+            "Liliaceae",
+            "ail, oignon, poireau, asperge",
+            "#9A6E5C",
+        ),
         (
             "Rosacées",
             "Rosaceae",
             "pommier, poirier, prunier, fraisier, framboisier",
+            "#A64238",
         ),
-        ("Bétulacées", "Betulaceae", "noisetier, bouleau, aulne"),
-        ("Juglandacées", "Juglandaceae", "noyer"),
-        ("Fagacées", "Fagaceae", "châtaignier, chêne, hêtre"),
+        (
+            "Bétulacées",
+            "Betulaceae",
+            "noisetier, bouleau, aulne",
+            "#7A6A5C",
+        ),
+        ("Juglandacées", "Juglandaceae", "noyer", "#6B5D4D"),
+        (
+            "Fagacées",
+            "Fagaceae",
+            "châtaignier, chêne, hêtre",
+            "#244529",
+        ),
     ]
     .into_iter()
-    .map(|(name, latin, desc)| {
-        Family::new(name, Some(latin.into()), Some(desc.into()))
+    .map(|(name, latin, desc, color)| {
+        Family::new_with_color(name, Some(latin.into()), Some(desc.into()), color)
             .expect("static seed Family is always valid")
     })
     .collect()

@@ -1,4 +1,10 @@
 import { LineEdit } from "std-widgets.slint";
+
+// Material Icons — the same monochrome glyph font Qrop ships. Embedding it
+// lets us tint icons with our palette (they inherit `color`) and keeps the
+// look crisp under the software renderer. Apache-2.0 licensed.
+import "../assets/fonts/MaterialIcons-Regular.ttf";
+
 // Pomone design tokens.
 //
 // Two globals are exposed:
@@ -58,22 +64,36 @@ export global Theme {
     out property <length> space-sm: 8px;
     out property <length> space-md: 12px;
     out property <length> space-lg: 16px;
-    out property <length> space-xl: 24px;
-    out property <length> space-2xl: 32px;
-    out property <length> space-3xl: 48px;
+    out property <length> space-xl: 20px;
+    out property <length> space-2xl: 24px;
+    out property <length> space-3xl: 40px;
 
-    // Type scale.
-    out property <length> font-size-h1: 38px;
-    out property <length> font-size-h2: 28px;
+    // Type scale. Nudged down from the original (body 18) towards Qrop's denser
+    // feel, but kept comfortably readable on HiDPI desktop displays — a middle
+    // ground, not Qrop's full 14px spreadsheet density.
+    out property <length> font-size-h1: 36px;
+    out property <length> font-size-h2: 27px;
     out property <length> font-size-h3: 22px;
     out property <length> font-size-body: 18px;
     out property <length> font-size-label: 17px;
-    out property <length> font-size-numeric: 32px;
+    out property <length> font-size-numeric: 31px;
 
     out property <int> font-weight-regular: 400;
     out property <int> font-weight-medium: 500;
     out property <int> font-weight-semibold: 600;
     out property <int> font-weight-bold: 700;
+
+    // Icon font family (embedded at the top of this file).
+    out property <string> icon-font: "Material Icons";
+    out property <length> icon-size: 21px;
+
+    // Control heights — a dense scale echoing Qrop's Material "Dense" variant
+    // (Qrop: table rows 42, fields 32, buttons 36, toolbar 48). Screens should
+    // read these instead of hard-coding pixel heights so density stays uniform.
+    out property <length> control-height: 42px;
+    out property <length> control-height-compact: 36px;
+    out property <length> row-height: 46px;
+    out property <length> field-height: 42px;
 
     // Radii.
     out property <length> radius-sm: 4px;
@@ -88,6 +108,176 @@ export global Theme {
     // Animation timing — kept short so the UI feels snappy on slower hardware.
     out property <duration> transition-fast: 120ms;
     out property <duration> transition-medium: 200ms;
+}
+
+// Named Material Icons glyphs. Screens reference `Icons.home` rather than raw
+// code points, so the icon vocabulary is discoverable in one place and easy to
+// re-map. Render these in a `Text` with `font-family: Theme.icon-font`.
+export global Icons {
+    out property <string> home: "\u{e88a}";
+    out property <string> plantings: "\u{e25c}";   // local_florist
+    out property <string> tasks: "\u{e85d}";        // assignment
+    out property <string> agenda: "\u{e878}";       // event
+    out property <string> cultures: "\u{e63f}";     // eco (leaf)
+    out property <string> families: "\u{e87b}";     // spa (flower)
+    out property <string> locations: "\u{e55f}";    // place
+    out property <string> strata: "\u{e53b}";       // layers
+    out property <string> crop-map: "\u{e55b}";     // map
+    out property <string> settings: "\u{e8b8}";     // settings
+    out property <string> help: "\u{e8fd}";         // help_outline
+}
+
+// One entry of a `ColorPicker` palette: the display colour plus the raw hex
+// string the form stores. Rust builds the palette (parsing hex → colour once)
+// and the picker emits the hex back on selection.
+export struct PaletteColor {
+    hex: string,
+    color: color,
+}
+
+// A swatch-grid colour chooser — a software-renderer-friendly alternative to a
+// native colour dialog. Click a swatch to pick; the current selection gets a
+// ring. `picked` carries both the hex (for the form field) and the resolved
+// colour (so the caller can update a live preview without re-parsing).
+export component ColorPicker inherits Rectangle {
+    in property <[PaletteColor]> palette;
+    // Hex of the currently-selected colour; the matching swatch is ringed.
+    in property <string> selected-hex;
+    callback picked(string, color);
+
+    property <int> columns: 6;
+    property <length> cell: 28px;
+    property <length> gap: 8px;
+    property <int> row-count: Math.ceil(palette.length / columns);
+
+    horizontal-stretch: 0;
+    // Hug the grid: `columns` swatches across, `row-count` down.
+    min-width: columns * cell + (columns - 1) * gap;
+    height: row-count * cell + max(0, row-count - 1) * gap;
+
+    for item[idx] in palette: Rectangle {
+        x: mod(idx, root.columns) * (root.cell + root.gap);
+        y: floor(idx / root.columns) * (root.cell + root.gap);
+        width: root.cell;
+        height: root.cell;
+        border-radius: Theme.radius-sm;
+        background: item.color;
+        // Selected swatch: a light ring drawn as an inset border.
+        border-width: item.hex == root.selected-hex ? Theme.focus-ring-width : Theme.border-width;
+        border-color: item.hex == root.selected-hex ? Palette.focus-ring : Palette.border-strong;
+
+        swatch-touch := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.picked(item.hex, item.color); }
+        }
+
+        // Checkmark on the selected swatch for a clear, colour-blind-safe cue.
+        if item.hex == root.selected-hex: Text {
+            text: "✓";
+            color: Palette.text-on-primary;
+            font-size: Theme.font-size-label;
+            font-weight: Theme.font-weight-bold;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            width: 100%;
+            height: 100%;
+        }
+    }
+}
+
+// Compact colour field that opens the swatch grid in a popup — saves vertical
+// space in a form versus an always-visible grid. Shows the current colour +
+// hex + a caret; click to open. Picking a swatch (or typing a custom hex in the
+// popup) updates `hex`/`preview` in place, so a host just two-way binds both.
+export component ColorPickerField inherits Rectangle {
+    in property <[PaletteColor]> palette;
+    in-out property <string> hex;
+    in-out property <color> preview;
+    in property <bool> enabled: true;
+    in property <string> custom-placeholder;
+
+    height: Theme.field-height;
+    min-width: 160px;
+    border-radius: Theme.radius-md;
+    border-width: Theme.border-width;
+    border-color: enabled ? Palette.border-strong : Palette.border;
+    background: enabled ? Palette.surface : Palette.surface-alt;
+
+    touch := TouchArea {
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => {
+            if (root.enabled) {
+                popup.show();
+            }
+        }
+
+        HorizontalLayout {
+            padding-left: Theme.space-sm;
+            padding-right: Theme.space-sm;
+            spacing: Theme.space-sm;
+
+            // Current-colour swatch.
+            Rectangle {
+                width: 22px;
+                height: 22px;
+                y: (parent.height - self.height) / 2;
+                border-radius: Theme.radius-sm;
+                border-width: Theme.border-width;
+                border-color: Palette.border-strong;
+                background: root.preview;
+            }
+            Text {
+                text: root.hex;
+                color: Palette.text-primary;
+                font-size: Theme.font-size-body;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
+            Text {
+                text: "▾";
+                color: Palette.text-muted;
+                font-size: Theme.font-size-label;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0;
+        y: root.height + 2px;
+
+        Rectangle {
+            background: Palette.surface;
+            border-width: Theme.border-width;
+            border-color: Palette.border-strong;
+            border-radius: Theme.radius-md;
+
+            VerticalLayout {
+                padding: Theme.space-md;
+                spacing: Theme.space-md;
+
+                ColorPicker {
+                    palette: root.palette;
+                    selected-hex: root.hex;
+                    picked(picked-hex, picked-color) => {
+                        root.hex = picked-hex;
+                        root.preview = picked-color;
+                        popup.close();
+                    }
+                }
+
+                // Free hex entry for a fully custom colour. Uses the base
+                // LineEdit (defined-later `ThemedLineEdit` isn't in scope here)
+                // with our body font size.
+                LineEdit {
+                    font-size: Theme.font-size-body;
+                    text <=> root.hex;
+                    placeholder-text: root.custom-placeholder;
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +304,7 @@ export component PrimaryButton inherits Rectangle {
     in property <bool> enabled: true;
     callback clicked();
 
-    height: 48px;
+    height: Theme.control-height;
     // Hug content + comfortable padding so long labels don't get elided
     // ("Tester la connexion" was being cut to "Tester la c" before).
     min-width: max(120px, button-text.preferred-width + 2 * Theme.space-xl);
@@ -190,7 +380,7 @@ export component SecondaryButton inherits Rectangle {
     property <length> pad: compact ? Theme.space-md : Theme.space-xl;
     property <brush> edge: danger ? Palette.danger : Palette.border-strong;
 
-    height: compact ? 34px : 48px;
+    height: compact ? Theme.control-height-compact : Theme.control-height;
     // Hug content + comfortable padding (see PrimaryButton's note).
     min-width: max(compact ? 72px : 120px, secondary-text.preferred-width + 2 * root.pad);
     horizontal-stretch: 0;
@@ -280,7 +470,7 @@ export component ThemedComboBox inherits Rectangle {
     in-out property <int> current-index: 0;
     in property <bool> enabled: true;
 
-    height: 48px;
+    height: Theme.field-height;
     min-width: 120px;
     border-radius: Theme.radius-md;
     border-width: Theme.border-width;
@@ -379,7 +569,7 @@ export component ThemedComboBox inherits Rectangle {
                 padding: 4px;
                 spacing: 0px;
                 for item[idx] in root.model: option := Rectangle {
-                    height: 40px;
+                    height: Theme.control-height-compact;
                     border-radius: Theme.radius-sm;
                     background: idx == root.current-index ? Palette.surface-alt
                                 : option-touch.has-hover ? Palette.surface-alt
@@ -411,15 +601,27 @@ export component ThemedComboBox inherits Rectangle {
     }
 }
 
+// Group heading inside the sidebar — a quiet "eyebrow" that separates the
+// navigation into sections so a long flat list doesn't overwhelm.
+export component NavSectionHeader inherits Text {
+    color: Palette.text-muted;
+    font-size: Theme.font-size-label - 2px;
+    font-weight: Theme.font-weight-semibold;
+}
+
 // Sidebar navigation button. Filled in primary green when `selected`, ghost
 // otherwise (hover state lifts the background slightly). Text is aligned to
 // the left like every desktop sidebar.
 export component NavButton inherits Rectangle {
     in property <string> text;
+    // Material Icons glyph (e.g. `Icons.home`). Empty string = no icon.
+    in property <string> icon;
     in property <bool> selected: false;
     callback clicked();
 
-    height: 48px;
+    property <brush> fg: selected ? Palette.text-on-primary : Palette.text-primary;
+
+    height: Theme.control-height-compact;
     border-radius: Theme.radius-md;
     background: selected ? Palette.primary
                 : touch.pressed ? Palette.surface-alt
@@ -447,17 +649,31 @@ export component NavButton inherits Rectangle {
             root.clicked();
         }
 
-        Text {
-            text: root.text;
-            color: root.selected ? Palette.text-on-primary : Palette.text-primary;
-            font-size: Theme.font-size-body;
-            font-weight: root.selected ? Theme.font-weight-semibold : Theme.font-weight-medium;
-            horizontal-alignment: left;
-            vertical-alignment: center;
-            x: Theme.space-md;
-            y: 0;
-            width: parent.width - 2 * Theme.space-md;
-            height: parent.height;
+        HorizontalLayout {
+            padding-left: Theme.space-md;
+            padding-right: Theme.space-md;
+            spacing: Theme.space-md;
+
+            if root.icon != "": Text {
+                text: root.icon;
+                font-family: Theme.icon-font;
+                font-size: Theme.icon-size;
+                color: root.fg;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+                width: Theme.icon-size + 2px;
+            }
+
+            Text {
+                text: root.text;
+                color: root.fg;
+                font-size: Theme.font-size-body;
+                font-weight: root.selected ? Theme.font-weight-semibold : Theme.font-weight-medium;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                overflow: elide;
+            }
         }
     }
 

@@ -9,8 +9,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::ids::TaskTypeId;
-use crate::validation::{normalize_optional, require_name};
-use crate::{DomainError, DomainResult};
+use crate::validation::{normalize_optional, require_hex_color, require_name};
+use crate::DomainResult;
 
 /// Stable identity of what a task type represents, independent of the
 /// user-visible name. Lets PR E's auto-generator pick the right type to
@@ -72,18 +72,6 @@ impl TaskType {
             color: require_hex_color(color.into())?,
             ..self
         })
-    }
-}
-
-fn require_hex_color(raw: String) -> DomainResult<String> {
-    let trimmed = raw.trim();
-    let ok = trimmed.starts_with('#')
-        && matches!(trimmed.len(), 4 | 7)
-        && trimmed[1..].chars().all(|c| c.is_ascii_hexdigit());
-    if ok {
-        Ok(trimmed.to_owned())
-    } else {
-        Err(DomainError::InvalidHexColor(raw))
     }
 }
 

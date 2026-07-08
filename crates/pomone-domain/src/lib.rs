@@ -39,7 +39,7 @@ mod validation;
 // Re-export the most commonly used types at the crate root for ergonomics.
 pub use crop::{Crop, Lifespan, ProductivePattern, PruningSeason};
 pub use error::{DomainError, DomainResult};
-pub use family::Family;
+pub use family::{Family, DEFAULT_FAMILY_COLOR};
 pub use harvest::YearlyHarvest;
 pub use ids::{
     CropId, FamilyId, LocationId, LocationKindId, PlantingId, StrataId, TaskId, TaskImplementId,

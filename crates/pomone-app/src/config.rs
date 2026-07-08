@@ -76,6 +76,41 @@ impl AppConfig {
     }
 }
 
+/// Persisted main-window size (logical pixels), so the app reopens at the size
+/// the user last left it. Stored in its own file rather than `AppConfig` so it
+/// never races the backend-config save path (which `swap_backend` rewrites).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WindowGeometry {
+    pub width: u32,
+    pub height: u32,
+}
+
+impl WindowGeometry {
+    /// Load the saved geometry, or `None` if absent / unreadable / malformed
+    /// (any failure just means "use the default size").
+    #[must_use]
+    pub fn load() -> Option<Self> {
+        let path = window_geometry_path().ok()?;
+        let text = std::fs::read_to_string(path).ok()?;
+        toml::from_str(&text).ok()
+    }
+
+    /// Save the geometry to its OS-specific file (creating parent dirs).
+    pub fn save(self) -> AppResult<()> {
+        let path = window_geometry_path()?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&path, toml::to_string_pretty(&self)?)?;
+        Ok(())
+    }
+}
+
+/// OS-specific path of the window-geometry file.
+pub fn window_geometry_path() -> AppResult<PathBuf> {
+    Ok(project_dirs()?.config_dir().join("window.toml"))
+}
+
 fn project_dirs() -> AppResult<ProjectDirs> {
     ProjectDirs::from("", "", "pomone")
         .ok_or_else(|| AppError::Config("cannot determine OS user directories".into()))

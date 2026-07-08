@@ -1,25 +1,24 @@
-// Pomone — Task Types catalog screen.
+// Pomone — Families catalog screen.
 //
-// Manages the lookup table behind every task's "type" field (Semis,
-// Repiquage, Récolte, Désherbage…). Pre-seeded with 8 defaults — one per
-// `TaskCategory` — that the user can rename, recolor, or extend.
+// Manages the botanical families (Solanacées, Rosacées…) and, above all,
+// their user-configurable colour, which tints plantings and the crop map by
+// family (mirrors Qrop's `family.color`). Pre-seeded with 11 families the
+// user can rename, recolour, or extend.
 //
-// Layout mirrors `strata.slint`: list on the left (2/3 width), form on
-// the right (1/3 width). The form doubles as create + edit; the host
-// flips `is-edit-mode` on row-click and pre-fills the in-out properties.
+// Layout mirrors `task_types.slint`: list on the left (2/3), form on the
+// right (1/3). The form doubles as create + edit; the host flips
+// `is-edit-mode` on row-click and pre-fills the in-out properties.
 
-import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox, ColorPickerField, PaletteColor } from "theme.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ColorPickerField, PaletteColor } from "theme.slint";
 import { ScrollView, ListView } from "std-widgets.slint";
 
-export struct TaskTypeAdminItem {
+export struct FamilyAdminItem {
     id: string,
     name: string,
-    /// Localized category label, already resolved by Rust (e.g. "Semis").
-    category-label: string,
-    /// Resolved color for the swatch. Parsed Rust-side from the hex string.
+    latin-name: string,
+    /// Resolved colour for the swatch. Parsed Rust-side from the hex string.
     color: color,
-    /// Raw hex (e.g. "#3C6E47") — surfaced so the row can pre-fill the
-    /// form via Rust without an extra round-trip.
+    /// Raw hex (e.g. "#B85C38") — surfaced so the row can pre-fill the form.
     color-hex: string,
     in-use: bool,
 }
@@ -34,8 +33,8 @@ component ColorSwatch inherits Rectangle {
     background: swatch-color;
 }
 
-component TaskTypeRowView inherits Card {
-    in property <TaskTypeAdminItem> entry;
+component FamilyRowView inherits Card {
+    in property <FamilyAdminItem> entry;
     in property <string> edit-text;
     in property <string> delete-text;
     in property <string> in-use-text;
@@ -61,8 +60,8 @@ component TaskTypeRowView inherits Card {
             }
             HorizontalLayout {
                 spacing: Theme.space-sm;
-                Text {
-                    text: entry.category-label;
+                if entry.latin-name != "": Text {
+                    text: entry.latin-name;
                     color: Palette.text-muted;
                     font-size: Theme.font-size-label;
                     vertical-alignment: center;
@@ -88,7 +87,7 @@ component TaskTypeRowView inherits Card {
     }
 }
 
-export component TaskTypesPage inherits Rectangle {
+export component FamiliesPage inherits Rectangle {
     background: Palette.background;
 
     // Chrome strings
@@ -99,13 +98,17 @@ export component TaskTypesPage inherits Rectangle {
     in property <string> form-section-edit;
     in property <string> label-name;
     in property <string> placeholder-name;
-    in property <string> label-category;
+    in property <string> label-latin;
+    in property <string> placeholder-latin;
+    in property <string> label-description;
+    in property <string> placeholder-description;
     in property <string> label-color;
     in property <string> placeholder-color;
     in property <string> hint-color;
+    // Preset palette for the swatch-grid chooser (built Rust-side).
+    in property <[PaletteColor]> color-palette;
     in property <string> btn-save-text;
     in property <string> btn-cancel-text;
-    in property <string> btn-back-text;
     in property <string> edit-text;
     in property <string> delete-text;
     in property <string> in-use-text;
@@ -113,17 +116,15 @@ export component TaskTypesPage inherits Rectangle {
     in property <bool> status-is-error: false;
 
     // Data
-    in property <[TaskTypeAdminItem]> types;
-    in property <[string]> category-labels;
-    in-out property <int> category-index: 0;
-    // Preset palette for the popup colour chooser (built Rust-side).
-    in property <[PaletteColor]> color-palette;
+    in property <[FamilyAdminItem]> families;
 
     // Form state
     in property <bool> is-edit-mode: false;
     in-out property <string> form-name;
-    in-out property <string> form-color: "#3C6E47";
-    /// Preview color of the swatch. Host sets it on load/reset; picking a
+    in-out property <string> form-latin;
+    in-out property <string> form-description;
+    in-out property <string> form-color: "#6B5D4D";
+    /// Preview colour of the swatch. The host sets it on load/reset; picking a
     /// palette swatch updates it live (in-out so the picker can write it).
     in-out property <color> form-color-preview;
 
@@ -131,26 +132,17 @@ export component TaskTypesPage inherits Rectangle {
     callback cancel();
     callback edit-row(string);
     callback delete-row(string);
-    callback go-back();
 
     ScrollView {
         VerticalLayout {
             padding: Theme.space-2xl;
             spacing: Theme.space-xl;
 
-            HorizontalLayout {
-                spacing: Theme.space-md;
-                Text {
-                    text: title-text;
-                    color: Palette.primary;
-                    font-size: Theme.font-size-h1;
-                    font-weight: Theme.font-weight-bold;
-                    horizontal-stretch: 1;
-                }
-                SecondaryButton {
-                    text: btn-back-text;
-                    clicked => { go-back(); }
-                }
+            Text {
+                text: title-text;
+                color: Palette.primary;
+                font-size: Theme.font-size-h1;
+                font-weight: Theme.font-weight-bold;
             }
 
             HorizontalLayout {
@@ -165,18 +157,18 @@ export component TaskTypesPage inherits Rectangle {
 
                         SectionHeader { text: list-title; }
 
-                        if types.length == 0: Text {
+                        if families.length == 0: Text {
                             text: empty-text;
                             color: Palette.text-muted;
                             font-size: Theme.font-size-body;
                             horizontal-alignment: center;
                         }
-                        if types.length > 0: list-area := Rectangle {
+                        if families.length > 0: list-area := Rectangle {
                             min-height: 320px;
                             preferred-height: 480px;
                             vertical-stretch: 1;
                             ListView {
-                                for item in types: TaskTypeRowView {
+                                for item in families: FamilyRowView {
                                     entry: item;
                                     edit-text: edit-text;
                                     delete-text: delete-text;
@@ -216,15 +208,25 @@ export component TaskTypesPage inherits Rectangle {
                         VerticalLayout {
                             spacing: Theme.space-xs;
                             Text {
-                                text: label-category;
+                                text: label-latin;
                                 color: Palette.text-secondary;
                                 font-size: Theme.font-size-label;
                             }
-                            // Category is structural — disabled in edit mode.
-                            ThemedComboBox {
-                                model: category-labels;
-                                current-index <=> category-index;
-                                enabled: category-labels.length > 0 && !is-edit-mode;
+                            ThemedLineEdit {
+                                text <=> form-latin;
+                                placeholder-text: placeholder-latin;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text {
+                                text: label-description;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedLineEdit {
+                                text <=> form-description;
+                                placeholder-text: placeholder-description;
                             }
                         }
                         VerticalLayout {

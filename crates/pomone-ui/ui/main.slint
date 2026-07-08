@@ -6,7 +6,7 @@
 // in-properties, keeping translations and data in a single Rust-side source
 // of truth.
 
-import { Palette, Theme, NavButton, SecondaryButton, PrimaryButton, Card } from "theme.slint";
+import { Palette, Theme, Icons, NavButton, NavSectionHeader, SecondaryButton, PrimaryButton, Card, PaletteColor } from "theme.slint";
 import { HomePage } from "home.slint";
 import { Timeline, GanttBar } from "components/timeline.slint";
 import { PlantingsPage, PlantingRow } from "plantings.slint";
@@ -16,18 +16,21 @@ import { TaskCalendarPage, TaskCalendarDay, TaskRow, TaskCategoryChip } from "ta
 import { AgendaPage, AgendaRow } from "agenda.slint";
 import { TaskFormPage } from "task_form.slint";
 import { TaskTypesPage, TaskTypeAdminItem } from "task_types.slint";
+import { FamiliesPage, FamilyAdminItem } from "families.slint";
 import { CropMapPage, CropMapLaneItem, CropMapBarItem, CropMapLocationOption } from "crop_map.slint";
 import { PlantingDetailPage, DetailLine, YearlyHarvestRow, PlantingTaskRow } from "planting_detail.slint";
 import { StrataPage, StrataItem } from "strata.slint";
 import { SettingsPage } from "settings.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow, LocationItem, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, StrataItem, GanttBar, TaskTypeAdminItem, CropMapLaneItem, CropMapBarItem, CropMapLocationOption }
+export { PlantingRow, CropRow, VarietyRow, LocationItem, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, StrataItem, GanttBar, TaskTypeAdminItem, FamilyAdminItem, PaletteColor, CropMapLaneItem, CropMapBarItem, CropMapLocationOption }
 
 export component MainWindow inherits Window {
     title: "Pomone";
-    preferred-width: 1320px;
-    preferred-height: 860px;
+    // Default size on first launch; overridden at runtime by the last saved
+    // window size (window.toml) when present.
+    preferred-width: 1600px;
+    preferred-height: 1000px;
     min-width: 880px;
     min-height: 600px;
     background: Palette.background;
@@ -62,6 +65,9 @@ export component MainWindow inherits Window {
     in property <string> section-gantt-text;        // Plantings Gantt card header
 
     // ------- Sidebar nav labels -------
+    in property <string> nav-group-planning-text;
+    in property <string> nav-group-catalog-text;
+    in property <string> nav-group-system-text;
     in property <string> nav-home-text;
     in property <string> nav-plantings-text;
     in property <string> nav-tasks-text;
@@ -69,6 +75,7 @@ export component MainWindow inherits Window {
     in property <string> nav-cultures-text;
     in property <string> nav-locations-text;
     in property <string> nav-strata-text;
+    in property <string> nav-families-text;
     in property <string> nav-settings-text;
     in property <string> nav-crop-map-text;
     in property <string> nav-help-text;
@@ -92,6 +99,16 @@ export component MainWindow inherits Window {
     in property <string> empty-state-text;
     in property <[PlantingRow]> plantings;
     in property <string> plants-suffix;
+    // Plantings table column headers + sort state.
+    in property <string> plantings-col-variety;
+    in property <string> plantings-col-location;
+    in property <string> plantings-col-schedule;
+    in property <string> plantings-col-area;
+    in property <string> plantings-col-plants;
+    in property <string> plantings-col-status;
+    in property <string> plantings-sort-column;
+    in property <bool> plantings-sort-asc: true;
+    callback plantings-sort(string);
     in property <string> section-new-text;
     in property <string> label-variety;
     in property <string> label-location;
@@ -504,6 +521,7 @@ export component MainWindow inherits Window {
     in property <[TaskTypeAdminItem]> task-types-items;
     in property <[string]> task-types-category-labels;
     in-out property <int> task-types-category-index: 0;
+    in property <[PaletteColor]> task-types-color-palette;
     in property <bool> task-types-is-edit-mode: false;
     in-out property <string> task-types-form-name;
     in-out property <string> task-types-form-color: "#3C6E47";
@@ -514,6 +532,42 @@ export component MainWindow inherits Window {
     callback task-types-delete-row(string);
     callback navigate-task-types();
     callback navigate-task-types-back();
+
+    // Families catalog (name + configurable colour)
+    in property <string> families-title-text;
+    in property <string> families-list-title;
+    in property <string> families-empty-text;
+    in property <string> families-form-section-create;
+    in property <string> families-form-section-edit;
+    in property <string> families-label-name;
+    in property <string> families-placeholder-name;
+    in property <string> families-label-latin;
+    in property <string> families-placeholder-latin;
+    in property <string> families-label-description;
+    in property <string> families-placeholder-description;
+    in property <string> families-label-color;
+    in property <string> families-placeholder-color;
+    in property <string> families-hint-color;
+    in property <string> families-btn-save-text;
+    in property <string> families-btn-cancel-text;
+    in property <string> families-edit-text;
+    in property <string> families-delete-text;
+    in property <string> families-in-use-text;
+    in-out property <string> families-status-text;
+    in property <bool> families-status-is-error: false;
+    in property <[FamilyAdminItem]> families-items;
+    in property <[PaletteColor]> families-color-palette;
+    in property <bool> families-is-edit-mode: false;
+    in-out property <string> families-form-name;
+    in-out property <string> families-form-latin;
+    in-out property <string> families-form-description;
+    in-out property <string> families-form-color: "#6B5D4D";
+    in property <color> families-form-color-preview;
+    callback families-save();
+    callback families-cancel-edit();
+    callback families-edit-row(string);
+    callback families-delete-row(string);
+    callback navigate-families();
 
     // ------- Crop Map page state -------
     in property <string> crop-map-title-text;
@@ -683,6 +737,11 @@ export component MainWindow inherits Window {
     }
     Timer {
         interval: 4s;
+        running: root.families-status-text != "";
+        triggered => { root.families-status-text = ""; }
+    }
+    Timer {
+        interval: 4s;
         running: root.crop-map-split-status-text != "";
         triggered => { root.crop-map-split-status-text = ""; }
     }
@@ -725,58 +784,96 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                Rectangle { height: Theme.space-md; }
+                Rectangle { height: Theme.space-sm; }
 
+                // Home stands alone above the grouped sections.
                 NavButton {
                     text: nav-home-text;
+                    icon: Icons.home;
                     selected: current-page == "home";
                     clicked => { current-page = "home"; navigate-home(); }
                 }
+
+                // ---- Planning ----
+                Rectangle { height: Theme.space-sm; }
+                NavSectionHeader {
+                    text: nav-group-planning-text;
+                    x: Theme.space-md;
+                }
                 NavButton {
                     text: nav-plantings-text;
+                    icon: Icons.plantings;
                     selected: current-page == "plantings";
                     clicked => { current-page = "plantings"; navigate-plantings(); }
                 }
                 NavButton {
                     text: nav-tasks-text;
+                    icon: Icons.tasks;
                     selected: current-page == "tasks";
                     clicked => { current-page = "tasks"; navigate-tasks(); }
                 }
                 NavButton {
                     text: nav-agenda-text;
+                    icon: Icons.agenda;
                     selected: current-page == "agenda";
                     clicked => { current-page = "agenda"; navigate-agenda(); }
                 }
                 NavButton {
+                    text: nav-crop-map-text;
+                    icon: Icons.crop-map;
+                    selected: current-page == "crop-map";
+                    clicked => { current-page = "crop-map"; navigate-crop-map(); }
+                }
+
+                // ---- Catalog ----
+                Rectangle { height: Theme.space-sm; }
+                NavSectionHeader {
+                    text: nav-group-catalog-text;
+                    x: Theme.space-md;
+                }
+                NavButton {
                     text: nav-cultures-text;
+                    icon: Icons.cultures;
                     selected: current-page == "cultures";
                     clicked => { current-page = "cultures"; navigate-cultures(); }
                 }
                 NavButton {
                     text: nav-locations-text;
+                    icon: Icons.locations;
                     selected: current-page == "locations";
                     clicked => { current-page = "locations"; navigate-locations(); }
                 }
                 NavButton {
                     text: nav-strata-text;
+                    icon: Icons.strata;
                     selected: current-page == "strata";
                     clicked => { current-page = "strata"; navigate-strata(); }
                 }
                 NavButton {
-                    text: nav-settings-text;
-                    selected: current-page == "settings";
-                    clicked => { current-page = "settings"; navigate-settings(); }
+                    text: nav-families-text;
+                    icon: Icons.families;
+                    selected: current-page == "families";
+                    clicked => { current-page = "families"; navigate-families(); }
+                }
+
+                // ---- System ----
+                Rectangle { height: Theme.space-sm; }
+                NavSectionHeader {
+                    text: nav-group-system-text;
+                    x: Theme.space-md;
                 }
                 NavButton {
-                    text: nav-crop-map-text;
-                    selected: current-page == "crop-map";
-                    clicked => { current-page = "crop-map"; navigate-crop-map(); }
+                    text: nav-settings-text;
+                    icon: Icons.settings;
+                    selected: current-page == "settings";
+                    clicked => { current-page = "settings"; navigate-settings(); }
                 }
                 // Help is an action, not a page — never appears `selected`.
                 // Clicking it asks Rust to open the bundled manual PDF with
                 // the system's default viewer.
                 NavButton {
                     text: nav-help-text;
+                    icon: Icons.help;
                     selected: false;
                     clicked => { open-manual(); }
                 }
@@ -832,6 +929,15 @@ export component MainWindow inherits Window {
                 empty-state-text: empty-state-text;
                 plantings: plantings;
                 plants-suffix: plants-suffix;
+                col-variety: plantings-col-variety;
+                col-location: plantings-col-location;
+                col-schedule: plantings-col-schedule;
+                col-area: plantings-col-area;
+                col-plants: plantings-col-plants;
+                col-status: plantings-col-status;
+                sort-column: plantings-sort-column;
+                sort-asc: plantings-sort-asc;
+                sort(k) => { plantings-sort(k); }
                 section-new-text: section-new-text;
                 label-variety: label-variety;
                 label-location: label-location;
@@ -1177,6 +1283,7 @@ export component MainWindow inherits Window {
                 types: task-types-items;
                 category-labels: task-types-category-labels;
                 category-index <=> task-types-category-index;
+                color-palette: task-types-color-palette;
                 is-edit-mode: task-types-is-edit-mode;
                 form-name <=> task-types-form-name;
                 form-color <=> task-types-form-color;
@@ -1186,6 +1293,43 @@ export component MainWindow inherits Window {
                 edit-row(id) => { task-types-edit-row(id); }
                 delete-row(id) => { task-types-delete-row(id); }
                 go-back => { navigate-task-types-back(); }
+            }
+
+            // ------- Families catalog (name + configurable colour) -------
+            if current-page == "families": FamiliesPage {
+                title-text: families-title-text;
+                list-title: families-list-title;
+                empty-text: families-empty-text;
+                form-section-create: families-form-section-create;
+                form-section-edit: families-form-section-edit;
+                label-name: families-label-name;
+                placeholder-name: families-placeholder-name;
+                label-latin: families-label-latin;
+                placeholder-latin: families-placeholder-latin;
+                label-description: families-label-description;
+                placeholder-description: families-placeholder-description;
+                label-color: families-label-color;
+                placeholder-color: families-placeholder-color;
+                hint-color: families-hint-color;
+                btn-save-text: families-btn-save-text;
+                btn-cancel-text: families-btn-cancel-text;
+                edit-text: families-edit-text;
+                delete-text: families-delete-text;
+                in-use-text: families-in-use-text;
+                status-text: families-status-text;
+                status-is-error: families-status-is-error;
+                families: families-items;
+                color-palette: families-color-palette;
+                is-edit-mode: families-is-edit-mode;
+                form-name <=> families-form-name;
+                form-latin <=> families-form-latin;
+                form-description <=> families-form-description;
+                form-color <=> families-form-color;
+                form-color-preview: families-form-color-preview;
+                save => { families-save(); }
+                cancel => { families-cancel-edit(); }
+                edit-row(id) => { families-edit-row(id); }
+                delete-row(id) => { families-delete-row(id); }
             }
 
             // ------- Crop Map -------

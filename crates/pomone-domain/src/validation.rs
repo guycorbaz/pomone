@@ -66,6 +66,21 @@ pub(crate) fn require_valid_doy(doy: u16) -> DomainResult<u16> {
     }
 }
 
+/// Trim and validate a hex colour string (`#RGB` or `#RRGGBB`). Shared by the
+/// entities that carry a user-picked colour (task types, families).
+pub(crate) fn require_hex_color(raw: impl Into<String>) -> DomainResult<String> {
+    let raw: String = raw.into();
+    let trimmed = raw.trim();
+    let ok = trimmed.starts_with('#')
+        && matches!(trimmed.len(), 4 | 7)
+        && trimmed[1..].chars().all(|c| c.is_ascii_hexdigit());
+    if ok {
+        Ok(trimmed.to_owned())
+    } else {
+        Err(DomainError::InvalidHexColor(raw))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -216,9 +216,10 @@ component CategoryChipView inherits Rectangle {
     in property <TaskCategoryChip> chip;
     callback clicked(string);
 
-    height: 28px;
+    height: 30px;
     min-width: 0;
-    border-radius: Theme.radius-md;
+    // Pill-shaped like Qrop's ChoiceChip.
+    border-radius: Theme.radius-pill;
     border-width: chip.selected ? 2px : Theme.border-width;
     border-color: chip.selected ? chip.color : Palette.border;
     background: chip.selected ? chip.color : Palette.surface;
@@ -230,8 +231,8 @@ component CategoryChipView inherits Rectangle {
         clicked => { root.clicked(chip.key); }
 
         HorizontalLayout {
-            padding-left: Theme.space-sm;
-            padding-right: Theme.space-sm;
+            padding-left: Theme.space-md;
+            padding-right: Theme.space-md;
             spacing: Theme.space-xs;
             alignment: center;
 
@@ -254,9 +255,10 @@ component ToggleChip inherits Rectangle {
     in property <color> tint;
     callback clicked();
 
-    height: 28px;
+    height: 30px;
     min-width: 0;
-    border-radius: Theme.radius-md;
+    // Pill-shaped like Qrop's ChoiceChip.
+    border-radius: Theme.radius-pill;
     border-width: selected ? 2px : Theme.border-width;
     border-color: selected ? tint : Palette.border;
     background: selected ? tint : Palette.surface;
@@ -268,8 +270,8 @@ component ToggleChip inherits Rectangle {
         clicked => { root.clicked(); }
 
         HorizontalLayout {
-            padding-left: Theme.space-sm;
-            padding-right: Theme.space-sm;
+            padding-left: Theme.space-md;
+            padding-right: Theme.space-md;
             alignment: center;
             Text {
                 text: root.label;

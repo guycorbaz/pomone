@@ -15,6 +15,7 @@ pub mod crop_map_view;
 pub mod cultures_view;
 pub mod demo;
 pub mod error;
+pub mod families_view;
 pub mod harvest_view;
 pub mod i18n;
 pub mod locations_view;
@@ -37,7 +38,7 @@ pub use app::{test_backend, App};
 pub use backup::{backup_path_for, backup_sqlite, restore_sqlite};
 pub use bed_usage_view::{bed_usage_series, BedUsage, BedUsagePoint};
 pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
-pub use config::{default_config_path, AppConfig, BackendConfig};
+pub use config::{default_config_path, AppConfig, BackendConfig, WindowGeometry};
 pub use crop_map_view::{
     list_crop_map_lanes, move_planting_to_location, split_planting, CropMapBar, CropMapLane,
     SplitPart,
@@ -51,6 +52,10 @@ pub use cultures_view::{
 };
 pub use demo::{seed_demo_data, DemoSummary};
 pub use error::{AppError, AppResult};
+pub use families_view::{
+    create_family, delete_family, get_family_for_edit, list_families_admin, update_family,
+    FamilyAdminRow, FamilyEditForm,
+};
 pub use harvest_view::{list_yearly_harvests_for_planting, YearlyHarvestRow};
 pub use i18n::{I18n, Lang};
 pub use locations_view::{

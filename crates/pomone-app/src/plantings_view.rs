@@ -42,9 +42,16 @@ pub struct LocationOption {
 pub struct PlantingRow {
     pub id: String,
     pub variety_label: String,
+    /// Two-letter crop initials for the family-coloured pastille (e.g. "TO"
+    /// for Tomate), mirroring Qrop's crop disk.
+    pub crop_initials: String,
+    /// Hex colour of the planting's botanical family — tints the pastille.
+    pub family_color: String,
     pub location_label: String,
     pub schedule_summary: String,
     pub area_label: String,
+    /// Raw area for numeric column sorting (not shown directly).
+    pub area_m2: Decimal,
     pub plants_count: u32,
     pub cycle_dates: Option<CycleDates>,
     /// Life-cycle status (issue #63). The UI host turns it into a localized
@@ -74,6 +81,17 @@ pub struct CycleDates {
     pub transplanted_on: Option<chrono::NaiveDate>,
     pub first_harvest_on: chrono::NaiveDate,
     pub last_harvest_on: chrono::NaiveDate,
+}
+
+/// First two characters of a crop name, upper-cased, for the coloured pastille
+/// (e.g. "Tomate" → "TO", "Ail" → "AI", "É" → "É"). Unicode-safe.
+fn crop_initials(crop_name: &str) -> String {
+    crop_name
+        .chars()
+        .filter(|c| !c.is_whitespace())
+        .take(2)
+        .collect::<String>()
+        .to_uppercase()
 }
 
 /// Format a `Decimal` area as a French-style number with `m²` suffix.
@@ -178,21 +196,30 @@ pub async fn list_plantings(repo: &dyn Repository) -> AppResult<Vec<PlantingRow>
     let varieties = repo.variety_list().await?;
     let crops = repo.crop_list().await?;
     let locations = repo.location_list().await?;
+    let families = repo.family_list().await?;
 
     let var_by_id: HashMap<_, _> = varieties.iter().map(|v| (v.id, v)).collect();
     let crop_by_id: HashMap<_, _> = crops.iter().map(|c| (c.id, c)).collect();
     let loc_by_id: HashMap<_, _> = locations.iter().map(|l| (l.id, l)).collect();
+    let family_color_by_id: HashMap<_, _> =
+        families.iter().map(|f| (f.id, f.color.clone())).collect();
 
     let mut rows: Vec<PlantingRow> = plantings
         .iter()
         .map(|p| {
-            let variety_label = var_by_id.get(&p.variety_id).map_or_else(
-                || "?".to_owned(),
-                |v| {
-                    let crop_name = crop_by_id.get(&v.crop_id).map_or("?", |c| c.name.as_str());
-                    format!("{crop_name} · {}", v.name)
-                },
-            );
+            // Resolve variety → crop → family for the label, pastille initials,
+            // and family colour in one lookup chain.
+            let crop = var_by_id
+                .get(&p.variety_id)
+                .and_then(|v| crop_by_id.get(&v.crop_id));
+            let crop_name = crop.map_or("?", |c| c.name.as_str());
+            let variety_label = var_by_id
+                .get(&p.variety_id)
+                .map_or_else(|| "?".to_owned(), |v| format!("{crop_name} · {}", v.name));
+            let crop_initials = crop_initials(crop_name);
+            let family_color = crop
+                .and_then(|c| family_color_by_id.get(&c.family_id).cloned())
+                .unwrap_or_else(|| pomone_domain::DEFAULT_FAMILY_COLOR.to_owned());
             let location_label = loc_by_id.get(&p.location_id).map_or_else(
                 || "?".to_owned(),
                 |l| match l.parent_id.and_then(|pid| loc_by_id.get(&pid)) {
@@ -217,9 +244,12 @@ pub async fn list_plantings(repo: &dyn Repository) -> AppResult<Vec<PlantingRow>
             PlantingRow {
                 id: p.id.to_string(),
                 variety_label,
+                crop_initials,
+                family_color,
                 location_label,
                 schedule_summary: schedule_summary(p),
                 area_label: format_area(p.area_m2),
+                area_m2: p.area_m2,
                 plants_count: p.plants_count,
                 cycle_dates,
                 status: p.status,
