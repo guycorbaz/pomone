@@ -17,25 +17,27 @@ use pomone_app::{
     create_strata, create_task, create_task_type, create_variety, delete_crop, delete_family,
     delete_location, delete_strata, delete_task, delete_task_type, delete_variety,
     extend_series_if_needed, get_crop_for_edit, get_family_for_edit, get_location_for_edit,
-    get_planting_detail, get_task_for_edit, get_task_type_for_edit, list_agenda,
-    list_calendar_entries, list_crop_map_lanes, list_crops, list_families_admin,
+    get_planting_detail, get_task_for_edit, get_task_type_for_edit, get_variety_for_edit,
+    list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops, list_families_admin,
     list_family_options, list_location_kind_options, list_location_options, list_locations_tree,
     list_parent_options, list_planting_choices, list_planting_tasks, list_plantings,
     list_strata_options, list_strata_rows, list_task_category_options, list_task_type_options,
     list_task_types_admin, list_varieties_for_crop, list_variety_options,
     list_yearly_harvests_for_planting, move_planting_to_location, parse_id, planting_status_key,
     recurrence_unit_str, reschedule_task, services, split_planting, test_backend, update_crop,
-    update_family, update_location, update_task, update_task_type, AgendaRow as AppAgendaRow, App,
-    AppConfig, AppError, BackendConfig, BedUsagePoint as AppBedUsagePoint,
-    CalendarEntry as AppCalendarEntry, CalendarEntryKind, CalendarEventKind, CropEditForm,
-    CropInput, CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow,
-    CycleDates, FamilyAdminRow, FamilyEditForm, FamilyOption, Lang, LifespanKind, LocationEditForm,
-    LocationInput, LocationKindOption, LocationListItem, LocationOption, MigrationReport,
-    ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
-    PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput,
-    StrataOption, StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
-    TaskTypeEditForm, TaskTypeOption, VarietyInput, VarietyOption, VarietyProfileKind,
-    VarietyRow as AppVarietyRow, WindowGeometry, YearlyHarvestRow as AppYearlyHarvestRow,
+    update_family, update_location, update_task, update_task_type, update_variety,
+    AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
+    BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry, CalendarEntryKind,
+    CalendarEventKind, CropEditForm, CropInput, CropMapBar as AppCropMapBar,
+    CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyAdminRow,
+    FamilyEditForm, FamilyOption, Lang, LifespanKind, LocationEditForm, LocationInput,
+    LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
+    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
+    PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
+    StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
+    TaskTypeEditForm, TaskTypeOption, VarietyEditForm, VarietyInput, VarietyOption,
+    VarietyProfileKind, VarietyRow as AppVarietyRow, WindowGeometry,
+    YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{
     LocationId, PlantingId, PlantingStatus, PruningSeason, RecurrenceUnit, StrataId, VarietyId,
@@ -163,6 +165,9 @@ struct UiState {
     /// Stringified `CropId` currently edited in the Cultures crop form; empty
     /// in create mode.
     editing_crop_id: String,
+    /// Stringified `VarietyId` currently edited in the Cultures variety form;
+    /// empty in create mode.
+    editing_variety_id: String,
     /// Stringified `LocationId` currently edited in the Lieux form; empty in
     /// create mode.
     editing_location_id: String,
@@ -276,6 +281,7 @@ fn main() -> Result<()> {
         editing_task_type_id: String::new(),
         editing_family_id: String::new(),
         editing_crop_id: String::new(),
+        editing_variety_id: String::new(),
         editing_location_id: String::new(),
         task_filter_categories: all_category_keys().into_iter().collect(),
         show_milestones: true,
@@ -1633,15 +1639,28 @@ fn main() -> Result<()> {
                 return;
             };
             let mut s = state.borrow_mut();
-            match try_create_variety(&window, &mut s) {
+            let was_edit = window.get_variety_is_edit_mode();
+            match try_save_variety(&window, &mut s) {
                 Ok(()) => {
-                    let i18n = s.app.i18n();
-                    window.set_status_text(SharedString::from(i18n.t("status-variety-created")));
+                    let key = if was_edit {
+                        "status-variety-updated"
+                    } else {
+                        "status-variety-created"
+                    };
+                    window.set_status_text(SharedString::from(s.app.i18n().t(key)));
                     window.set_status_is_error(false);
-                    window.set_new_variety_name(SharedString::from(""));
-                    window.set_new_variety_description(SharedString::from(""));
+                    if was_edit {
+                        // Back to a clean create form (also clears edit mode).
+                        reset_variety_form_to_create(&window, &mut s);
+                    } else {
+                        // Keep the profile fields for rapid entry; only clear
+                        // the name + description of the just-created variety.
+                        window.set_new_variety_name(SharedString::from(""));
+                        window.set_new_variety_description(SharedString::from(""));
+                    }
+                    // Refreshes the catalog counts and the crop's variety list.
                     if let Err(e) = refresh_cultures(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh cultures after create");
+                        tracing::error!(error = %e, "failed to refresh cultures after save");
                     }
                 }
                 Err(e) => {
@@ -1650,6 +1669,31 @@ fn main() -> Result<()> {
                     window.set_status_is_error(is_err);
                 }
             }
+        });
+    }
+
+    // --- Edit / cancel-edit a variety (Cultures screen) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_edit_variety(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            if let Err(e) = open_variety_form_for_edit(&window, &mut s, &id) {
+                tracing::error!(error = %e, "failed to open variety edit form");
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_cancel_variety_edit(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            reset_variety_form_to_create(&window, &mut state.borrow_mut());
         });
     }
 
@@ -2114,6 +2158,10 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_crop_cancel_text(SharedString::from(i18n.t("button-cancel-crop-edit")));
     window.set_crop_save_text(SharedString::from(i18n.t("button-save-crop")));
     window.set_create_variety_button_text(SharedString::from(i18n.t("button-create-variety")));
+    window.set_variety_edit_text(SharedString::from(i18n.t("button-edit")));
+    window.set_variety_form_section_edit(SharedString::from(i18n.t("variety-form-section-edit")));
+    window.set_variety_save_text(SharedString::from(i18n.t("button-save-variety")));
+    window.set_variety_cancel_text(SharedString::from(i18n.t("button-cancel-variety-edit")));
 
     // Planting detail page — static labels only; per-planting data is
     // refreshed by `refresh_planting_detail` whenever a row/event is clicked.
@@ -2807,6 +2855,9 @@ fn do_delete_variety(window: &MainWindow, s: &mut UiState, id: &str) {
         Ok(()) => {
             window.set_status_text(SharedString::from(s.app.i18n().t("status-variety-deleted")));
             window.set_status_is_error(false);
+            if s.editing_variety_id == id {
+                reset_variety_form_to_create(window, s);
+            }
             if let Err(e) = refresh_varieties_of_selected_crop(window, s) {
                 tracing::error!(error = %e, "failed to refresh varieties after delete");
             }
@@ -2856,7 +2907,10 @@ fn do_delete_location(window: &MainWindow, s: &mut UiState, id: &str) {
     }
 }
 
-fn try_create_variety(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+/// Build the `VarietyInput` from the variety form, then create or update
+/// depending on the form's edit mode (the variety being edited is
+/// `state.editing_variety_id`).
+fn try_save_variety(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
     let i18n = state.app.i18n();
     let idx = window.get_selected_crop_index();
     if idx < 0 {
@@ -2925,10 +2979,63 @@ fn try_create_variety(window: &MainWindow, state: &mut UiState) -> Result<(), Fo
                 .map_err(FormError::Service)?;
     }
 
+    let editing_id = state.editing_variety_id.clone();
     state
         .runtime
-        .block_on(async { create_variety(state.app.repo(), input).await.map(|_| ()) })
+        .block_on(async {
+            if editing_id.is_empty() {
+                create_variety(state.app.repo(), input).await.map(|_| ())
+            } else {
+                update_variety(state.app.repo(), &editing_id, input).await
+            }
+        })
         .map_err(FormError::Service)
+}
+
+/// Clear the variety form and drop back to create mode. Numeric fields go back
+/// to the same defaults the Slint form ships with.
+fn reset_variety_form_to_create(window: &MainWindow, state: &mut UiState) {
+    state.editing_variety_id.clear();
+    window.set_variety_is_edit_mode(false);
+    window.set_new_variety_name(SharedString::from(""));
+    window.set_new_variety_description(SharedString::from(""));
+    window.set_new_variety_dtt(SharedString::from("35"));
+    window.set_new_variety_dtm(SharedString::from("70"));
+    window.set_new_variety_window(SharedString::from("60"));
+    window.set_new_variety_bud_break_doy(SharedString::from(""));
+    window.set_new_variety_flowering_doy(SharedString::from(""));
+    window.set_new_variety_harvest_start_doy(SharedString::from("220"));
+    window.set_new_variety_harvest_end_doy(SharedString::from("280"));
+    window.set_new_variety_yield_kg(SharedString::from(""));
+}
+
+/// Load one variety into the variety form and switch it to edit mode. The form
+/// panel shown (annual vs pluriannual) is driven by the selected crop, which
+/// already owns this variety, so only the field values need prefilling.
+fn open_variety_form_for_edit(window: &MainWindow, state: &mut UiState, id: &str) -> Result<()> {
+    let form: VarietyEditForm = state
+        .runtime
+        .block_on(async { get_variety_for_edit(state.app.repo(), id).await })
+        .context("failed to load variety for edit")?;
+
+    state.editing_variety_id.clone_from(&form.id);
+    window.set_variety_is_edit_mode(true);
+    window.set_new_variety_name(SharedString::from(form.name));
+    window.set_new_variety_description(SharedString::from(form.description));
+    if form.is_annual {
+        window.set_new_variety_dtt(SharedString::from(form.days_to_transplant));
+        window.set_new_variety_dtm(SharedString::from(form.days_to_maturity));
+        window.set_new_variety_window(SharedString::from(form.harvest_window_days));
+    } else {
+        window.set_new_variety_bud_break_doy(SharedString::from(form.bud_break_doy));
+        window.set_new_variety_flowering_doy(SharedString::from(form.flowering_doy));
+        window.set_new_variety_harvest_start_doy(SharedString::from(form.harvest_start_doy));
+        window.set_new_variety_harvest_end_doy(SharedString::from(form.harvest_end_doy));
+        window.set_new_variety_yield_kg(SharedString::from(form.expected_yield_kg_per_plant));
+    }
+    window.set_status_text(SharedString::from(""));
+    window.set_status_is_error(false);
+    Ok(())
 }
 
 fn parse_u8(s: &str, field: &'static str) -> Result<u8, AppError> {

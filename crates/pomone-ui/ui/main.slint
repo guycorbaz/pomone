@@ -236,6 +236,13 @@ export component MainWindow inherits Window {
     in-out property <string> new-variety-yield-kg;
     in property <string> create-variety-button-text;
     callback create-variety();
+    in property <bool> variety-is-edit-mode: false;
+    in property <string> variety-form-section-edit;
+    in property <string> variety-save-text;
+    in property <string> variety-cancel-text;
+    in property <string> variety-edit-text;
+    callback edit-variety(string);
+    callback cancel-variety-edit();
 
     // ------- Locations page state forwarded to LocationsPage -------
     in property <string> locations-title-text;
@@ -1122,6 +1129,13 @@ export component MainWindow inherits Window {
                 variety-delete-text: crop-delete-text;
                 variety-in-use-text: crop-in-use-text;
                 delete-variety(id) => { delete-variety(id); }
+                variety-edit-text: variety-edit-text;
+                variety-is-edit-mode: variety-is-edit-mode;
+                variety-form-section-edit: variety-form-section-edit;
+                variety-save-text: variety-save-text;
+                variety-cancel-text: variety-cancel-text;
+                edit-variety(id) => { edit-variety(id); }
+                cancel-variety-edit => { cancel-variety-edit(); }
             }
 
             // ------- Settings -------

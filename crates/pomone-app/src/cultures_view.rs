@@ -337,11 +337,12 @@ pub struct VarietyInput {
     pub expected_yield_kg_per_plant: Option<Decimal>,
 }
 
-/// Create a variety of an existing crop. Surfaces a clear `Inconsistent`
-/// error when the UI sent a profile kind that doesn't match the parent crop's
-/// lifespan (the domain layer would catch it anyway, but we want a better
-/// message than the generic mismatch).
-pub async fn create_variety(repo: &dyn Repository, input: VarietyInput) -> AppResult<Variety> {
+/// Build a validated `Variety` (with a fresh id) from a `VarietyInput`, shared
+/// by create and update. Surfaces a clear `Inconsistent` error when the UI sent
+/// a profile kind that doesn't match the parent crop's lifespan (the domain
+/// layer would catch it anyway, but we want a better message than the generic
+/// mismatch).
+async fn build_variety(repo: &dyn Repository, input: VarietyInput) -> AppResult<Variety> {
     let crop_id: pomone_domain::CropId = crate::plantings_view::parse_id(&input.crop_id_str)?;
     let crop = repo
         .crop_get(crop_id)
@@ -377,15 +378,116 @@ pub async fn create_variety(repo: &dyn Repository, input: VarietyInput) -> AppRe
             input.expected_yield_kg_per_plant,
         )?),
     };
-    let variety = Variety::new(
+    Ok(Variety::new(
         crop_id,
         crop.lifespan,
         input.name,
         input.description,
         profile,
-    )?;
+    )?)
+}
+
+/// Create a variety of an existing crop.
+pub async fn create_variety(repo: &dyn Repository, input: VarietyInput) -> AppResult<Variety> {
+    let variety = build_variety(repo, input).await?;
     repo.variety_create(&variety).await?;
     Ok(variety)
+}
+
+/// Flattened variety fields for prefilling the edit form. Numeric fields are
+/// stringified (empty when the underlying value is `None`) so the Slint UI can
+/// bind them to text boxes; `is_annual` tells the UI which profile panel to
+/// show — it always matches the parent crop's lifespan.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VarietyEditForm {
+    pub id: String,
+    pub crop_id_str: String,
+    pub name: String,
+    pub description: String,
+    pub is_annual: bool,
+    // Annual fields (empty strings when the variety is pluriannual).
+    pub days_to_transplant: String,
+    pub days_to_maturity: String,
+    pub harvest_window_days: String,
+    // Pluriannual fields (empty strings when the variety is annual).
+    pub bud_break_doy: String,
+    pub flowering_doy: String,
+    pub harvest_start_doy: String,
+    pub harvest_end_doy: String,
+    pub expected_yield_kg_per_plant: String,
+}
+
+/// Load one variety and flatten it for the edit form. `NotFound` if the id is
+/// unknown (the UI should only pass ids it just listed).
+pub async fn get_variety_for_edit(
+    repo: &dyn Repository,
+    id_str: &str,
+) -> AppResult<VarietyEditForm> {
+    let id: pomone_domain::VarietyId = crate::plantings_view::parse_id(id_str)?;
+    let v = repo
+        .variety_get(id)
+        .await?
+        .ok_or_else(|| AppError::NotFound {
+            kind: "variety",
+            id: id_str.to_owned(),
+        })?;
+    let mut form = VarietyEditForm {
+        id: v.id.to_string(),
+        crop_id_str: v.crop_id.to_string(),
+        name: v.name,
+        description: v.description.unwrap_or_default(),
+        is_annual: matches!(v.profile, VarietyProfile::Annual(_)),
+        days_to_transplant: String::new(),
+        days_to_maturity: String::new(),
+        harvest_window_days: String::new(),
+        bud_break_doy: String::new(),
+        flowering_doy: String::new(),
+        harvest_start_doy: String::new(),
+        harvest_end_doy: String::new(),
+        expected_yield_kg_per_plant: String::new(),
+    };
+    match v.profile {
+        VarietyProfile::Annual(p) => {
+            form.days_to_transplant = p
+                .days_to_transplant
+                .map(|d| d.to_string())
+                .unwrap_or_default();
+            form.days_to_maturity = p.days_to_maturity.to_string();
+            form.harvest_window_days = p.harvest_window_days.to_string();
+        }
+        VarietyProfile::Pluriannual(p) => {
+            form.bud_break_doy = p.bud_break_doy.map(|d| d.to_string()).unwrap_or_default();
+            form.flowering_doy = p.flowering_doy.map(|d| d.to_string()).unwrap_or_default();
+            form.harvest_start_doy = p.harvest_start_doy.to_string();
+            form.harvest_end_doy = p.harvest_end_doy.to_string();
+            form.expected_yield_kg_per_plant = p
+                .expected_yield_kg_per_plant
+                .map(|y| y.to_string())
+                .unwrap_or_default();
+        }
+    }
+    Ok(form)
+}
+
+/// Update an existing variety from the same `VarietyInput` the create form
+/// produces. Rebuilds and validates the variety, then keeps the original id.
+pub async fn update_variety(
+    repo: &dyn Repository,
+    id_str: &str,
+    input: VarietyInput,
+) -> AppResult<()> {
+    let id: pomone_domain::VarietyId = crate::plantings_view::parse_id(id_str)?;
+    // Confirm it exists for a clean NotFound rather than a silent no-op update.
+    if repo.variety_get(id).await?.is_none() {
+        return Err(AppError::NotFound {
+            kind: "variety",
+            id: id_str.to_owned(),
+        });
+    }
+    let mut variety = build_variety(repo, input).await?;
+    variety.id = id;
+    repo.variety_update(&variety).await?;
+    Ok(())
 }
 
 fn lifespan_label(lifespan: Lifespan) -> String {
@@ -917,5 +1019,112 @@ mod tests {
         assert!(row.in_use);
         let err = delete_crop(&repo, &crops[0].id).await.unwrap_err();
         assert!(matches!(err, AppError::Inconsistent(msg) if msg == "crop_in_use"));
+    }
+
+    #[tokio::test]
+    async fn update_variety_changes_name_and_profile() {
+        let repo = fresh_repo().await;
+        let crops = list_crops(&repo).await.unwrap();
+        let v = create_variety(&repo, annual_variety_input(&crops[0].id, "Marmande"))
+            .await
+            .unwrap();
+        update_variety(
+            &repo,
+            &v.id.to_string(),
+            VarietyInput {
+                name: "Marmande sélection".to_owned(),
+                days_to_maturity: 90,
+                ..annual_variety_input(&crops[0].id, "ignored")
+            },
+        )
+        .await
+        .unwrap();
+        let rows = list_varieties_for_crop(&repo, &crops[0].id).await.unwrap();
+        let updated = rows.iter().find(|r| r.id == v.id.to_string()).unwrap();
+        assert_eq!(updated.name, "Marmande sélection");
+        assert!(updated.profile_label.contains("DTM 90"));
+    }
+
+    #[tokio::test]
+    async fn get_variety_for_edit_roundtrips_annual() {
+        let repo = fresh_repo().await;
+        let crops = list_crops(&repo).await.unwrap();
+        let v = create_variety(
+            &repo,
+            VarietyInput {
+                description: Some("fruits côtelés".to_owned()),
+                ..annual_variety_input(&crops[0].id, "Cœur de bœuf")
+            },
+        )
+        .await
+        .unwrap();
+        let form = get_variety_for_edit(&repo, &v.id.to_string())
+            .await
+            .unwrap();
+        assert_eq!(form.name, "Cœur de bœuf");
+        assert_eq!(form.description, "fruits côtelés");
+        assert!(form.is_annual);
+        assert_eq!(form.days_to_transplant, "35");
+        assert_eq!(form.days_to_maturity, "75");
+        assert_eq!(form.harvest_window_days, "55");
+        assert_eq!(form.crop_id_str, crops[0].id);
+    }
+
+    #[tokio::test]
+    async fn get_variety_for_edit_roundtrips_pluriannual() {
+        let repo = fresh_repo().await;
+        let families = list_family_options(&repo).await.unwrap();
+        let crop = create_crop(
+            &repo,
+            CropInput {
+                lifespan_kind: LifespanKind::PluriannualRecurring,
+                lifespan_years: 40,
+                years_to_first_yield: 3,
+                pruning_season: PruningSeason::Winter,
+                ..annual_crop_input(&solanaceae_id_str(&families), "Pommier")
+            },
+        )
+        .await
+        .unwrap();
+        let v = create_variety(
+            &repo,
+            VarietyInput {
+                expected_yield_kg_per_plant: Some(Decimal::new(155, 1)),
+                ..pluriannual_variety_input(&crop.id.to_string(), "Reine des Reinettes")
+            },
+        )
+        .await
+        .unwrap();
+        let form = get_variety_for_edit(&repo, &v.id.to_string())
+            .await
+            .unwrap();
+        assert!(!form.is_annual);
+        assert_eq!(form.bud_break_doy, "80");
+        assert_eq!(form.flowering_doy, "120");
+        assert_eq!(form.harvest_start_doy, "220");
+        assert_eq!(form.harvest_end_doy, "280");
+        assert_eq!(form.expected_yield_kg_per_plant, "15.5");
+        // Annual-only fields stay empty for a pluriannual variety.
+        assert_eq!(form.days_to_maturity, "");
+    }
+
+    #[tokio::test]
+    async fn update_variety_unknown_id() {
+        let repo = fresh_repo().await;
+        let crops = list_crops(&repo).await.unwrap();
+        let err = update_variety(
+            &repo,
+            &pomone_domain::VarietyId::new().to_string(),
+            annual_variety_input(&crops[0].id, "Fantôme"),
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            AppError::NotFound {
+                kind: "variety",
+                ..
+            }
+        ));
     }
 }

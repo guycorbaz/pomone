@@ -112,8 +112,10 @@ component CropRowView inherits Rectangle {
 
 component VarietyRowView inherits Card {
     in property <VarietyRow> entry;
+    in property <string> edit-text;
     in property <string> delete-text;
     in property <string> in-use-text;
+    callback edit(string);
     callback delete(string);
     height: 96px;
 
@@ -149,6 +151,11 @@ component VarietyRowView inherits Card {
                 color: Palette.text-secondary;
                 font-size: Theme.font-size-label;
                 vertical-alignment: center;
+            }
+            SecondaryButton {
+                text: edit-text;
+                compact: true;
+                clicked => { edit(entry.id); }
             }
             SecondaryButton {
                 text: delete-text;
@@ -260,6 +267,14 @@ export component CulturesPage inherits Rectangle {
     in-out property <string> new-variety-yield-kg;
     in property <string> create-variety-button-text;
     callback create-variety();
+    // Variety edit mode (mirrors the crop edit form).
+    in property <bool> variety-is-edit-mode: false;
+    in property <string> variety-form-section-edit;
+    in property <string> variety-save-text;
+    in property <string> variety-cancel-text;
+    in property <string> variety-edit-text;
+    callback edit-variety(string);
+    callback cancel-variety-edit();
     in property <string> variety-delete-text;
     in property <string> variety-in-use-text;
     callback delete-variety(string);
@@ -491,16 +506,19 @@ export component CulturesPage inherits Rectangle {
                         ListView {
                             for v in varieties: VarietyRowView {
                                 entry: v;
+                                edit-text: variety-edit-text;
                                 delete-text: variety-delete-text;
                                 in-use-text: variety-in-use-text;
                                 width: var-list.width;
+                                edit(id) => { edit-variety(id); }
                                 delete(id) => { delete-variety(id); }
                             }
                         }
                     }
 
                     Rectangle { height: Theme.space-xs; background: Palette.border; }
-                    SectionHeader { text: selected-crop-is-annual ? new-variety-section : new-variety-section-pluriannual; }
+                    SectionHeader { text: variety-is-edit-mode ? variety-form-section-edit
+                                          : (selected-crop-is-annual ? new-variety-section : new-variety-section-pluriannual); }
 
                     VerticalLayout {
                         spacing: Theme.space-xs;
@@ -661,10 +679,17 @@ export component CulturesPage inherits Rectangle {
                             }
                         }
                     }
-                    PrimaryButton {
-                        text: create-variety-button-text;
-                        enabled: selected-crop-index >= 0;
-                        clicked => { create-variety(); }
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        PrimaryButton {
+                            text: variety-is-edit-mode ? variety-save-text : create-variety-button-text;
+                            enabled: selected-crop-index >= 0;
+                            clicked => { create-variety(); }
+                        }
+                        if variety-is-edit-mode: SecondaryButton {
+                            text: variety-cancel-text;
+                            clicked => { cancel-variety-edit(); }
+                        }
                     }
                 }
             }
