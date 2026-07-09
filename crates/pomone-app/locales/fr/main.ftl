@@ -517,3 +517,51 @@ gantt-month-9 = Sept.
 gantt-month-10 = Oct.
 gantt-month-11 = Nov.
 gantt-month-12 = Déc.
+
+## Tooltips contextuels (#39) — aide au survol.
+## Sidebar : rappelle la fonction de l'écran + le raccourci clavier.
+tooltip-nav-home = Vue d'ensemble : occupation des planches et Gantt de la saison. (Ctrl+1)
+tooltip-nav-plantings = Liste des plantations, création et vue Gantt. (Ctrl+2)
+tooltip-nav-tasks = Calendrier mensuel des tâches et jalons de culture. (Ctrl+3)
+tooltip-nav-agenda = Toutes les tâches en liste : en retard, aujourd'hui, à venir. (Ctrl+4)
+tooltip-nav-crop-map = Occupation des lieux dans le temps ; déplacer ou diviser une plantation. (Ctrl+9)
+tooltip-nav-cultures = Catalogue des cultures et de leurs variétés. (Ctrl+5)
+tooltip-nav-locations = Catalogue des lieux : jardins, planches, serres… (Ctrl+6)
+tooltip-nav-strata = Strates de végétation (canopée, arbustive, couvre-sol…). (Ctrl+7)
+tooltip-nav-families = Familles botaniques et leur couleur d'affichage.
+tooltip-nav-settings = Base de données (SQLite/MariaDB), sauvegardes. (Ctrl+8)
+tooltip-nav-help = Ouvre le manuel utilisateur (PDF). (F1)
+tooltip-nav-language = Bascule la langue de l'interface entre français et anglais.
+
+## Formulaire nouvelle plantation
+tooltip-planting-variety = Variété à planter. Se gère dans Cultures → variétés.
+tooltip-planting-location = Lieu qui accueille la plantation (jardin, planche, serre…).
+tooltip-planting-strata = Étage de végétation occupé — utile en agroforesterie ; « Couvre-sol » convient au maraîchage.
+tooltip-planting-method = Mode d'implantation : semis direct, plants élevés puis repiqués, ou plants achetés.
+tooltip-planting-sown-on = Date de semis (ou de plantation pour des plants achetés), au format AAAA-MM-JJ.
+tooltip-planting-established-on = Date de plantation de la culture pérenne, au format AAAA-MM-JJ.
+tooltip-planting-removal-on = Date d'arrachage prévue (optionnelle), au format AAAA-MM-JJ.
+tooltip-planting-area = Surface occupée en m² (décimales acceptées, ex. 12.5).
+tooltip-planting-count = Nombre de plants ou de pieds.
+tooltip-planting-create = Crée la plantation et génère automatiquement ses tâches (semis, repiquage, récolte…).
+
+## Formulaire tâche
+tooltip-task-type = Type d'opération (semis, désherbage, récolte…). Gérez la liste via « Gérer les types ».
+tooltip-task-planting = Plantation concernée — « Aucune » pour une tâche générale.
+tooltip-task-planned-on = Date prévue de la tâche, au format AAAA-MM-JJ.
+tooltip-task-completed = Cochez quand la tâche est faite ; elle apparaît grisée dans les listes.
+tooltip-task-notes = Notes libres : produit utilisé, météo, remarques…
+tooltip-task-recurring = Répète la tâche à intervalle régulier (arrosage, tonte…). La série se crée à l'enregistrement.
+tooltip-task-recurrence-interval = Nombre d'unités entre deux occurrences (ex. 7 avec « jours » = hebdomadaire).
+tooltip-task-recurrence-unit = Unité de l'intervalle : jours, semaines ou mois.
+tooltip-task-recurrence-end-on = Dernière date de la série, au format AAAA-MM-JJ.
+
+## Calendrier unifié
+tooltip-calendar-prev = Mois précédent. (←)
+tooltip-calendar-next = Mois suivant. (→)
+tooltip-calendar-today = Revient au mois courant.
+tooltip-calendar-new-task = Crée une tâche : type, plantation, date, récurrence.
+tooltip-calendar-manage-types = Gérer les types de tâches : noms, catégories, couleurs.
+tooltip-calendar-filter-chip = Affiche ou masque cette catégorie de tâches sur le calendrier.
+tooltip-calendar-filter-all = Réaffiche toutes les catégories.
+tooltip-calendar-milestones = Affiche ou masque les jalons de culture (semis, récolte…) déduits des plantations.

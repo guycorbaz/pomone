@@ -67,7 +67,7 @@ use generated::{
     PlantingRow as SlintPlantingRow, PlantingTaskRow as SlintPlantingTaskRow,
     StrataItem as SlintStrataItem, TaskCalendarDay as SlintTaskCalendarDay,
     TaskCategoryChip as SlintTaskCategoryChip, TaskRow as SlintTaskRow,
-    TaskTypeAdminItem as SlintTaskTypeAdminItem, TreatmentRow as SlintTreatmentRow,
+    TaskTypeAdminItem as SlintTaskTypeAdminItem, TooltipCatalog, TreatmentRow as SlintTreatmentRow,
     VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
@@ -1879,6 +1879,51 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_nav_families_text(SharedString::from(i18n.t("nav-families")));
     window.set_nav_crop_map_text(SharedString::from(i18n.t("nav-crop-map")));
     window.set_nav_help_text(SharedString::from(i18n.t("nav-help")));
+
+    // Contextual-help tooltips (#39). The texts live in a Slint global
+    // (`TooltipCatalog`) so pages read them directly — no per-string
+    // window → page property forwarding.
+    let tips = window.global::<TooltipCatalog>();
+    let t = |key: &str| SharedString::from(i18n.t(key));
+    tips.set_nav_home(t("tooltip-nav-home"));
+    tips.set_nav_plantings(t("tooltip-nav-plantings"));
+    tips.set_nav_tasks(t("tooltip-nav-tasks"));
+    tips.set_nav_agenda(t("tooltip-nav-agenda"));
+    tips.set_nav_crop_map(t("tooltip-nav-crop-map"));
+    tips.set_nav_cultures(t("tooltip-nav-cultures"));
+    tips.set_nav_locations(t("tooltip-nav-locations"));
+    tips.set_nav_strata(t("tooltip-nav-strata"));
+    tips.set_nav_families(t("tooltip-nav-families"));
+    tips.set_nav_settings(t("tooltip-nav-settings"));
+    tips.set_nav_help(t("tooltip-nav-help"));
+    tips.set_nav_language(t("tooltip-nav-language"));
+    tips.set_planting_variety(t("tooltip-planting-variety"));
+    tips.set_planting_location(t("tooltip-planting-location"));
+    tips.set_planting_strata(t("tooltip-planting-strata"));
+    tips.set_planting_method(t("tooltip-planting-method"));
+    tips.set_planting_sown_on(t("tooltip-planting-sown-on"));
+    tips.set_planting_established_on(t("tooltip-planting-established-on"));
+    tips.set_planting_removal_on(t("tooltip-planting-removal-on"));
+    tips.set_planting_area(t("tooltip-planting-area"));
+    tips.set_planting_count(t("tooltip-planting-count"));
+    tips.set_planting_create(t("tooltip-planting-create"));
+    tips.set_task_type(t("tooltip-task-type"));
+    tips.set_task_planting(t("tooltip-task-planting"));
+    tips.set_task_planned_on(t("tooltip-task-planned-on"));
+    tips.set_task_completed(t("tooltip-task-completed"));
+    tips.set_task_notes(t("tooltip-task-notes"));
+    tips.set_task_recurring(t("tooltip-task-recurring"));
+    tips.set_task_recurrence_interval(t("tooltip-task-recurrence-interval"));
+    tips.set_task_recurrence_unit(t("tooltip-task-recurrence-unit"));
+    tips.set_task_recurrence_end_on(t("tooltip-task-recurrence-end-on"));
+    tips.set_calendar_prev(t("tooltip-calendar-prev"));
+    tips.set_calendar_next(t("tooltip-calendar-next"));
+    tips.set_calendar_today(t("tooltip-calendar-today"));
+    tips.set_calendar_new_task(t("tooltip-calendar-new-task"));
+    tips.set_calendar_manage_types(t("tooltip-calendar-manage-types"));
+    tips.set_calendar_filter_chip(t("tooltip-calendar-filter-chip"));
+    tips.set_calendar_filter_all(t("tooltip-calendar-filter-all"));
+    tips.set_calendar_milestones(t("tooltip-calendar-milestones"));
 
     // Crop Map — static labels; lanes / pickers come from refresh_crop_map.
     window.set_crop_map_title_text(SharedString::from(i18n.t("title-crop-map")));

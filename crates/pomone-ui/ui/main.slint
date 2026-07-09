@@ -21,9 +21,12 @@ import { CropMapPage, CropMapLaneItem, CropMapBarItem, CropMapLocationOption } f
 import { PlantingDetailPage, DetailLine, YearlyHarvestRow, PlantingTaskRow, TreatmentRow } from "planting_detail.slint";
 import { StrataPage, StrataItem } from "strata.slint";
 import { SettingsPage } from "settings.slint";
+import { TooltipLayer, TooltipCatalog } from "components/tooltip.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow, LocationItem, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, TreatmentRow, StrataItem, GanttBar, TaskTypeAdminItem, FamilyAdminItem, PaletteColor, CropMapLaneItem, CropMapBarItem, CropMapLocationOption }
+// `TooltipCatalog` is a global: Rust fills the localized tooltip texts once
+// per language via `window.global::<TooltipCatalog>()` (apply_translations).
+export { PlantingRow, CropRow, VarietyRow, LocationItem, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, TreatmentRow, StrataItem, GanttBar, TaskTypeAdminItem, FamilyAdminItem, PaletteColor, CropMapLaneItem, CropMapBarItem, CropMapLocationOption, TooltipCatalog }
 
 export component MainWindow inherits Window {
     title: "Pomone";
@@ -836,6 +839,7 @@ export component MainWindow inherits Window {
                 // Home stands alone above the grouped sections.
                 NavButton {
                     text: nav-home-text;
+                    tip: TooltipCatalog.nav-home;
                     icon: Icons.home;
                     selected: current-page == "home";
                     clicked => { current-page = "home"; navigate-home(); }
@@ -849,24 +853,28 @@ export component MainWindow inherits Window {
                 }
                 NavButton {
                     text: nav-plantings-text;
+                    tip: TooltipCatalog.nav-plantings;
                     icon: Icons.plantings;
                     selected: current-page == "plantings";
                     clicked => { current-page = "plantings"; navigate-plantings(); }
                 }
                 NavButton {
                     text: nav-tasks-text;
+                    tip: TooltipCatalog.nav-tasks;
                     icon: Icons.tasks;
                     selected: current-page == "tasks";
                     clicked => { current-page = "tasks"; navigate-tasks(); }
                 }
                 NavButton {
                     text: nav-agenda-text;
+                    tip: TooltipCatalog.nav-agenda;
                     icon: Icons.agenda;
                     selected: current-page == "agenda";
                     clicked => { current-page = "agenda"; navigate-agenda(); }
                 }
                 NavButton {
                     text: nav-crop-map-text;
+                    tip: TooltipCatalog.nav-crop-map;
                     icon: Icons.crop-map;
                     selected: current-page == "crop-map";
                     clicked => { current-page = "crop-map"; navigate-crop-map(); }
@@ -880,24 +888,28 @@ export component MainWindow inherits Window {
                 }
                 NavButton {
                     text: nav-cultures-text;
+                    tip: TooltipCatalog.nav-cultures;
                     icon: Icons.cultures;
                     selected: current-page == "cultures";
                     clicked => { current-page = "cultures"; navigate-cultures(); }
                 }
                 NavButton {
                     text: nav-locations-text;
+                    tip: TooltipCatalog.nav-locations;
                     icon: Icons.locations;
                     selected: current-page == "locations";
                     clicked => { current-page = "locations"; navigate-locations(); }
                 }
                 NavButton {
                     text: nav-strata-text;
+                    tip: TooltipCatalog.nav-strata;
                     icon: Icons.strata;
                     selected: current-page == "strata";
                     clicked => { current-page = "strata"; navigate-strata(); }
                 }
                 NavButton {
                     text: nav-families-text;
+                    tip: TooltipCatalog.nav-families;
                     icon: Icons.families;
                     selected: current-page == "families";
                     clicked => { current-page = "families"; navigate-families(); }
@@ -911,6 +923,7 @@ export component MainWindow inherits Window {
                 }
                 NavButton {
                     text: nav-settings-text;
+                    tip: TooltipCatalog.nav-settings;
                     icon: Icons.settings;
                     selected: current-page == "settings";
                     clicked => { current-page = "settings"; navigate-settings(); }
@@ -920,6 +933,7 @@ export component MainWindow inherits Window {
                 // the system's default viewer.
                 NavButton {
                     text: nav-help-text;
+                    tip: TooltipCatalog.nav-help;
                     icon: Icons.help;
                     selected: false;
                     clicked => { open-manual(); }
@@ -941,6 +955,7 @@ export component MainWindow inherits Window {
                     }
                     SecondaryButton {
                         text: language-button-text;
+                        tip: TooltipCatalog.nav-language;
                         clicked => { toggle-language(); }
                     }
                 }
@@ -1595,5 +1610,13 @@ export component MainWindow inherits Window {
                 }
             }
         }
+    }
+
+    // ------- Contextual-help tooltip bubble (#39) -------
+    // Last child so it paints above every page and dialog. Purely visual:
+    // it holds no TouchArea and never intercepts input.
+    TooltipLayer {
+        width: 100%;
+        height: 100%;
     }
 }

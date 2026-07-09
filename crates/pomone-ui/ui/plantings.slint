@@ -7,6 +7,7 @@
 import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
 import { ListView, ScrollView } from "std-widgets.slint";
 import { Timeline, GanttBar } from "components/timeline.slint";
+import { TooltipArea, TooltipCatalog } from "components/tooltip.slint";
 
 // Row of the plantings list. Mirrors `pomone_app::PlantingRow` field-for-field;
 // the Rust binding converts at the boundary.
@@ -445,6 +446,7 @@ export component PlantingsPage inherits Rectangle {
                             model: variety-labels;
                             current-index <=> variety-index;
                             enabled: variety-labels.length > 0;
+                            tip: TooltipCatalog.planting-variety;
                         }
                     }
                     VerticalLayout {
@@ -459,6 +461,7 @@ export component PlantingsPage inherits Rectangle {
                             model: location-labels;
                             current-index <=> location-index;
                             enabled: location-labels.length > 0;
+                            tip: TooltipCatalog.planting-location;
                         }
                     }
                     // Strata: the vegetation layer this planting occupies
@@ -475,6 +478,7 @@ export component PlantingsPage inherits Rectangle {
                             model: strata-labels;
                             current-index <=> strata-index;
                             enabled: strata-labels.length > 0;
+                            tip: TooltipCatalog.planting-strata;
                         }
                     }
                 }
@@ -499,6 +503,7 @@ export component PlantingsPage inherits Rectangle {
                             model: method-labels;
                             current-index <=> method-index;
                             enabled: method-labels.length > 0;
+                            tip: TooltipCatalog.planting-method;
                         }
                     }
                     VerticalLayout {
@@ -509,9 +514,12 @@ export component PlantingsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ThemedLineEdit {
-                            text <=> sown-on-text;
-                            placeholder-text: placeholder-date;
+                        TooltipArea {
+                            tip: TooltipCatalog.planting-sown-on;
+                            ThemedLineEdit {
+                                text <=> sown-on-text;
+                                placeholder-text: placeholder-date;
+                            }
                         }
                     }
                 }
@@ -525,9 +533,12 @@ export component PlantingsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ThemedLineEdit {
-                            text <=> established-on-text;
-                            placeholder-text: placeholder-date;
+                        TooltipArea {
+                            tip: TooltipCatalog.planting-established-on;
+                            ThemedLineEdit {
+                                text <=> established-on-text;
+                                placeholder-text: placeholder-date;
+                            }
                         }
                     }
                     VerticalLayout {
@@ -538,9 +549,12 @@ export component PlantingsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ThemedLineEdit {
-                            text <=> removal-on-text;
-                            placeholder-text: placeholder-removal-date;
+                        TooltipArea {
+                            tip: TooltipCatalog.planting-removal-on;
+                            ThemedLineEdit {
+                                text <=> removal-on-text;
+                                placeholder-text: placeholder-removal-date;
+                            }
                         }
                     }
                 }
@@ -555,10 +569,13 @@ export component PlantingsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ThemedLineEdit {
-                            text <=> area-text;
-                            placeholder-text: placeholder-area;
-                            input-type: decimal;
+                        TooltipArea {
+                            tip: TooltipCatalog.planting-area;
+                            ThemedLineEdit {
+                                text <=> area-text;
+                                placeholder-text: placeholder-area;
+                                input-type: decimal;
+                            }
                         }
                     }
                     VerticalLayout {
@@ -569,10 +586,13 @@ export component PlantingsPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ThemedLineEdit {
-                            text <=> count-text;
-                            placeholder-text: placeholder-count;
-                            input-type: number;
+                        TooltipArea {
+                            tip: TooltipCatalog.planting-count;
+                            ThemedLineEdit {
+                                text <=> count-text;
+                                placeholder-text: placeholder-count;
+                                input-type: number;
+                            }
                         }
                     }
                 }
@@ -584,6 +604,7 @@ export component PlantingsPage inherits Rectangle {
                     PrimaryButton {
                         text: create-button-text;
                         enabled: variety-labels.length > 0 && location-labels.length > 0 && strata-labels.length > 0;
+                        tip: TooltipCatalog.planting-create;
                         clicked => { create-planting(); }
                     }
                     Text {

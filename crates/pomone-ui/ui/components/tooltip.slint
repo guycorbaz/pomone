@@ -1,0 +1,140 @@
+// Pomone — contextual-help tooltips (#39).
+//
+// Three pieces:
+//   * `TooltipState` (theme.slint) — the shared "what is hovered" global.
+//   * `TooltipArea` — wraps any element that has no TouchArea of its own
+//     (LineEdit, plain labels…). Components that already own a TouchArea
+//     (PrimaryButton, NavButton, ThemedComboBox…) expose a `tip` property
+//     instead and report to `TooltipState` themselves.
+//   * `TooltipLayer` — the single bubble, instantiated once by MainWindow
+//     after every page so it always paints on top.
+//
+// The bubble fades in 500 ms after the pointer settles on an element (an
+// `in` state transition with a delayed opacity animation — no Timer needed)
+// and hides instantly on leave or click.
+
+import { Palette, Theme, TooltipState } from "../theme.slint";
+
+// Localized tooltip texts, filled once from Rust (`apply_translations`) via
+// `window.global::<TooltipCatalog>()`. A Slint global rather than MainWindow
+// properties: pages read the text they need directly, which spares the
+// window → page property forwarding for every single string.
+export global TooltipCatalog {
+    // Sidebar navigation
+    in-out property <string> nav-home;
+    in-out property <string> nav-plantings;
+    in-out property <string> nav-tasks;
+    in-out property <string> nav-agenda;
+    in-out property <string> nav-crop-map;
+    in-out property <string> nav-cultures;
+    in-out property <string> nav-locations;
+    in-out property <string> nav-strata;
+    in-out property <string> nav-families;
+    in-out property <string> nav-settings;
+    in-out property <string> nav-help;
+    in-out property <string> nav-language;
+
+    // Plantings — new-planting form
+    in-out property <string> planting-variety;
+    in-out property <string> planting-location;
+    in-out property <string> planting-strata;
+    in-out property <string> planting-method;
+    in-out property <string> planting-sown-on;
+    in-out property <string> planting-established-on;
+    in-out property <string> planting-removal-on;
+    in-out property <string> planting-area;
+    in-out property <string> planting-count;
+    in-out property <string> planting-create;
+
+    // Task form
+    in-out property <string> task-type;
+    in-out property <string> task-planting;
+    in-out property <string> task-planned-on;
+    in-out property <string> task-completed;
+    in-out property <string> task-notes;
+    in-out property <string> task-recurring;
+    in-out property <string> task-recurrence-interval;
+    in-out property <string> task-recurrence-unit;
+    in-out property <string> task-recurrence-end-on;
+
+    // Unified calendar
+    in-out property <string> calendar-prev;
+    in-out property <string> calendar-next;
+    in-out property <string> calendar-today;
+    in-out property <string> calendar-new-task;
+    in-out property <string> calendar-manage-types;
+    in-out property <string> calendar-filter-chip;
+    in-out property <string> calendar-filter-all;
+    in-out property <string> calendar-milestones;
+}
+
+// Hover-help wrapper for elements without their own TouchArea:
+//
+//     TooltipArea { tip: TooltipCatalog.planting-area; ThemedLineEdit { … } }
+//
+// The TouchArea observes hover *before* its children (Slint runs the parent's
+// input filter first and still forwards every event), so the wrapped widget
+// keeps its clicks, focus and mouse cursor.
+export component TooltipArea inherits TouchArea {
+    in property <string> tip;
+
+    // Stay layout-transparent: mirror the wrapped content's constraints.
+    min-width: content.min-width;
+    min-height: content.min-height;
+    preferred-width: content.preferred-width;
+    preferred-height: content.preferred-height;
+    max-width: content.max-width;
+    max-height: content.max-height;
+
+    changed has-hover => {
+        if (self.has-hover) {
+            TooltipState.show(root.tip, root.absolute-position.x, root.absolute-position.y, root.height);
+        } else {
+            TooltipState.hide(root.tip);
+        }
+    }
+
+    content := VerticalLayout {
+        @children
+    }
+}
+
+// The bubble itself. Instantiate exactly once, as MainWindow's last child so
+// it paints above every page and dialog. Contains no TouchArea: it never
+// intercepts input (and hovering the bubble's own pixels can't flicker it).
+export component TooltipLayer inherits Rectangle {
+    background: transparent;
+
+    bubble := Rectangle {
+        property <length> gap: 6px;
+        // Below the hovered element, flipped above it when the bubble would
+        // overflow the window bottom; clamped inside the window horizontally.
+        x: max(4px, min(TooltipState.anchor-x, root.width - self.width - 4px));
+        y: TooltipState.anchor-y + TooltipState.anchor-height + self.gap + self.height <= root.height - 4px
+            ? TooltipState.anchor-y + TooltipState.anchor-height + self.gap
+            : TooltipState.anchor-y - self.height - self.gap;
+        background: Palette.text-primary;
+        border-radius: Theme.radius-sm;
+        opacity: 0;
+
+        states [
+            shown when TooltipState.active: {
+                opacity: 0.96;
+                in {
+                    animate opacity { delay: 500ms; duration: 100ms; }
+                }
+            }
+        ]
+
+        HorizontalLayout {
+            padding: Theme.space-sm;
+            Text {
+                text: TooltipState.text;
+                color: Palette.surface;
+                font-size: Theme.font-size-label;
+                max-width: 320px;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
