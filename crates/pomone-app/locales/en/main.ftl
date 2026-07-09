@@ -563,3 +563,42 @@ tooltip-calendar-manage-types = Manage task types: names, categories, colours.
 tooltip-calendar-filter-chip = Shows or hides this task category on the calendar.
 tooltip-calendar-filter-all = Shows every category again.
 tooltip-calendar-milestones = Shows or hides crop milestones (sowing, harvest…) derived from plantings.
+
+## Public holidays (#35) — names shown on the calendar.
+holiday-new-year = New Year's Day
+holiday-berchtold = Berchtold's Day (2 January)
+holiday-neuchatel-republic = Republic Day (Neuchâtel)
+holiday-st-joseph = Saint Joseph's Day
+holiday-good-friday = Good Friday
+holiday-easter-monday = Easter Monday
+holiday-labour-day = Labour Day
+holiday-victory-day = Victory Day 1945
+holiday-ascension = Ascension Day
+holiday-whit-monday = Whit Monday
+holiday-corpus-christi = Corpus Christi
+holiday-jura-independence = Jura Independence Day
+holiday-bastille-day = Bastille Day
+holiday-swiss-national-day = Swiss National Day
+holiday-assumption = Assumption Day
+holiday-geneva-fast = Geneva Fast
+holiday-federal-fast-monday = Federal Fast Monday
+holiday-all-saints = All Saints' Day
+holiday-armistice-day = Armistice Day 1918
+holiday-immaculate-conception = Immaculate Conception
+holiday-christmas = Christmas Day
+holiday-st-stephens = Saint Stephen's Day
+holiday-geneva-restoration = Restoration of the Republic
+
+## Holiday region (settings picker)
+settings-holiday-section = Public holidays
+settings-holiday-region-label = Region
+settings-holiday-explain = Public holidays of the chosen region are greyed out on the calendar.
+holiday-region-none = None (hide public holidays)
+holiday-region-ch-vd = Switzerland — Vaud
+holiday-region-ch-ge = Switzerland — Geneva
+holiday-region-ch-ne = Switzerland — Neuchâtel
+holiday-region-ch-fr = Switzerland — Fribourg
+holiday-region-ch-vs = Switzerland — Valais
+holiday-region-ch-ju = Switzerland — Jura
+holiday-region-fr = France
+status-holiday-region-saved = Region saved

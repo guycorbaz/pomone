@@ -59,6 +59,15 @@ export component SettingsPage inherits Rectangle {
     in property <bool> backup-status-is-error: false;
     callback backup-now();
 
+    // -------- Public holidays (issue #35) --------
+    in property <string> holiday-section;
+    in property <string> holiday-region-label;
+    in property <string> holiday-explain-text;
+    in property <[string]> holiday-region-labels;
+    in-out property <int> holiday-region-index;
+    // Emitted on selection change; the host persists + repaints the calendar.
+    callback holiday-region-changed(int);
+
     // Callbacks pass the form values as arguments instead of relying on
     // `<=>` chains to propagate them back to the host — the chain across
     // the MainWindow ↔ SettingsPage boundary turned out to leave the
@@ -301,6 +310,44 @@ export component SettingsPage inherits Rectangle {
                         color: backup-status-is-error ? Palette.danger : Palette.success;
                         font-size: Theme.font-size-label;
                         wrap: word-wrap;
+                    }
+                }
+            }
+
+            // -------- Public holidays (issue #35) --------
+            Card {
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: holiday-section; }
+
+                    Text {
+                        text: holiday-explain-text;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-label;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        alignment: start;
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text {
+                                text: holiday-region-label;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedComboBox {
+                                model: holiday-region-labels;
+                                current-index <=> holiday-region-index;
+                                min-width: 280px;
+                                changed current-index => {
+                                    root.holiday-region-changed(self.current-index);
+                                }
+                            }
+                        }
                     }
                 }
             }

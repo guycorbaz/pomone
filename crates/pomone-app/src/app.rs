@@ -71,6 +71,13 @@ impl App {
         lang.tag().clone_into(&mut self.config.language);
     }
 
+    /// Set the public-holiday region (issue #35) and persist the config.
+    /// `region` is a `HolidayRegion::code()` or the empty string (off).
+    pub fn set_holiday_region(&mut self, region: &str) -> AppResult<()> {
+        region.clone_into(&mut self.config.holiday_region);
+        self.config.save_default()
+    }
+
     /// Swap the active backend in place.
     ///
     /// When `migrate_data` is true, every record from the current
@@ -171,6 +178,7 @@ mod tests {
                 path: "::memory::".into(), // unused in this path
             },
             language: "fr".to_owned(),
+            holiday_region: "ch-vd".to_owned(),
         };
         let repo = SqliteRepository::in_memory().await.unwrap();
         App::with_repo(config, Box::new(repo)).await.unwrap()
@@ -223,6 +231,7 @@ mod tests {
         let config = AppConfig {
             backend: BackendConfig::Sqlite { path: db.clone() },
             language: "fr".to_owned(),
+            holiday_region: "ch-vd".to_owned(),
         };
         let repo = SqliteRepository::in_memory().await.unwrap();
         let app = App::with_repo(config, Box::new(repo)).await.unwrap();
@@ -241,6 +250,7 @@ mod tests {
                 url: "mysql://user@host/db".into(),
             },
             language: "fr".to_owned(),
+            holiday_region: "ch-vd".to_owned(),
         };
         let repo = SqliteRepository::in_memory().await.unwrap();
         let app = App::with_repo(config, Box::new(repo)).await.unwrap();
@@ -256,6 +266,7 @@ mod tests {
                 path: "::memory::".into(),
             },
             language: "klingon".to_owned(),
+            holiday_region: "ch-vd".to_owned(),
         };
         let repo = SqliteRepository::in_memory().await.unwrap();
         let err = App::with_repo(bad_config, Box::new(repo))
