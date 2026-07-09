@@ -961,6 +961,43 @@ fn main() -> Result<()> {
         );
     }
 
+    // --- Manual backup from the settings page (issue #58) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_settings_backup_now(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let s = state.borrow();
+            let i18n = s.app.i18n();
+            match s.app.backup_now() {
+                Ok(path) => {
+                    let mut args = FluentArgs::new();
+                    args.set("path", path.display().to_string());
+                    window.set_settings_backup_status_text(SharedString::from(
+                        i18n.t_args("settings-backup-done", &args),
+                    ));
+                    window.set_settings_backup_status_is_error(false);
+                }
+                Err(AppError::Inconsistent(ref code)) if code == "backup_sqlite_only" => {
+                    window.set_settings_backup_status_text(SharedString::from(
+                        i18n.t("error-backup-sqlite-only"),
+                    ));
+                    window.set_settings_backup_status_is_error(true);
+                }
+                Err(e) => {
+                    let mut args = FluentArgs::new();
+                    args.set("message", localize_app_error(i18n, &e));
+                    window.set_settings_backup_status_text(SharedString::from(
+                        i18n.t_args("status-planting-failed", &args),
+                    ));
+                    window.set_settings_backup_status_is_error(true);
+                }
+            }
+        });
+    }
+
     // --- Planting row click → open detail ---
     {
         let state = Rc::clone(&state);
@@ -1949,6 +1986,9 @@ fn apply_translations(window: &MainWindow, app: &App) {
         i18n.t("settings-button-save-migrate"),
     ));
     window.set_settings_migrate_warning(SharedString::from(i18n.t("settings-migrate-warning")));
+    window.set_settings_backup_section(SharedString::from(i18n.t("section-backup")));
+    window.set_settings_backup_explain(SharedString::from(i18n.t("settings-backup-explain")));
+    window.set_settings_backup_button(SharedString::from(i18n.t("button-backup-now")));
 
     // Weekday header labels, shared by the unified calendar grid below.
     let weekday_labels: Vec<SharedString> = [
@@ -3450,6 +3490,12 @@ fn format_migration_report(report: &MigrationReport, i18n: &pomone_app::I18n) ->
     args.set("varieties", n(report.varieties));
     args.set("plantings", n(report.plantings));
     args.set("harvests", n(report.yearly_harvests));
+    args.set("tasktypes", n(report.task_types));
+    args.set("taskmethods", n(report.task_methods));
+    args.set("taskimplements", n(report.task_implements));
+    args.set("taskseries", n(report.task_series));
+    args.set("tasks", n(report.tasks));
+    args.set("treatments", n(report.treatments));
     i18n.t_args("settings-report", &args)
 }
 
@@ -3488,13 +3534,21 @@ fn try_swap_backend(
             let backend_text = backend_display(&s.app.config().backend);
             let mut args = FluentArgs::new();
             args.set("backend", backend_text.clone());
-            let msg = if migrate {
+            let mut msg = if migrate {
                 let report_text = format_migration_report(&report, i18n);
                 args.set("report", report_text);
                 i18n.t_args("settings-migrate-ok", &args)
             } else {
                 i18n.t_args("settings-save-ok", &args)
             };
+            // Surface the pre-swap auto-backup path (issue #58) so the user
+            // knows where the safety net lives.
+            if let Some(backup) = &report.pre_swap_backup {
+                let mut bargs = FluentArgs::new();
+                bargs.set("path", backup.display().to_string());
+                msg.push('\n');
+                msg.push_str(&i18n.t_args("settings-backup-note", &bargs));
+            }
             window.set_settings_status_text(SharedString::from(msg));
             window.set_settings_status_is_error(false);
 

@@ -36,7 +36,9 @@ mod test_helpers;
 
 pub use agenda_view::{list_agenda, AgendaRow};
 pub use app::{test_backend, App};
-pub use backup::{backup_path_for, backup_sqlite, restore_sqlite};
+pub use backup::{
+    backup_backend, backup_path_for, backup_sqlite, backup_stamp_now, restore_sqlite,
+};
 pub use bed_usage_view::{bed_usage_series, BedUsage, BedUsagePoint};
 pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
 pub use config::{default_config_path, AppConfig, BackendConfig, WindowGeometry};

@@ -235,7 +235,15 @@ settings-test-ok = Connection successful.
 settings-save-ok = Switched database to: { $backend }
 settings-migrate-ok = Migration done into: { $backend } — { $report }
 settings-migrate-target-not-empty = The destination database already contains data. Point the migration at a fresh, empty database.
-settings-report = { $families } families · { $strata } strata · { $kinds } location kinds · { $locations } locations · { $crops } crops · { $varieties } varieties · { $plantings } plantings · { $harvests } harvests
+settings-report = { $families } families · { $strata } strata · { $kinds } location kinds · { $locations } locations · { $crops } crops · { $varieties } varieties · { $plantings } plantings · { $harvests } harvests · { $tasktypes } task types · { $taskmethods } methods · { $taskimplements } implements · { $taskseries } series · { $tasks } tasks · { $treatments } treatments
+
+## Backup (issue #58)
+section-backup = Backup
+settings-backup-explain = Instant copy of the SQLite file, created next to the database. An automatic backup is also taken before every backend switch. For MariaDB, use the server's tooling (mysqldump).
+button-backup-now = Back up now
+settings-backup-done = Backup created: { $path }
+settings-backup-note = Automatic backup: { $path }
+error-backup-sqlite-only = Built-in backup only covers the SQLite backend.
 
 ## Strata screen
 nav-strata = Strata

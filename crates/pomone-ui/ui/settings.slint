@@ -49,6 +49,16 @@ export component SettingsPage inherits Rectangle {
     in-out property <string> status-text;
     in property <bool> status-is-error: false;
 
+    // -------- Backup (issue #58) --------
+    in property <string> backup-section;
+    in property <string> backup-explain-text;
+    in property <string> backup-button-text;
+    // Persistent (no auto-clear timer): the user needs time to read the
+    // backup file path.
+    in property <string> backup-status-text;
+    in property <bool> backup-status-is-error: false;
+    callback backup-now();
+
     // Callbacks pass the form values as arguments instead of relying on
     // `<=>` chains to propagate them back to the host — the chain across
     // the MainWindow ↔ SettingsPage boundary turned out to leave the
@@ -260,6 +270,39 @@ export component SettingsPage inherits Rectangle {
                 color: status-is-error ? Palette.danger : Palette.success;
                 font-size: Theme.font-size-label;
                 wrap: word-wrap;
+            }
+
+            // -------- Backup (issue #58) --------
+            Card {
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: backup-section; }
+
+                    Text {
+                        text: backup-explain-text;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-label;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        SecondaryButton {
+                            text: backup-button-text;
+                            clicked => { backup-now(); }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                    }
+
+                    if backup-status-text != "": Text {
+                        text: backup-status-text;
+                        color: backup-status-is-error ? Palette.danger : Palette.success;
+                        font-size: Theme.font-size-label;
+                        wrap: word-wrap;
+                    }
+                }
             }
         }
     }
