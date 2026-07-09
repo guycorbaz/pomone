@@ -28,6 +28,8 @@ pub struct PlantingDetail {
     pub id: String,
     pub variety_label: String,
     pub location_label: String,
+    /// Name of the vegetation stratum the planting is grown in (issue #86).
+    pub strata_label: String,
     pub area_label: String,
     pub plants_count: u32,
     pub name: Option<String>,
@@ -191,6 +193,10 @@ pub async fn get_planting_detail(repo: &dyn Repository, id_str: &str) -> AppResu
         Some(pid) => repo.location_get(pid).await?.map(|l| l.name),
         None => None,
     };
+    let strata_label = repo
+        .strata_get(planting.strata_id)
+        .await?
+        .map_or_else(|| "?".to_owned(), |s| s.name);
 
     let variety_label = format!("{} · {}", crop.name, variety.name);
     let location_label = match parent_name {
@@ -203,6 +209,7 @@ pub async fn get_planting_detail(repo: &dyn Repository, id_str: &str) -> AppResu
         id: planting.id.to_string(),
         variety_label,
         location_label,
+        strata_label,
         area_label: fmt_area(planting.area_m2),
         plants_count: planting.plants_count,
         name: planting.name.clone(),
@@ -239,12 +246,12 @@ mod tests {
         let varieties = repo.variety_list().await.unwrap();
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
-        let strata = repo.strata_list().await.unwrap()[0].id;
+        let strata_entry = repo.strata_list().await.unwrap().remove(0);
         let planting = create_annual_planting_from_sowing(
             &repo,
             varieties[0].id,
             bed.id,
-            strata,
+            strata_entry.id,
             d(2026, 3, 1),
             dec!(20),
             100,
@@ -260,6 +267,7 @@ mod tests {
 
         assert!(detail.variety_label.starts_with("Tomate · "));
         assert!(detail.location_label.contains(" / "));
+        assert_eq!(detail.strata_label, strata_entry.name);
         assert_eq!(detail.plants_count, 100);
         assert_eq!(detail.name.as_deref(), Some("démo"));
         assert_eq!(detail.notes.as_deref(), Some("notes"));

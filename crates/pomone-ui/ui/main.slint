@@ -102,6 +102,7 @@ export component MainWindow inherits Window {
     // Plantings table column headers + sort state.
     in property <string> plantings-col-variety;
     in property <string> plantings-col-location;
+    in property <string> plantings-col-strata;
     in property <string> plantings-col-schedule;
     in property <string> plantings-col-area;
     in property <string> plantings-col-plants;
@@ -278,6 +279,7 @@ export component MainWindow inherits Window {
     in property <string> detail-back-button-text;
     in property <string> detail-variety-label;
     in property <string> detail-location-label;
+    in property <string> detail-strata-label;
     in property <string> detail-area-label;
     in property <int> detail-plants-count;
     in property <string> detail-name-label;
@@ -931,6 +933,7 @@ export component MainWindow inherits Window {
                 plants-suffix: plants-suffix;
                 col-variety: plantings-col-variety;
                 col-location: plantings-col-location;
+                col-strata: plantings-col-strata;
                 col-schedule: plantings-col-schedule;
                 col-area: plantings-col-area;
                 col-plants: plantings-col-plants;
@@ -984,6 +987,7 @@ export component MainWindow inherits Window {
                 back-button-text: detail-back-button-text;
                 variety-label: detail-variety-label;
                 location-label: detail-location-label;
+                strata-label: detail-strata-label;
                 area-label: detail-area-label;
                 plants-count: detail-plants-count;
                 name-label: detail-name-label;
@@ -993,6 +997,7 @@ export component MainWindow inherits Window {
                 section-schedule-text: detail-section-schedule-text;
                 section-summary-text: detail-section-summary-text;
                 label-location: label-location;
+                label-strata: label-planting-strata;
                 label-area: label-area;
                 label-plants-count: label-count;
                 empty-state-text: detail-empty-state-text;

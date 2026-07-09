@@ -17,6 +17,7 @@ export struct PlantingRow {
     crop-initials: string,
     family-color: color,
     location-label: string,
+    strata-label: string,
     schedule-summary: string,
     area-label: string,
     plants-count: int,
@@ -136,6 +137,15 @@ component PlantingTableRow inherits Rectangle {
                 overflow: elide;
             }
             Text {
+                text: entry.strata-label;
+                color: Palette.text-secondary;
+                font-size: Theme.font-size-label;
+                vertical-alignment: center;
+                horizontal-alignment: left;
+                width: 110px;
+                overflow: elide;
+            }
+            Text {
                 text: entry.schedule-summary;
                 color: Palette.text-muted;
                 font-size: Theme.font-size-label;
@@ -202,6 +212,7 @@ export component PlantingsPage inherits Rectangle {
     // Table column headers + current sort state (host owns the sorting).
     in property <string> col-variety;
     in property <string> col-location;
+    in property <string> col-strata;
     in property <string> col-schedule;
     in property <string> col-area;
     in property <string> col-plants;
@@ -353,6 +364,13 @@ export component PlantingsPage inherits Rectangle {
                             active-key: sort-column;
                             asc: sort-asc;
                             sort(k) => { sort(k); }
+                        }
+                        // Strata is display-only (not sortable): short enough
+                        // that a fixed width keeps the table columns stable.
+                        ColHeader {
+                            label: col-strata;
+                            sort-key: "";
+                            fixed-width: 110px;
                         }
                         // Schedule is display-only (not sortable).
                         ColHeader {
