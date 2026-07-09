@@ -243,6 +243,7 @@ settings-backup-explain = Instant copy of the SQLite file, created next to the d
 button-backup-now = Back up now
 settings-backup-done = Backup created: { $path }
 settings-backup-note = Automatic backup: { $path }
+settings-refresh-warning = Warning: some screens could not be reloaded ({ $screens }) — reopen them or restart the application.
 error-backup-sqlite-only = Built-in backup only covers the SQLite backend.
 
 ## Strata screen
