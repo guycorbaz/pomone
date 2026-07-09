@@ -60,6 +60,10 @@ export struct TaskCalendarDay {
     day-number: int,
     in-current-month: bool,
     is-today: bool,
+    // Public holiday of the configured region (#35): greys the cell and
+    // shows the (already localized) name under the day number.
+    is-holiday: bool,
+    holiday-name: string,
     tasks: [TaskRow],
 }
 
@@ -320,8 +324,10 @@ component DayCell inherits Rectangle {
     border-width: Theme.border-width;
     border-color: Palette.border;
     border-radius: Theme.radius-sm;
+    // Holidays render like out-of-month days (greyed, #35) — but today's
+    // highlight always wins so "where am I" stays readable.
     background: day.is-today ? Palette.surface-alt
-              : day.in-current-month ? Palette.surface
+              : day.in-current-month && !day.is-holiday ? Palette.surface
               :                        Palette.background;
 
     VerticalLayout {
@@ -334,6 +340,14 @@ component DayCell inherits Rectangle {
             font-size: Theme.font-size-label;
             font-weight: day.is-today ? Theme.font-weight-bold : Theme.font-weight-medium;
             horizontal-alignment: right;
+        }
+
+        if day.is-holiday && day.holiday-name != "": Text {
+            text: day.holiday-name;
+            color: Palette.text-muted;
+            font-size: Theme.font-size-label;
+            font-italic: true;
+            overflow: elide;
         }
 
         // Show up to 3 task pills; collapse the rest into a "+N" line so the

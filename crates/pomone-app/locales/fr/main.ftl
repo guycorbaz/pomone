@@ -565,3 +565,42 @@ tooltip-calendar-manage-types = Gérer les types de tâches : noms, catégories,
 tooltip-calendar-filter-chip = Affiche ou masque cette catégorie de tâches sur le calendrier.
 tooltip-calendar-filter-all = Réaffiche toutes les catégories.
 tooltip-calendar-milestones = Affiche ou masque les jalons de culture (semis, récolte…) déduits des plantations.
+
+## Jours fériés (#35) — noms affichés sur le calendrier.
+holiday-new-year = Nouvel An
+holiday-berchtold = Saint-Berchtold (2 janvier)
+holiday-neuchatel-republic = Instauration de la République
+holiday-st-joseph = Saint-Joseph
+holiday-good-friday = Vendredi saint
+holiday-easter-monday = Lundi de Pâques
+holiday-labour-day = Fête du travail
+holiday-victory-day = Victoire 1945
+holiday-ascension = Ascension
+holiday-whit-monday = Lundi de Pentecôte
+holiday-corpus-christi = Fête-Dieu
+holiday-jura-independence = Fête de l'indépendance
+holiday-bastille-day = Fête nationale
+holiday-swiss-national-day = Fête nationale
+holiday-assumption = Assomption
+holiday-geneva-fast = Jeûne genevois
+holiday-federal-fast-monday = Lundi du Jeûne fédéral
+holiday-all-saints = Toussaint
+holiday-armistice-day = Armistice 1918
+holiday-immaculate-conception = Immaculée Conception
+holiday-christmas = Noël
+holiday-st-stephens = Saint-Étienne
+holiday-geneva-restoration = Restauration de la République
+
+## Région des jours fériés (sélecteur Paramètres)
+settings-holiday-section = Jours fériés
+settings-holiday-region-label = Région
+settings-holiday-explain = Les jours fériés de la région choisie sont grisés sur le calendrier.
+holiday-region-none = Aucune (masquer les jours fériés)
+holiday-region-ch-vd = Suisse — Vaud
+holiday-region-ch-ge = Suisse — Genève
+holiday-region-ch-ne = Suisse — Neuchâtel
+holiday-region-ch-fr = Suisse — Fribourg
+holiday-region-ch-vs = Suisse — Valais
+holiday-region-ch-ju = Suisse — Jura
+holiday-region-fr = France
+status-holiday-region-saved = Région enregistrée

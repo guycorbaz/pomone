@@ -457,6 +457,12 @@ export component MainWindow inherits Window {
     in-out property <string> settings-backup-status-text;
     in property <bool> settings-backup-status-is-error: false;
     callback settings-backup-now();
+    in property <string> settings-holiday-section;
+    in property <string> settings-holiday-region-label;
+    in property <string> settings-holiday-explain;
+    in property <[string]> settings-holiday-region-labels;
+    in-out property <int> settings-holiday-region-index;
+    callback settings-holiday-region-changed(int);
 
     // ------- Task Calendar page state -------
     in property <string> task-calendar-title-text;
@@ -1284,6 +1290,12 @@ export component MainWindow inherits Window {
                 backup-status-text: settings-backup-status-text;
                 backup-status-is-error: settings-backup-status-is-error;
                 backup-now => { settings-backup-now(); }
+                holiday-section: settings-holiday-section;
+                holiday-region-label: settings-holiday-region-label;
+                holiday-explain-text: settings-holiday-explain;
+                holiday-region-labels: settings-holiday-region-labels;
+                holiday-region-index <=> settings-holiday-region-index;
+                holiday-region-changed(i) => { settings-holiday-region-changed(i); }
             }
 
             // ------- Strata -------

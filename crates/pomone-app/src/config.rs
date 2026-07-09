@@ -16,6 +16,16 @@ pub struct AppConfig {
     pub backend: BackendConfig,
     /// IETF BCP 47 language tag, e.g. "fr" or "en". Phase 5 will validate.
     pub language: String,
+    /// Public-holiday region code (issue #35), e.g. `"ch-vd"` — see
+    /// `pomone_domain::HolidayRegion::code`. Empty string = feature off.
+    /// Defaults to Vaud (Pomone's primary audience is French-speaking
+    /// Switzerland); `#[serde(default)]` keeps pre-#35 config files loading.
+    #[serde(default = "default_holiday_region")]
+    pub holiday_region: String,
+}
+
+fn default_holiday_region() -> String {
+    "ch-vd".to_owned()
 }
 
 /// Database backend selection.
@@ -38,6 +48,7 @@ impl AppConfig {
                 path: default_sqlite_path(),
             },
             language: "fr".to_owned(),
+            holiday_region: default_holiday_region(),
         }
     }
 
@@ -151,6 +162,7 @@ mod tests {
                 path: PathBuf::from("/tmp/pomone.sqlite"),
             },
             language: "en".to_owned(),
+            holiday_region: "ch-vd".to_owned(),
         };
         original.save_to(&path).unwrap();
         let loaded = AppConfig::load_from(&path).unwrap();
@@ -173,10 +185,26 @@ mod tests {
                 url: "mysql://user@host/db".to_owned(),
             },
             language: "fr".to_owned(),
+            holiday_region: "ch-vd".to_owned(),
         };
         let text = toml::to_string(&cfg).unwrap();
         assert!(text.contains("kind = \"mariadb\""));
         assert!(text.contains("url = \"mysql://user@host/db\""));
+    }
+
+    #[test]
+    fn pre_35_config_without_holiday_region_still_loads() {
+        // Config files written before issue #35 lack the field; serde's
+        // default must kick in instead of failing deserialization.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("old.toml");
+        std::fs::write(
+            &path,
+            "language = \"fr\"\n\n[backend]\nkind = \"sqlite\"\npath = \"/tmp/p.sqlite\"\n",
+        )
+        .unwrap();
+        let cfg = AppConfig::load_from(&path).unwrap();
+        assert_eq!(cfg.holiday_region, "ch-vd");
     }
 
     #[test]

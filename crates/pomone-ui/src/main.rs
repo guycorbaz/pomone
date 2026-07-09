@@ -40,8 +40,8 @@ use pomone_app::{
     YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{
-    LocationId, PlantingId, PlantingStatus, PruningSeason, RecurrenceUnit, StrataId, VarietyId,
-    DEFAULT_FAMILY_COLOR,
+    holidays_in_year, HolidayRegion, LocationId, PlantingId, PlantingStatus, PruningSeason,
+    RecurrenceUnit, StrataId, VarietyId, DEFAULT_FAMILY_COLOR,
 };
 use rust_decimal::Decimal;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
@@ -993,6 +993,39 @@ fn main() -> Result<()> {
                         i18n.t_args("status-planting-failed", &args),
                     ));
                     window.set_settings_backup_status_is_error(true);
+                }
+            }
+        });
+    }
+
+    // --- Public-holiday region picker (issue #35) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_settings_holiday_region_changed(move |index| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let code = holiday_region_code(index);
+            // The combo fires once at startup when apply_translations sets
+            // the initial index — don't rewrite the config for a no-op.
+            if s.app.config().holiday_region == code {
+                return;
+            }
+            match s.app.set_holiday_region(&code) {
+                Ok(()) => {
+                    let msg = s.app.i18n().t("status-holiday-region-saved");
+                    window.set_settings_status_text(SharedString::from(msg));
+                    window.set_settings_status_is_error(false);
+                    if let Err(e) = refresh_task_calendar(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh calendar after region change");
+                    }
+                }
+                Err(e) => {
+                    let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
+                    window.set_settings_status_text(text);
+                    window.set_settings_status_is_error(is_err);
                 }
             }
         });
@@ -2034,6 +2067,23 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_settings_backup_section(SharedString::from(i18n.t("section-backup")));
     window.set_settings_backup_explain(SharedString::from(i18n.t("settings-backup-explain")));
     window.set_settings_backup_button(SharedString::from(i18n.t("button-backup-now")));
+
+    // Public-holiday region picker (issue #35). Index 0 = "none"; the rest
+    // mirrors `HolidayRegion::ALL` order.
+    window.set_settings_holiday_section(SharedString::from(i18n.t("settings-holiday-section")));
+    window.set_settings_holiday_region_label(SharedString::from(
+        i18n.t("settings-holiday-region-label"),
+    ));
+    window.set_settings_holiday_explain(SharedString::from(i18n.t("settings-holiday-explain")));
+    let mut region_labels: Vec<SharedString> =
+        vec![SharedString::from(i18n.t("holiday-region-none"))];
+    region_labels.extend(
+        HolidayRegion::ALL
+            .iter()
+            .map(|r| SharedString::from(i18n.t(&format!("holiday-region-{}", r.key())))),
+    );
+    window.set_settings_holiday_region_labels(ModelRc::new(VecModel::from(region_labels)));
+    window.set_settings_holiday_region_index(holiday_region_index(&app.config().holiday_region));
 
     // Weekday header labels, shared by the unified calendar grid below.
     let weekday_labels: Vec<SharedString> = [
@@ -4129,6 +4179,28 @@ fn do_delete_treatment_row(window: &MainWindow, s: &mut UiState, id: &str) {
     }
 }
 
+/// Combo index of a persisted holiday-region code: 0 = none/unknown, then
+/// `HolidayRegion::ALL` order shifted by one. Inverse of [`holiday_region_code`].
+fn holiday_region_index(code: &str) -> i32 {
+    HolidayRegion::parse(code).map_or(0, |r| {
+        HolidayRegion::ALL
+            .iter()
+            .position(|x| *x == r)
+            .and_then(|p| i32::try_from(p + 1).ok())
+            .unwrap_or(0)
+    })
+}
+
+/// Persisted code for a combo index ("" = none). Inverse of
+/// [`holiday_region_index`].
+fn holiday_region_code(index: i32) -> String {
+    usize::try_from(index)
+        .ok()
+        .and_then(|i| i.checked_sub(1))
+        .and_then(|i| HolidayRegion::ALL.get(i))
+        .map_or_else(String::new, |r| r.code().to_owned())
+}
+
 fn parse_i32(s: &str, field: &'static str) -> Result<i32, AppError> {
     s.trim()
         .parse::<i32>()
@@ -4431,6 +4503,20 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
 
     let today = Local::now().date_naive();
 
+    // Public holidays of the configured region (#35), for every year the
+    // 42-cell grid touches (a January/December grid spans two years).
+    let mut holiday_by_date: std::collections::HashMap<NaiveDate, pomone_domain::Holiday> =
+        std::collections::HashMap::new();
+    if let Some(region) = HolidayRegion::parse(&state.app.config().holiday_region) {
+        let mut years = vec![grid_start.year()];
+        if grid_end.year() != grid_start.year() {
+            years.push(grid_end.year());
+        }
+        for y in years {
+            holiday_by_date.extend(holidays_in_year(region, y));
+        }
+    }
+
     let mut days: Vec<SlintTaskCalendarDay> = Vec::with_capacity(42);
     for offset in 0..42 {
         let date = grid_start
@@ -4442,11 +4528,17 @@ fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) -> Result<()>
         } else {
             0
         };
+        let holiday = holiday_by_date.get(&date);
+        let holiday_name = holiday.map_or_else(String::new, |h| {
+            i18n_glyphs.t(&format!("holiday-{}", h.key()))
+        });
         let cell_tasks: Vec<SlintTaskRow> = by_date.remove(&date).unwrap_or_default();
         days.push(SlintTaskCalendarDay {
             day_number,
             in_current_month,
             is_today: date == today,
+            is_holiday: holiday.is_some(),
+            holiday_name: SharedString::from(holiday_name),
             tasks: ModelRc::new(VecModel::from(cell_tasks)),
         });
     }
@@ -5379,5 +5471,6 @@ fn _config_for_dev_fallback() -> AppConfig {
             path: "pomone.sqlite".into(),
         },
         language: "fr".into(),
+        holiday_region: "ch-vd".to_owned(),
     }
 }
