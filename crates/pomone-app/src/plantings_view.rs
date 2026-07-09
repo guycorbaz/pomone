@@ -48,6 +48,9 @@ pub struct PlantingRow {
     /// Hex colour of the planting's botanical family — tints the pastille.
     pub family_color: String,
     pub location_label: String,
+    /// Name of the vegetation stratum the planting is grown in (issue #86),
+    /// resolved for display; "?" if the referenced stratum is missing.
+    pub strata_label: String,
     pub schedule_summary: String,
     pub area_label: String,
     /// Raw area for numeric column sorting (not shown directly).
@@ -197,12 +200,14 @@ pub async fn list_plantings(repo: &dyn Repository) -> AppResult<Vec<PlantingRow>
     let crops = repo.crop_list().await?;
     let locations = repo.location_list().await?;
     let families = repo.family_list().await?;
+    let strata = repo.strata_list().await?;
 
     let var_by_id: HashMap<_, _> = varieties.iter().map(|v| (v.id, v)).collect();
     let crop_by_id: HashMap<_, _> = crops.iter().map(|c| (c.id, c)).collect();
     let loc_by_id: HashMap<_, _> = locations.iter().map(|l| (l.id, l)).collect();
     let family_color_by_id: HashMap<_, _> =
         families.iter().map(|f| (f.id, f.color.clone())).collect();
+    let strata_name_by_id: HashMap<_, _> = strata.iter().map(|s| (s.id, s.name.as_str())).collect();
 
     let mut rows: Vec<PlantingRow> = plantings
         .iter()
@@ -227,6 +232,9 @@ pub async fn list_plantings(repo: &dyn Repository) -> AppResult<Vec<PlantingRow>
                     None => l.name.clone(),
                 },
             );
+            let strata_label = strata_name_by_id
+                .get(&p.strata_id)
+                .map_or_else(|| "?".to_owned(), |&name| name.to_owned());
             let cycle_dates = match p.schedule {
                 pomone_domain::PlantingSchedule::Cycle {
                     sown_on,
@@ -247,6 +255,7 @@ pub async fn list_plantings(repo: &dyn Repository) -> AppResult<Vec<PlantingRow>
                 crop_initials,
                 family_color,
                 location_label,
+                strata_label,
                 schedule_summary: schedule_summary(p),
                 area_label: format_area(p.area_m2),
                 area_m2: p.area_m2,
@@ -328,13 +337,13 @@ mod tests {
         let varieties = repo.variety_list().await.unwrap();
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
-        let strata = repo.strata_list().await.unwrap()[0].id;
+        let strata_entry = repo.strata_list().await.unwrap().remove(0);
         let date = NaiveDate::from_ymd_opt(2026, 3, 1).unwrap();
         let _ = create_annual_planting_from_sowing(
             &repo,
             varieties[0].id,
             bed.id,
-            strata,
+            strata_entry.id,
             date,
             dec!(20),
             100,
@@ -347,6 +356,7 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert!(rows[0].variety_label.starts_with("Tomate · "));
         assert!(rows[0].location_label.contains(" / "));
+        assert_eq!(rows[0].strata_label, strata_entry.name);
         assert!(rows[0].schedule_summary.contains("semis"));
         assert_eq!(rows[0].plants_count, 100);
     }

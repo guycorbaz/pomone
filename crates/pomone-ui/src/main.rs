@@ -2045,6 +2045,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     // Plantings page
     window.set_plantings_col_variety(SharedString::from(i18n.t("plantings-col-variety")));
     window.set_plantings_col_location(SharedString::from(i18n.t("plantings-col-location")));
+    window.set_plantings_col_strata(SharedString::from(i18n.t("label-crop-strata")));
     window.set_plantings_col_schedule(SharedString::from(i18n.t("plantings-col-schedule")));
     window.set_plantings_col_area(SharedString::from(i18n.t("plantings-col-area")));
     window.set_plantings_col_plants(SharedString::from(i18n.t("plantings-col-plants")));
@@ -2424,6 +2425,7 @@ fn to_slint_row(row: AppPlantingRow, i18n: &pomone_app::I18n) -> SlintPlantingRo
         crop_initials: SharedString::from(row.crop_initials),
         family_color: parse_hex_color(&row.family_color),
         location_label: SharedString::from(row.location_label),
+        strata_label: SharedString::from(row.strata_label),
         schedule_summary: SharedString::from(row.schedule_summary),
         area_label: SharedString::from(row.area_label),
         plants_count: usize_to_i32(row.plants_count as usize),
@@ -3947,6 +3949,7 @@ fn refresh_planting_detail(
 
     window.set_detail_variety_label(SharedString::from(detail.variety_label));
     window.set_detail_location_label(SharedString::from(detail.location_label));
+    window.set_detail_strata_label(SharedString::from(detail.strata_label));
     window.set_detail_area_label(SharedString::from(detail.area_label));
     window.set_detail_plants_count(usize_to_i32(detail.plants_count as usize));
     window.set_detail_name_value(SharedString::from(detail.name.unwrap_or_default()));

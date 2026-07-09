@@ -38,6 +38,7 @@ export component PlantingDetailPage inherits Rectangle {
     in property <string> back-button-text;
     in property <string> variety-label;
     in property <string> location-label;
+    in property <string> strata-label;
     in property <string> area-label;
     in property <int> plants-count;
 
@@ -49,6 +50,7 @@ export component PlantingDetailPage inherits Rectangle {
     in property <string> section-schedule-text;
     in property <string> section-summary-text;
     in property <string> label-location;
+    in property <string> label-strata;
     in property <string> label-area;
     in property <string> label-plants-count;
 
@@ -224,6 +226,22 @@ export component PlantingDetailPage inherits Rectangle {
                         }
                         Text {
                             text: location-label;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: label-strata;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: strata-label;
                             color: Palette.text-primary;
                             font-size: Theme.font-size-body;
                             font-weight: Theme.font-weight-semibold;
