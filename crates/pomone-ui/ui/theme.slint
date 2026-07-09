@@ -127,6 +127,38 @@ export global Icons {
     out property <string> help: "\u{e8fd}";         // help_outline
 }
 
+// Contextual-help tooltip state (#39). One bubble per window: interactive
+// components report hover enter/leave here, and `TooltipLayer` (drawn last
+// by MainWindow, see components/tooltip.slint) renders the single active
+// bubble above every page — no per-page plumbing, no z-order fights.
+export global TooltipState {
+    in-out property <bool> active: false;
+    in-out property <string> text: "";
+    // Top-left corner + height of the hovered element, in window coordinates
+    // (`absolute-position`). The layer anchors the bubble below the element.
+    in-out property <length> anchor-x;
+    in-out property <length> anchor-y;
+    in-out property <length> anchor-height;
+
+    public function show(tip: string, x: length, y: length, h: length) {
+        if (tip == "") {
+            return;
+        }
+        self.text = tip;
+        self.anchor-x = x;
+        self.anchor-y = y;
+        self.anchor-height = h;
+        self.active = true;
+    }
+    // Guarded by `tip` so a stale leave (fired after the pointer already
+    // entered another tooltip'd element) doesn't kill the new bubble.
+    public function hide(tip: string) {
+        if (self.text == tip) {
+            self.active = false;
+        }
+    }
+}
+
 // One entry of a `ColorPicker` palette: the display colour plus the raw hex
 // string the form stores. Rust builds the palette (parsing hex → colour once)
 // and the picker emits the hex back on selection.
@@ -302,6 +334,8 @@ export component Card inherits Rectangle {
 export component PrimaryButton inherits Rectangle {
     in property <string> text;
     in property <bool> enabled: true;
+    // Optional hover-help text; empty = no tooltip (see TooltipState).
+    in property <string> tip;
     callback clicked();
 
     height: Theme.control-height;
@@ -332,8 +366,16 @@ export component PrimaryButton inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
+        changed has-hover => {
+            if (self.has-hover) {
+                TooltipState.show(root.tip, root.absolute-position.x, root.absolute-position.y, root.height);
+            } else {
+                TooltipState.hide(root.tip);
+            }
+        }
         clicked => {
             if (root.enabled) {
+                TooltipState.active = false;
                 focus-scope.focus();
                 root.clicked();
             }
@@ -375,6 +417,8 @@ export component SecondaryButton inherits Rectangle {
     // it red (used for destructive actions like Delete).
     in property <bool> compact: false;
     in property <bool> danger: false;
+    // Optional hover-help text; empty = no tooltip (see TooltipState).
+    in property <string> tip;
     callback clicked();
 
     property <length> pad: compact ? Theme.space-md : Theme.space-xl;
@@ -409,8 +453,16 @@ export component SecondaryButton inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
+        changed has-hover => {
+            if (self.has-hover) {
+                TooltipState.show(root.tip, root.absolute-position.x, root.absolute-position.y, root.height);
+            } else {
+                TooltipState.hide(root.tip);
+            }
+        }
         clicked => {
             if (root.enabled) {
+                TooltipState.active = false;
                 focus-scope.focus();
                 root.clicked();
             }
@@ -469,6 +521,8 @@ export component ThemedComboBox inherits Rectangle {
     in property <[string]> model;
     in-out property <int> current-index: 0;
     in property <bool> enabled: true;
+    // Optional hover-help text; empty = no tooltip (see TooltipState).
+    in property <string> tip;
 
     height: Theme.field-height;
     min-width: 120px;
@@ -508,8 +562,16 @@ export component ThemedComboBox inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: root.enabled ? pointer : default;
+        changed has-hover => {
+            if (self.has-hover) {
+                TooltipState.show(root.tip, root.absolute-position.x, root.absolute-position.y, root.height);
+            } else {
+                TooltipState.hide(root.tip);
+            }
+        }
         clicked => {
             if (root.enabled && root.model.length > 0) {
+                TooltipState.active = false;
                 focus-scope.focus();
                 popup.show();
             }
@@ -617,6 +679,8 @@ export component NavButton inherits Rectangle {
     // Material Icons glyph (e.g. `Icons.home`). Empty string = no icon.
     in property <string> icon;
     in property <bool> selected: false;
+    // Optional hover-help text; empty = no tooltip (see TooltipState).
+    in property <string> tip;
     callback clicked();
 
     property <brush> fg: selected ? Palette.text-on-primary : Palette.text-primary;
@@ -644,7 +708,15 @@ export component NavButton inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
+        changed has-hover => {
+            if (self.has-hover) {
+                TooltipState.show(root.tip, root.absolute-position.x, root.absolute-position.y, root.height);
+            } else {
+                TooltipState.hide(root.tip);
+            }
+        }
         clicked => {
+            TooltipState.active = false;
             focus-scope.focus();
             root.clicked();
         }

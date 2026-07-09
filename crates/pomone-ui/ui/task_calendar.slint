@@ -9,7 +9,8 @@
 // delete the task); the "+ Nouvelle tâche" button opens the form in
 // creation mode.
 
-import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader } from "theme.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, TooltipState } from "theme.slint";
+import { TooltipCatalog } from "components/tooltip.slint";
 import { ScrollView } from "std-widgets.slint";
 
 // One entry on the unified calendar grid — either an editable task or a
@@ -214,6 +215,8 @@ component TaskPill inherits Rectangle {
 // strong border when on, reduced opacity + thin border when off).
 component CategoryChipView inherits Rectangle {
     in property <TaskCategoryChip> chip;
+    // Optional hover-help text; empty = no tooltip (see TooltipState).
+    in property <string> tip;
     callback clicked(string);
 
     height: 30px;
@@ -228,6 +231,13 @@ component CategoryChipView inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
+        changed has-hover => {
+            if (self.has-hover) {
+                TooltipState.show(root.tip, root.absolute-position.x, root.absolute-position.y, root.height);
+            } else {
+                TooltipState.hide(root.tip);
+            }
+        }
         clicked => { root.clicked(chip.key); }
 
         HorizontalLayout {
@@ -253,6 +263,8 @@ component ToggleChip inherits Rectangle {
     in property <string> label;
     in property <bool> selected;
     in property <color> tint;
+    // Optional hover-help text; empty = no tooltip (see TooltipState).
+    in property <string> tip;
     callback clicked();
 
     height: 30px;
@@ -267,6 +279,13 @@ component ToggleChip inherits Rectangle {
 
     touch := TouchArea {
         mouse-cursor: pointer;
+        changed has-hover => {
+            if (self.has-hover) {
+                TooltipState.show(root.tip, root.absolute-position.x, root.absolute-position.y, root.height);
+            } else {
+                TooltipState.hide(root.tip);
+            }
+        }
         clicked => { root.clicked(); }
 
         HorizontalLayout {
@@ -462,11 +481,11 @@ export component TaskCalendarPage inherits Rectangle {
                     font-weight: Theme.font-weight-bold;
                     horizontal-stretch: 1;
                 }
-                PrimaryButton { text: new-task-button-text; clicked => { new-task-clicked(); } }
-                SecondaryButton { text: manage-types-button-text; clicked => { manage-types-clicked(); } }
-                SecondaryButton { text: prev-button-text; clicked => { prev-month(); } }
-                SecondaryButton { text: today-button-text; clicked => { go-today(); } }
-                SecondaryButton { text: next-button-text; clicked => { next-month(); } }
+                PrimaryButton { text: new-task-button-text; tip: TooltipCatalog.calendar-new-task; clicked => { new-task-clicked(); } }
+                SecondaryButton { text: manage-types-button-text; tip: TooltipCatalog.calendar-manage-types; clicked => { manage-types-clicked(); } }
+                SecondaryButton { text: prev-button-text; tip: TooltipCatalog.calendar-prev; clicked => { prev-month(); } }
+                SecondaryButton { text: today-button-text; tip: TooltipCatalog.calendar-today; clicked => { go-today(); } }
+                SecondaryButton { text: next-button-text; tip: TooltipCatalog.calendar-next; clicked => { next-month(); } }
             }
 
             // Filter chips — one per TaskCategory. Rust pushes the full set
@@ -488,6 +507,7 @@ export component TaskCalendarPage inherits Rectangle {
                         }
                         SecondaryButton {
                             text: filter-all-button-text;
+                            tip: TooltipCatalog.calendar-filter-all;
                             clicked => { select-all-categories(); }
                         }
                     }
@@ -497,6 +517,7 @@ export component TaskCalendarPage inherits Rectangle {
                         alignment: start;
                         for chip in filter-chips: CategoryChipView {
                             chip: chip;
+                            tip: TooltipCatalog.calendar-filter-chip;
                             clicked(k) => { toggle-category(k); }
                         }
                     }
@@ -510,6 +531,7 @@ export component TaskCalendarPage inherits Rectangle {
                             label: milestone-filter-label;
                             selected: show-milestones;
                             tint: Palette.accent;
+                            tip: TooltipCatalog.calendar-milestones;
                             clicked => { toggle-milestones(); }
                         }
                     }

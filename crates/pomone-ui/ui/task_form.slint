@@ -11,7 +11,8 @@
 // ComboBox can index into them. Rust keeps a parallel id table to map the
 // selected indices back to UUIDs at save time.
 
-import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox, TooltipState } from "theme.slint";
+import { TooltipArea, TooltipCatalog } from "components/tooltip.slint";
 
 // Small inline checkbox — std-widgets::CheckBox doesn't expose font-size
 // either, and it's not used anywhere else in the app. Twenty lines of
@@ -19,6 +20,8 @@ import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, Th
 component PomoneCheckBox inherits Rectangle {
     in property <string> text;
     in-out property <bool> checked;
+    // Optional hover-help text; empty = no tooltip (see TooltipState).
+    in property <string> tip;
 
     height: 32px;
 
@@ -55,6 +58,13 @@ component PomoneCheckBox inherits Rectangle {
 
     TouchArea {
         mouse-cursor: pointer;
+        changed has-hover => {
+            if (self.has-hover) {
+                TooltipState.show(root.tip, root.absolute-position.x, root.absolute-position.y, root.height);
+            } else {
+                TooltipState.hide(root.tip);
+            }
+        }
         clicked => { root.checked = !root.checked; }
     }
 }
@@ -144,6 +154,7 @@ export component TaskFormPage inherits Rectangle {
                             model: task-type-labels;
                             current-index <=> task-type-index;
                             enabled: task-type-labels.length > 0;
+                            tip: TooltipCatalog.task-type;
                         }
                     }
                     VerticalLayout {
@@ -158,6 +169,7 @@ export component TaskFormPage inherits Rectangle {
                             model: planting-labels;
                             current-index <=> planting-index;
                             enabled: planting-labels.length > 0;
+                            tip: TooltipCatalog.task-planting;
                         }
                     }
                 }
@@ -173,9 +185,12 @@ export component TaskFormPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ThemedLineEdit {
-                            text <=> planned-on-text;
-                            placeholder-text: placeholder-date;
+                        TooltipArea {
+                            tip: TooltipCatalog.task-planned-on;
+                            ThemedLineEdit {
+                                text <=> planned-on-text;
+                                placeholder-text: placeholder-date;
+                            }
                         }
                     }
                     VerticalLayout {
@@ -189,6 +204,7 @@ export component TaskFormPage inherits Rectangle {
                         PomoneCheckBox {
                             text: label-completed;
                             checked <=> completed;
+                            tip: TooltipCatalog.task-completed;
                         }
                     }
                 }
@@ -201,9 +217,12 @@ export component TaskFormPage inherits Rectangle {
                         color: Palette.text-secondary;
                         font-size: Theme.font-size-label;
                     }
-                    ThemedLineEdit {
-                        text <=> notes-text;
-                        placeholder-text: placeholder-notes;
+                    TooltipArea {
+                        tip: TooltipCatalog.task-notes;
+                        ThemedLineEdit {
+                            text <=> notes-text;
+                            placeholder-text: placeholder-notes;
+                        }
                     }
                 }
 
@@ -233,6 +252,7 @@ export component TaskFormPage inherits Rectangle {
                 if !is-edit-mode: PomoneCheckBox {
                     text: label-recurring;
                     checked <=> recurring;
+                    tip: TooltipCatalog.task-recurring;
                 }
                 if !is-edit-mode && recurring: HorizontalLayout {
                     spacing: Theme.space-md;
@@ -244,10 +264,13 @@ export component TaskFormPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ThemedLineEdit {
-                            text <=> recurrence-interval-text;
-                            placeholder-text: placeholder-recurrence-interval;
-                            input-type: number;
+                        TooltipArea {
+                            tip: TooltipCatalog.task-recurrence-interval;
+                            ThemedLineEdit {
+                                text <=> recurrence-interval-text;
+                                placeholder-text: placeholder-recurrence-interval;
+                                input-type: number;
+                            }
                         }
                     }
                     VerticalLayout {
@@ -262,6 +285,7 @@ export component TaskFormPage inherits Rectangle {
                             model: recurrence-unit-labels;
                             current-index <=> recurrence-unit-index;
                             enabled: recurrence-unit-labels.length > 0;
+                            tip: TooltipCatalog.task-recurrence-unit;
                         }
                     }
                     VerticalLayout {
@@ -272,9 +296,12 @@ export component TaskFormPage inherits Rectangle {
                             color: Palette.text-secondary;
                             font-size: Theme.font-size-label;
                         }
-                        ThemedLineEdit {
-                            text <=> recurrence-end-on-text;
-                            placeholder-text: placeholder-recurrence-end-on;
+                        TooltipArea {
+                            tip: TooltipCatalog.task-recurrence-end-on;
+                            ThemedLineEdit {
+                                text <=> recurrence-end-on-text;
+                                placeholder-text: placeholder-recurrence-end-on;
+                            }
                         }
                     }
                 }

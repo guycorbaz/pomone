@@ -515,3 +515,51 @@ gantt-month-9 = Sep
 gantt-month-10 = Oct
 gantt-month-11 = Nov
 gantt-month-12 = Dec
+
+## Contextual tooltips (#39) — hover help.
+## Sidebar: recalls what the screen does + its keyboard shortcut.
+tooltip-nav-home = Overview: bed occupation and season Gantt. (Ctrl+1)
+tooltip-nav-plantings = Planting list, creation form and Gantt view. (Ctrl+2)
+tooltip-nav-tasks = Monthly calendar of tasks and crop milestones. (Ctrl+3)
+tooltip-nav-agenda = Every task as a list: overdue, today, upcoming. (Ctrl+4)
+tooltip-nav-crop-map = Location occupation over time; move or split a planting. (Ctrl+9)
+tooltip-nav-cultures = Catalog of crops and their varieties. (Ctrl+5)
+tooltip-nav-locations = Catalog of locations: gardens, beds, greenhouses… (Ctrl+6)
+tooltip-nav-strata = Vegetation strata (canopy, shrub, ground cover…). (Ctrl+7)
+tooltip-nav-families = Botanical families and their display colour.
+tooltip-nav-settings = Database (SQLite/MariaDB), backups. (Ctrl+8)
+tooltip-nav-help = Opens the user manual (PDF). (F1)
+tooltip-nav-language = Switches the interface language between French and English.
+
+## New-planting form
+tooltip-planting-variety = Variety to plant. Managed under Crops → varieties.
+tooltip-planting-location = Location hosting the planting (garden, bed, greenhouse…).
+tooltip-planting-strata = Vegetation layer occupied — useful in agroforestry; "Ground cover" fits market gardening.
+tooltip-planting-method = Establishment method: direct sowing, raised then transplanted, or bought plants.
+tooltip-planting-sown-on = Sowing date (or planting date for bought plants), as YYYY-MM-DD.
+tooltip-planting-established-on = Establishment date of the perennial crop, as YYYY-MM-DD.
+tooltip-planting-removal-on = Expected removal date (optional), as YYYY-MM-DD.
+tooltip-planting-area = Area used in m² (decimals accepted, e.g. 12.5).
+tooltip-planting-count = Number of plants.
+tooltip-planting-create = Creates the planting and auto-generates its tasks (sowing, transplanting, harvest…).
+
+## Task form
+tooltip-task-type = Kind of operation (sowing, weeding, harvest…). Manage the list via "Manage types".
+tooltip-task-planting = Planting this task belongs to — "None" for a general task.
+tooltip-task-planned-on = Planned date of the task, as YYYY-MM-DD.
+tooltip-task-completed = Tick when the task is done; it shows greyed out in lists.
+tooltip-task-notes = Free notes: product used, weather, remarks…
+tooltip-task-recurring = Repeats the task at a regular interval (watering, mowing…). The series is created on save.
+tooltip-task-recurrence-interval = Number of units between two occurrences (e.g. 7 with "days" = weekly).
+tooltip-task-recurrence-unit = Unit of the interval: days, weeks or months.
+tooltip-task-recurrence-end-on = Last date of the series, as YYYY-MM-DD.
+
+## Unified calendar
+tooltip-calendar-prev = Previous month. (←)
+tooltip-calendar-next = Next month. (→)
+tooltip-calendar-today = Back to the current month.
+tooltip-calendar-new-task = Creates a task: type, planting, date, recurrence.
+tooltip-calendar-manage-types = Manage task types: names, categories, colours.
+tooltip-calendar-filter-chip = Shows or hides this task category on the calendar.
+tooltip-calendar-filter-all = Shows every category again.
+tooltip-calendar-milestones = Shows or hides crop milestones (sowing, harvest…) derived from plantings.

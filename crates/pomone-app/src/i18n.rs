@@ -243,6 +243,52 @@ mod tests {
     }
 
     #[test]
+    fn fr_and_en_expose_the_same_keys() {
+        // Every user-facing key must exist in both catalogues (project
+        // convention). Compare the raw message identifiers of the two
+        // embedded .ftl files so a key added to one side only fails fast.
+        fn keys(ftl: &str) -> std::collections::BTreeSet<String> {
+            ftl.lines()
+                .filter(|l| {
+                    // A message definition starts at column 0 with
+                    // `identifier =`; attributes/continuations are indented.
+                    !l.starts_with([' ', '\t', '#', '.'])
+                })
+                .filter_map(|l| {
+                    let (id, _) = l.split_once('=')?;
+                    let id = id.trim();
+                    (!id.is_empty()).then(|| id.to_owned())
+                })
+                .collect()
+        }
+        let fr = keys(FR_FTL);
+        let en = keys(EN_FTL);
+        let only_fr: Vec<_> = fr.difference(&en).collect();
+        let only_en: Vec<_> = en.difference(&fr).collect();
+        assert!(
+            only_fr.is_empty() && only_en.is_empty(),
+            "keys missing from en: {only_fr:?}; keys missing from fr: {only_en:?}"
+        );
+    }
+
+    #[test]
+    fn tooltip_keys_resolve_in_both_languages() {
+        let fr = I18n::new(Lang::Fr).unwrap();
+        let en = I18n::new(Lang::En).unwrap();
+        // Spot-check one key per tooltip family (#39); the parity test
+        // above guarantees the rest exist on both sides.
+        for key in [
+            "tooltip-nav-home",
+            "tooltip-planting-area",
+            "tooltip-task-recurring",
+            "tooltip-calendar-milestones",
+        ] {
+            assert_ne!(fr.t(key), format!("{{{key}}}"), "missing fr {key}");
+            assert_ne!(en.t(key), format!("{{{key}}}"), "missing en {key}");
+        }
+    }
+
+    #[test]
     fn missing_in_fr_falls_back_to_en() {
         // We don't have FR-only keys today, so simulate by constructing
         // an I18n where FR has been deliberately stripped of one key.
