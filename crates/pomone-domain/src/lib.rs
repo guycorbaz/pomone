@@ -32,6 +32,7 @@ pub mod strata;
 pub mod task;
 pub mod task_series;
 pub mod task_type;
+pub mod treatment;
 pub mod variety;
 
 mod validation;
@@ -43,7 +44,7 @@ pub use family::{Family, DEFAULT_FAMILY_COLOR};
 pub use harvest::YearlyHarvest;
 pub use ids::{
     CropId, FamilyId, LocationId, LocationKindId, PlantingId, StrataId, TaskId, TaskImplementId,
-    TaskMethodId, TaskSeriesId, TaskTypeId, VarietyId,
+    TaskMethodId, TaskSeriesId, TaskTypeId, TreatmentId, VarietyId,
 };
 pub use location::Location;
 pub use location_kind::LocationKind;
@@ -52,4 +53,5 @@ pub use strata::Strata;
 pub use task::Task;
 pub use task_series::{RecurrenceRule, RecurrenceUnit, TaskSeries};
 pub use task_type::{TaskCategory, TaskImplement, TaskMethod, TaskType};
+pub use treatment::Treatment;
 pub use variety::{AnnualProfile, PluriannualProfile, Variety, VarietyProfile};

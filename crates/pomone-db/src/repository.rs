@@ -10,8 +10,8 @@ use async_trait::async_trait;
 use pomone_domain::{
     Crop, CropId, Family, FamilyId, Location, LocationId, LocationKind, LocationKindId, Planting,
     PlantingId, Strata, StrataId, Task, TaskId, TaskImplement, TaskImplementId, TaskMethod,
-    TaskMethodId, TaskSeries, TaskSeriesId, TaskType, TaskTypeId, Variety, VarietyId,
-    YearlyHarvest,
+    TaskMethodId, TaskSeries, TaskSeriesId, TaskType, TaskTypeId, Treatment, TreatmentId, Variety,
+    VarietyId, YearlyHarvest,
 };
 
 #[async_trait]
@@ -149,6 +149,17 @@ pub trait TaskRepo: Send + Sync {
     async fn task_delete(&self, id: TaskId) -> DbResult<()>;
 }
 
+#[async_trait]
+pub trait TreatmentRepo: Send + Sync {
+    async fn treatment_get(&self, id: TreatmentId) -> DbResult<Option<Treatment>>;
+    async fn treatment_list_for_planting(
+        &self,
+        planting_id: PlantingId,
+    ) -> DbResult<Vec<Treatment>>;
+    async fn treatment_create(&self, treatment: &Treatment) -> DbResult<()>;
+    async fn treatment_delete(&self, id: TreatmentId) -> DbResult<()>;
+}
+
 /// Aggregated trait that backends implement. Application code depends on
 /// `dyn Repository` so backends can be swapped at runtime.
 pub trait Repository:
@@ -165,6 +176,7 @@ pub trait Repository:
     + TaskImplementRepo
     + TaskSeriesRepo
     + TaskRepo
+    + TreatmentRepo
     + Send
     + Sync
 {

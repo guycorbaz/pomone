@@ -28,6 +28,7 @@ pub mod task_autogen;
 pub mod task_calendar_view;
 pub mod task_types_view;
 pub mod tasks_view;
+pub mod treatments_view;
 pub mod unified_calendar_view;
 
 #[cfg(test)]
@@ -86,4 +87,5 @@ pub use tasks_view::{
     list_planting_choices, list_task_type_options, recurrence_unit_str, update_task,
     PlantingChoice, TaskEditForm, TaskTypeOption,
 };
+pub use treatments_view::{delete_treatment, list_treatments_for_planting, TreatmentRow};
 pub use unified_calendar_view::{list_calendar_entries, CalendarEntry, CalendarEntryKind};

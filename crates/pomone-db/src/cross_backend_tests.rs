@@ -9,7 +9,7 @@ use crate::seed::seed_defaults;
 use chrono::NaiveDate;
 use pomone_domain::{
     AnnualProfile, Crop, Family, Lifespan, Location, LocationKind, Planting, PlantingSchedule,
-    PluriannualProfile, PruningSeason, Strata, Variety, VarietyProfile, YearlyHarvest,
+    PluriannualProfile, PruningSeason, Strata, Treatment, Variety, VarietyProfile, YearlyHarvest,
 };
 use rust_decimal_macros::dec;
 
@@ -159,6 +159,52 @@ async fn scenario_annual_cycle_with_full_dates(repo: &dyn Repository) {
 
     let got = repo.planting_get(planting.id).await.unwrap().unwrap();
     assert_eq!(got, planting);
+
+    // Treatments: record two applications, newest listed first, then verify
+    // the roundtrip and that deleting the planting cascades.
+    let t1 = Treatment::new(
+        planting.id,
+        d(2026, 6, 10),
+        "cuivre",
+        "Bouillie bordelaise",
+        dec!(1.25),
+        "kg/ha",
+        Some("avant pluie".into()),
+    )
+    .unwrap();
+    let t2 = Treatment::new(
+        planting.id,
+        d(2026, 7, 5),
+        "soufre",
+        "Thiovit",
+        dec!(3),
+        "g/m²",
+        None,
+    )
+    .unwrap();
+    repo.treatment_create(&t1).await.unwrap();
+    repo.treatment_create(&t2).await.unwrap();
+
+    let treatments = repo.treatment_list_for_planting(planting.id).await.unwrap();
+    assert_eq!(treatments.len(), 2);
+    assert_eq!(treatments[0], t2, "newest treatment must come first");
+    assert_eq!(treatments[1], t1);
+
+    repo.treatment_delete(t2.id).await.unwrap();
+    assert!(repo.treatment_get(t2.id).await.unwrap().is_none());
+    assert_eq!(
+        repo.treatment_list_for_planting(planting.id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    repo.planting_delete(planting.id).await.unwrap();
+    assert!(
+        repo.treatment_get(t1.id).await.unwrap().is_none(),
+        "planting delete must cascade to treatments"
+    );
 }
 
 async fn scenario_fk_cascade_on_crop_delete(repo: &dyn Repository) {
