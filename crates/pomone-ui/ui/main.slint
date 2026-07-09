@@ -448,6 +448,12 @@ export component MainWindow inherits Window {
     callback settings-test-backend(int, string, string, string, string, string, string);
     callback settings-save-backend(int, string, string, string, string, string, string);
     callback settings-save-and-migrate(int, string, string, string, string, string, string);
+    in property <string> settings-backup-section;
+    in property <string> settings-backup-explain;
+    in property <string> settings-backup-button;
+    in-out property <string> settings-backup-status-text;
+    in property <bool> settings-backup-status-is-error: false;
+    callback settings-backup-now();
 
     // ------- Task Calendar page state -------
     in property <string> task-calendar-title-text;
@@ -1257,6 +1263,12 @@ export component MainWindow inherits Window {
                 save-and-migrate(k, sp, h, po, u, pw, db) => {
                     settings-save-and-migrate(k, sp, h, po, u, pw, db);
                 }
+                backup-section: settings-backup-section;
+                backup-explain-text: settings-backup-explain;
+                backup-button-text: settings-backup-button;
+                backup-status-text: settings-backup-status-text;
+                backup-status-is-error: settings-backup-status-is-error;
+                backup-now => { settings-backup-now(); }
             }
 
             // ------- Strata -------

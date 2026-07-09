@@ -16,8 +16,33 @@
 //! MariaDB backups are out of scope: use the server's native tooling
 //! (`mysqldump`) — the CLI says so rather than pretending to handle it.
 
+use crate::config::BackendConfig;
 use crate::error::{AppError, AppResult};
 use std::path::{Path, PathBuf};
+
+/// Current local time rendered like `2026-05-31_220401` — the stamp format
+/// shared by the CLI, the settings-page button and the pre-swap auto-backup.
+#[must_use]
+pub fn backup_stamp_now() -> String {
+    chrono::Local::now().format("%Y-%m-%d_%H%M%S").to_string()
+}
+
+/// Snapshot the SQLite file behind `backend`, if any, to a timestamped
+/// sibling `.bak`. Returns `Ok(None)` when there is nothing to snapshot:
+/// MariaDB backends (use the server's native tooling) or a database file
+/// that doesn't exist yet. Used as the automatic safety net before a
+/// backend swap (issue #58).
+pub fn backup_backend(backend: &BackendConfig, stamp: &str) -> AppResult<Option<PathBuf>> {
+    let BackendConfig::Sqlite { path } = backend else {
+        return Ok(None);
+    };
+    if !path.exists() {
+        return Ok(None);
+    }
+    let dest = backup_path_for(path, stamp);
+    backup_sqlite(path, &dest)?;
+    Ok(Some(dest))
+}
 
 /// Build a timestamped backup path next to `db_path`. `stamp` is supplied by
 /// the caller (e.g. `"2026-05-31_2204"`) so this stays pure and testable.
@@ -139,6 +164,36 @@ mod tests {
         std::fs::write(&dest, b"PREV").unwrap();
         assert!(backup_sqlite(&db, &dest).is_err());
         assert_eq!(std::fs::read(&dest).unwrap(), b"PREV");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn backup_backend_snapshots_existing_sqlite_file() {
+        let dir = scratch("backend-sqlite");
+        let db = dir.join("pomone.sqlite");
+        std::fs::write(&db, b"DATA").unwrap();
+        let backend = BackendConfig::Sqlite { path: db.clone() };
+
+        let dest = backup_backend(&backend, "stamp1").unwrap().unwrap();
+        assert_eq!(dest, backup_path_for(&db, "stamp1"));
+        assert_eq!(std::fs::read(&dest).unwrap(), b"DATA");
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn backup_backend_skips_missing_file_and_mariadb() {
+        let dir = scratch("backend-skip");
+        let backend = BackendConfig::Sqlite {
+            path: dir.join("absent.sqlite"),
+        };
+        assert_eq!(backup_backend(&backend, "s").unwrap(), None);
+
+        let mariadb = BackendConfig::Mariadb {
+            url: "mysql://user@host/db".into(),
+        };
+        assert_eq!(backup_backend(&mariadb, "s").unwrap(), None);
 
         std::fs::remove_dir_all(&dir).ok();
     }

@@ -18,7 +18,8 @@ pub use error::{DbError, DbResult};
 pub use mariadb::MariaDbRepository;
 pub use repository::{
     CropRepo, FamilyRepo, LocationKindRepo, LocationRepo, PlantingRepo, Repository, StrataRepo,
-    TaskImplementRepo, TaskMethodRepo, TaskRepo, TaskTypeRepo, VarietyRepo, YearlyHarvestRepo,
+    TaskImplementRepo, TaskMethodRepo, TaskRepo, TaskSeriesRepo, TaskTypeRepo, TreatmentRepo,
+    VarietyRepo, YearlyHarvestRepo,
 };
 pub use seed::seed_defaults;
 pub use sqlite::SqliteRepository;

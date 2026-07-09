@@ -31,16 +31,27 @@ pub struct MigrationReport {
     pub varieties: usize,
     pub plantings: usize,
     pub yearly_harvests: usize,
+    pub task_types: usize,
+    pub task_methods: usize,
+    pub task_implements: usize,
+    pub task_series: usize,
+    pub tasks: usize,
+    pub treatments: usize,
+    /// Snapshot of the previous SQLite file taken by
+    /// [`crate::App::swap_backend`] just before the swap; `None` when the
+    /// previous backend was MariaDB or had no database file yet.
+    pub pre_swap_backup: Option<std::path::PathBuf>,
 }
 
 /// Copy every record from `source` into `target`. Honours FK order:
-/// families/strata/location_kinds → locations (roots before children)
-/// → crops → varieties → plantings → yearly_harvests.
+/// families/strata/location_kinds/task lookups → locations (roots before
+/// children) → crops → varieties → plantings → yearly_harvests/treatments
+/// → task_series → tasks.
 ///
 /// The target must be a fresh schema with **no** seeded defaults — IDs of
-/// the source's lookup tables (Family/Strata/LocationKind) are reused
-/// verbatim, and the underlying `_create` calls would otherwise fail on a
-/// duplicate primary key.
+/// the source's lookup tables (Family/Strata/LocationKind/TaskType…) are
+/// reused verbatim, and the underlying `_create` calls would otherwise fail
+/// on a duplicate primary key.
 pub async fn copy_all(
     source: &dyn Repository,
     target: &dyn Repository,
@@ -67,6 +78,18 @@ pub async fn copy_all(
     for k in source.location_kind_list().await? {
         target.location_kind_create(&k).await?;
         report.location_kinds += 1;
+    }
+    for tt in source.task_type_list().await? {
+        target.task_type_create(&tt).await?;
+        report.task_types += 1;
+    }
+    for m in source.task_method_list().await? {
+        target.task_method_create(&m).await?;
+        report.task_methods += 1;
+    }
+    for i in source.task_implement_list().await? {
+        target.task_implement_create(&i).await?;
+        report.task_implements += 1;
     }
 
     // 2. Locations: pre-order walk so each parent lands before its children
@@ -103,6 +126,21 @@ pub async fn copy_all(
             target.yearly_harvest_upsert(&h).await?;
             report.yearly_harvests += 1;
         }
+        for t in source.treatment_list_for_planting(p.id).await? {
+            target.treatment_create(&t).await?;
+            report.treatments += 1;
+        }
+    }
+
+    // 4. Work history: recurring series first (tasks reference them), then
+    //    the tasks themselves (issue #102 — these were silently dropped).
+    for s in source.task_series_list().await? {
+        target.task_series_create(&s).await?;
+        report.task_series += 1;
+    }
+    for t in source.task_list().await? {
+        target.task_create(&t).await?;
+        report.tasks += 1;
     }
 
     Ok(report)
@@ -115,10 +153,12 @@ async fn target_has_data(target: &dyn Repository) -> AppResult<bool> {
     Ok(!target.family_list().await?.is_empty()
         || !target.strata_list().await?.is_empty()
         || !target.location_kind_list().await?.is_empty()
+        || !target.task_type_list().await?.is_empty()
         || !target.location_list().await?.is_empty()
         || !target.crop_list().await?.is_empty()
         || !target.variety_list().await?.is_empty()
-        || !target.planting_list().await?.is_empty())
+        || !target.planting_list().await?.is_empty()
+        || !target.task_list().await?.is_empty())
 }
 
 fn push_with_ancestors(
@@ -298,6 +338,69 @@ mod tests {
         let report = copy_all(&source, &target).await.unwrap();
         assert!(report.plantings >= 1);
         assert_eq!(report.yearly_harvests, 1);
+    }
+
+    #[tokio::test]
+    async fn copy_all_carries_tasks_and_treatments_over() {
+        // Issue #102: work history and phytosanitary records used to be
+        // silently dropped by backend migration.
+        use crate::services::record_treatment;
+        use pomone_db::{TaskRepo, TaskTypeRepo, TreatmentRepo};
+
+        let source = seeded_repo().await;
+        seed_test_data(&source).await.unwrap();
+        let varieties = source.variety_list().await.unwrap();
+        let locations = source.location_list().await.unwrap();
+        let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        let strata = source.strata_list().await.unwrap()[0].id;
+        // Creating a planting auto-generates its sow/harvest tasks.
+        let planting = create_annual_planting_from_sowing(
+            &source,
+            varieties[0].id,
+            bed.id,
+            strata,
+            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        record_treatment(
+            &source,
+            planting.id,
+            NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            "cuivre".into(),
+            "Bouillie bordelaise".into(),
+            dec!(1.25),
+            "kg/ha".into(),
+            None,
+        )
+        .await
+        .unwrap();
+        let source_tasks = source.task_list().await.unwrap();
+        assert!(!source_tasks.is_empty(), "autogen should have made tasks");
+
+        let target = SqliteRepository::in_memory().await.unwrap();
+        let report = copy_all(&source, &target).await.unwrap();
+
+        assert!(report.task_types > 0, "seeded task types must be copied");
+        assert_eq!(report.tasks, source_tasks.len());
+        assert_eq!(report.treatments, 1);
+        assert_eq!(target.task_list().await.unwrap(), source_tasks);
+        assert_eq!(
+            target
+                .treatment_list_for_planting(planting.id)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            source.task_type_list().await.unwrap(),
+            target.task_type_list().await.unwrap()
+        );
     }
 
     #[tokio::test]

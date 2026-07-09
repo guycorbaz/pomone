@@ -4,7 +4,8 @@ use anyhow::{bail, Context, Result};
 use chrono::Local;
 use clap::Parser;
 use pomone_app::{
-    backup_path_for, backup_sqlite, restore_sqlite, seed_demo_data, App, AppConfig, BackendConfig,
+    backup_path_for, backup_sqlite, backup_stamp_now, restore_sqlite, seed_demo_data, App,
+    AppConfig, BackendConfig,
 };
 use std::path::PathBuf;
 
@@ -71,7 +72,7 @@ fn sqlite_db_path(config: &AppConfig) -> Result<PathBuf> {
 fn backup(output: Option<PathBuf>) -> Result<()> {
     let config = AppConfig::load_or_default().context("failed to load Pomone config")?;
     let db_path = sqlite_db_path(&config)?;
-    let stamp = Local::now().format("%Y-%m-%d_%H%M%S").to_string();
+    let stamp = backup_stamp_now();
     let dest = match output {
         Some(dir) => {
             let name = db_path

@@ -4,11 +4,13 @@
 //! UI and CLI binaries hold a single [`App`] instance and call use-case
 //! methods on it (or pass `app.repo()` to free service functions).
 
+use crate::backup::{backup_backend, backup_path_for, backup_sqlite, backup_stamp_now};
 use crate::config::{AppConfig, BackendConfig};
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::i18n::{I18n, Lang};
 use crate::migration::{copy_all, MigrationReport};
 use pomone_db::{seed_defaults, MariaDbRepository, Repository, SqliteRepository};
+use std::path::PathBuf;
 
 /// Application runtime context.
 pub struct App {
@@ -86,16 +88,34 @@ impl App {
         new_backend: BackendConfig,
         migrate_data: bool,
     ) -> AppResult<MigrationReport> {
+        // Safety net (issue #58): snapshot the current SQLite file before
+        // anything else. A failed snapshot aborts the whole swap — better a
+        // refused migration than one without a way back.
+        let pre_swap_backup = backup_backend(&self.config.backend, &backup_stamp_now())?;
         let new_repo = build_repo_inner(&new_backend, !migrate_data).await?;
-        let report = if migrate_data {
+        let mut report = if migrate_data {
             copy_all(&*self.repo, &*new_repo).await?
         } else {
             MigrationReport::default()
         };
+        report.pre_swap_backup = pre_swap_backup;
         self.repo = new_repo;
         self.config.backend = new_backend;
         self.config.save_default()?;
         Ok(report)
+    }
+
+    /// Snapshot the current SQLite database to a timestamped sibling `.bak`
+    /// and return its path (issue #58 — the settings-page "backup now"
+    /// button). `Inconsistent("backup_sqlite_only")` for MariaDB backends,
+    /// whose backups belong to the server's native tooling.
+    pub fn backup_now(&self) -> AppResult<PathBuf> {
+        let BackendConfig::Sqlite { path } = &self.config.backend else {
+            return Err(AppError::Inconsistent("backup_sqlite_only".into()));
+        };
+        let dest = backup_path_for(path, &backup_stamp_now());
+        backup_sqlite(path, &dest)?;
+        Ok(dest)
     }
 }
 
@@ -191,6 +211,42 @@ mod tests {
         app.set_lang(Lang::En);
         assert_eq!(app.i18n().t("crop"), "Crop");
         assert_eq!(app.config().language, "en");
+    }
+
+    #[tokio::test]
+    async fn backup_now_snapshots_the_sqlite_file() {
+        let dir = std::env::temp_dir().join(format!("pomone-app-backup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let db = dir.join("pomone.sqlite");
+        std::fs::write(&db, b"LIVE").unwrap();
+
+        let config = AppConfig {
+            backend: BackendConfig::Sqlite { path: db.clone() },
+            language: "fr".to_owned(),
+        };
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        let app = App::with_repo(config, Box::new(repo)).await.unwrap();
+
+        let dest = app.backup_now().unwrap();
+        assert_eq!(std::fs::read(&dest).unwrap(), b"LIVE");
+        assert!(dest.to_string_lossy().ends_with(".bak"));
+
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[tokio::test]
+    async fn backup_now_rejects_mariadb_backend() {
+        let config = AppConfig {
+            backend: BackendConfig::Mariadb {
+                url: "mysql://user@host/db".into(),
+            },
+            language: "fr".to_owned(),
+        };
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        let app = App::with_repo(config, Box::new(repo)).await.unwrap();
+
+        let err = app.backup_now().unwrap_err();
+        assert!(matches!(err, crate::AppError::Inconsistent(ref m) if m == "backup_sqlite_only"));
     }
 
     #[tokio::test]
