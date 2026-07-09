@@ -15,10 +15,10 @@
 //! planting was already created, we don't want to roll it back over a
 //! taxonomy quibble.
 //!
-//! This module is idempotent in spirit: callers should only invoke it
-//! once per planting (typically right after `planting_create`). It does
-//! not check whether tasks already exist; running it twice would create
-//! duplicates.
+//! The generator is idempotent (issue #69): before creating a task it
+//! checks the planting's existing tasks and skips any (type, date) pair
+//! that is already there, so calling it twice — or on a planting the user
+//! already gave tasks — never creates duplicates.
 
 use crate::error::AppResult;
 use chrono::NaiveDate;
@@ -36,10 +36,24 @@ pub async fn generate_tasks_for_planting(
     // lookups (a future fix-or-create flow could insert missing categories
     // on the fly — for now, missing = skip).
     let types = repo.task_type_list().await?;
+    // Idempotency guard (issue #69): a (type, date) pair the planting
+    // already carries is not re-created.
+    let existing: std::collections::HashSet<_> = repo
+        .task_list_for_planting(planting.id)
+        .await?
+        .iter()
+        .map(|t| (t.task_type_id, t.planned_on))
+        .collect();
     let triggers = phase_dates(planting);
     let mut created = Vec::with_capacity(triggers.len());
     for (trigger, date) in triggers {
         match resolve_type(&types, trigger) {
+            Some(tt) if existing.contains(&(tt.id, date)) => {
+                tracing::debug!(
+                    ?trigger, planting_id = %planting.id,
+                    "auto-generated task already exists — skipping duplicate",
+                );
+            }
             Some(tt) => {
                 let task = Task::new(
                     Some(planting.id),
@@ -239,5 +253,46 @@ mod tests {
     fn perennial_yields_a_plant_trigger_at_establishment() {
         let p = perennial_planting(d(2026, 3, 15));
         assert_eq!(phase_dates(&p), vec![(Trigger::Plant, d(2026, 3, 15))]);
+    }
+
+    #[tokio::test]
+    async fn generating_twice_creates_no_duplicates() {
+        use crate::services::create_annual_planting_from_sowing;
+        use crate::test_helpers::seed_test_data;
+        use pomone_db::{
+            seed_defaults, LocationRepo, PlantingRepo, SqliteRepository, StrataRepo, TaskRepo,
+            VarietyRepo,
+        };
+
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        seed_test_data(&repo).await.unwrap();
+        let varieties = repo.variety_list().await.unwrap();
+        let locations = repo.location_list().await.unwrap();
+        let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        let strata = repo.strata_list().await.unwrap()[0].id;
+        // Creation runs the generator once.
+        let planting = create_annual_planting_from_sowing(
+            &repo,
+            varieties[0].id,
+            bed.id,
+            strata,
+            d(2026, 3, 1),
+            dec!(20),
+            100,
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+        let planting = repo.planting_get(planting.id).await.unwrap().unwrap();
+        let before = repo.task_list_for_planting(planting.id).await.unwrap();
+        assert!(!before.is_empty());
+
+        // Second run must be a no-op (issue #69).
+        let created = generate_tasks_for_planting(&repo, &planting).await.unwrap();
+        assert!(created.is_empty(), "second run must not create tasks");
+        let after = repo.task_list_for_planting(planting.id).await.unwrap();
+        assert_eq!(after.len(), before.len());
     }
 }

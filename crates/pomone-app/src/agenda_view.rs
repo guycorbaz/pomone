@@ -33,9 +33,15 @@ pub struct AgendaRow {
     pub today: bool,
 }
 
+/// Completed tasks kept in the list (issue #69). Pending tasks are never
+/// dropped — an overdue task must stay visible however old it is — but the
+/// completed history is capped so years of records can't swamp the screen.
+const COMPLETED_HISTORY_CAP: usize = 500;
+
 /// Build the flat task list relative to `today`, sorted newest planned date
-/// first (ties broken by label). Includes every task — pending and completed —
-/// so the list doubles as a history. One DB read per lookup table.
+/// first (ties broken by label). Includes every pending task and the
+/// [`COMPLETED_HISTORY_CAP`] most recent completed ones, so the list doubles
+/// as a (bounded) history. One DB read per lookup table.
 pub async fn list_agenda(repo: &dyn Repository, today: NaiveDate) -> AppResult<Vec<AgendaRow>> {
     let tasks = repo.task_list().await?;
     let types = repo.task_type_list().await?;
@@ -82,6 +88,17 @@ pub async fn list_agenda(repo: &dyn Repository, today: NaiveDate) -> AppResult<V
 
     // Newest planned date first; stable tiebreak on label.
     rows.sort_by(|a, b| b.planned_on.cmp(&a.planned_on).then(a.label.cmp(&b.label)));
+
+    // Cap the completed history (rows are newest-first, so retaining the
+    // first N completed keeps the most recent ones). Pending rows all stay.
+    let mut completed_kept = 0usize;
+    rows.retain(|r| {
+        if !r.completed {
+            return true;
+        }
+        completed_kept += 1;
+        completed_kept <= COMPLETED_HISTORY_CAP
+    });
 
     Ok(rows)
 }
@@ -182,6 +199,31 @@ mod tests {
         // Exactly one "today" flag: the pending today task, not the completed one.
         assert_eq!(rows.iter().filter(|r| r.today).count(), 1);
         assert!(rows.iter().all(|r| !(r.today && r.overdue))); // never both
+    }
+
+    #[tokio::test]
+    async fn completed_history_is_capped_but_pending_never_dropped() {
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let today = d(2026, 5, 20);
+
+        // A very old pending task — must survive the cap however old.
+        add_task(&repo, TaskCategory::Weeding, d(2020, 1, 1), None).await;
+        // One more completed task than the cap allows.
+        let base = d(2024, 1, 1);
+        for i in 0..=COMPLETED_HISTORY_CAP {
+            let day = base + chrono::Duration::days(i64::try_from(i).unwrap());
+            add_task(&repo, TaskCategory::Irrigation, day, Some(day)).await;
+        }
+
+        let rows = list_agenda(&repo, today).await.unwrap();
+        let completed = rows.iter().filter(|r| r.completed).count();
+        assert_eq!(completed, COMPLETED_HISTORY_CAP);
+        // The dropped one is the oldest completed; the old pending stays.
+        assert!(rows.iter().any(|r| r.planned_on == "2020-01-01"));
+        assert!(!rows
+            .iter()
+            .any(|r| r.completed && r.planned_on == "2024-01-01"));
     }
 
     #[tokio::test]

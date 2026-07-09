@@ -3549,17 +3549,42 @@ fn try_swap_backend(
                 msg.push('\n');
                 msg.push_str(&i18n.t_args("settings-backup-note", &bargs));
             }
+
+            // Every list-based screen now points at a different repo; reload
+            // them all. A failed reload is surfaced in the status (issue #69)
+            // instead of leaving a silently empty screen.
+            refresh_bed_usage(window, &s.app, &s.runtime);
+            let mut failed_screens: Vec<&str> = Vec::new();
+            // (nav key, result) — the key doubles as the localized screen
+            // name in the warning below.
+            let reloads: [(&str, Result<()>); 5] = [
+                ("nav-plantings", refresh_plantings(window, &mut s)),
+                ("nav-cultures", refresh_cultures(window, &mut s)),
+                ("nav-locations", refresh_locations(window, &mut s)),
+                ("nav-tasks", refresh_task_calendar(window, &mut s)),
+                ("nav-strata", refresh_strata(window, &mut s)),
+            ];
+            for (screen, result) in reloads {
+                if let Err(e) = result {
+                    tracing::error!(error = %e, screen, "failed to refresh after backend swap");
+                    failed_screens.push(screen);
+                }
+            }
+            refresh_settings(window, &s);
+            if !failed_screens.is_empty() {
+                let i18n = s.app.i18n();
+                let screens = failed_screens
+                    .iter()
+                    .map(|key| i18n.t(key))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let mut wargs = FluentArgs::new();
+                wargs.set("screens", screens);
+                msg.push('\n');
+                msg.push_str(&i18n.t_args("settings-refresh-warning", &wargs));
+            }
             window.set_settings_status_text(SharedString::from(msg));
             window.set_settings_status_is_error(false);
-
-            // Every list-based screen now points at a different repo; reload them all.
-            refresh_bed_usage(window, &s.app, &s.runtime);
-            let _ = refresh_plantings(window, &mut s);
-            let _ = refresh_cultures(window, &mut s);
-            let _ = refresh_locations(window, &mut s);
-            let _ = refresh_task_calendar(window, &mut s);
-            let _ = refresh_strata(window, &mut s);
-            refresh_settings(window, &s);
         }
         Err(e) => {
             let i18n = s.app.i18n();

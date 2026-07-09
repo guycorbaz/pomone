@@ -245,6 +245,7 @@ settings-backup-explain = Copie instantanée du fichier SQLite, créée à côt�
 button-backup-now = Sauvegarder maintenant
 settings-backup-done = Sauvegarde créée : { $path }
 settings-backup-note = Sauvegarde automatique : { $path }
+settings-refresh-warning = Attention : certains écrans n'ont pas pu être rechargés ({ $screens }) — les rouvrir ou redémarrer l'application.
 error-backup-sqlite-only = La sauvegarde intégrée ne concerne que le backend SQLite.
 
 ## Strata screen
