@@ -151,6 +151,31 @@ placeholder-harvest-notes = gelée tardive, taille sévère…
 button-record-harvest = Enregistrer
 status-harvest-recorded = Récolte enregistrée
 
+## Treatments (phytosanitary traceability, issue #82)
+section-treatments = Traitements phytosanitaires
+section-record-treatment = Enregistrer un traitement
+empty-treatments = Aucun traitement enregistré pour le moment.
+treatment-header-date = Date
+treatment-header-substance = Matière active
+treatment-header-product = Produit
+treatment-header-dose = Dose
+treatment-header-notes = Notes
+label-treatment-date = Date (AAAA-MM-JJ)
+label-treatment-substance = Matière active
+label-treatment-product = Produit (marque)
+label-treatment-dose = Dose
+label-treatment-unit = Unité
+label-treatment-notes = Notes (optionnel)
+placeholder-treatment-substance = cuivre, soufre…
+placeholder-treatment-product = Bouillie bordelaise
+placeholder-treatment-dose = 1.25
+placeholder-treatment-unit = kg/ha
+placeholder-treatment-notes = météo, opérateur…
+button-record-treatment = Enregistrer
+button-delete-treatment = Supprimer
+status-treatment-recorded = Traitement enregistré
+status-treatment-deleted = Traitement supprimé
+
 ## Calendar screen
 calendar-prev = ‹
 calendar-next = ›
@@ -313,6 +338,7 @@ confirm-delete-title = Confirmer la suppression
 confirm-ok = Supprimer
 confirm-cancel = Annuler
 confirm-delete-strata = Supprimer cette strate ? Cette action est irréversible.
+confirm-delete-treatment = Supprimer ce traitement ? Cette action est irréversible.
 confirm-delete-task = Supprimer cette tâche ? Cette action est irréversible.
 confirm-delete-task-type = Supprimer ce type de tâche ? Cette action est irréversible.
 confirm-delete-planting = Supprimer cette plantation ? Cette action est irréversible. Elle n'est possible que si aucune activité n'a été enregistrée.

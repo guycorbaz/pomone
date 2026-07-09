@@ -18,12 +18,12 @@ import { TaskFormPage } from "task_form.slint";
 import { TaskTypesPage, TaskTypeAdminItem } from "task_types.slint";
 import { FamiliesPage, FamilyAdminItem } from "families.slint";
 import { CropMapPage, CropMapLaneItem, CropMapBarItem, CropMapLocationOption } from "crop_map.slint";
-import { PlantingDetailPage, DetailLine, YearlyHarvestRow, PlantingTaskRow } from "planting_detail.slint";
+import { PlantingDetailPage, DetailLine, YearlyHarvestRow, PlantingTaskRow, TreatmentRow } from "planting_detail.slint";
 import { StrataPage, StrataItem } from "strata.slint";
 import { SettingsPage } from "settings.slint";
 
 // Re-export so the generated Rust types are visible to `main.rs`.
-export { PlantingRow, CropRow, VarietyRow, LocationItem, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, StrataItem, GanttBar, TaskTypeAdminItem, FamilyAdminItem, PaletteColor, CropMapLaneItem, CropMapBarItem, CropMapLocationOption }
+export { PlantingRow, CropRow, VarietyRow, LocationItem, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, TreatmentRow, StrataItem, GanttBar, TaskTypeAdminItem, FamilyAdminItem, PaletteColor, CropMapLaneItem, CropMapBarItem, CropMapLocationOption }
 
 export component MainWindow inherits Window {
     title: "Pomone";
@@ -348,6 +348,40 @@ export component MainWindow inherits Window {
     in-out property <string> new-harvest-actual;
     in-out property <string> new-harvest-notes;
     callback record-harvest();
+
+    // ------- Treatments section (phytosanitary traceability, issue #82) -------
+    in property <string> treatments-section-title;
+    in property <string> treatments-empty-text;
+    in property <string> treatment-header-date;
+    in property <string> treatment-header-substance;
+    in property <string> treatment-header-product;
+    in property <string> treatment-header-dose;
+    in property <string> treatment-header-notes;
+    in property <[TreatmentRow]> treatment-rows;
+    in property <string> treatment-form-section;
+    in property <string> treatment-label-date;
+    in property <string> treatment-label-substance;
+    in property <string> treatment-label-product;
+    in property <string> treatment-label-dose;
+    in property <string> treatment-label-unit;
+    in property <string> treatment-label-notes;
+    in property <string> treatment-placeholder-substance;
+    in property <string> treatment-placeholder-product;
+    in property <string> treatment-placeholder-dose;
+    in property <string> treatment-placeholder-unit;
+    in property <string> treatment-placeholder-notes;
+    in property <string> treatment-record-button;
+    in property <string> treatment-delete-button;
+    in-out property <string> treatment-status-text;
+    in property <bool> treatment-status-is-error: false;
+    in-out property <string> new-treatment-date;
+    in-out property <string> new-treatment-substance;
+    in-out property <string> new-treatment-product;
+    in-out property <string> new-treatment-dose;
+    in-out property <string> new-treatment-unit;
+    in-out property <string> new-treatment-notes;
+    callback record-treatment();
+    callback delete-treatment(string);
 
     // ------- Strata page state forwarded to StrataPage -------
     in property <string> strata-title-text;
@@ -719,6 +753,11 @@ export component MainWindow inherits Window {
     }
     Timer {
         interval: 4s;
+        running: root.treatment-status-text != "";
+        triggered => { root.treatment-status-text = ""; }
+    }
+    Timer {
+        interval: 4s;
         running: root.strata-status-text != "";
         triggered => { root.strata-status-text = ""; }
     }
@@ -1044,8 +1083,40 @@ export component MainWindow inherits Window {
                 new-harvest-expected <=> new-harvest-expected;
                 new-harvest-actual <=> new-harvest-actual;
                 new-harvest-notes <=> new-harvest-notes;
+                treatments-section-title: treatments-section-title;
+                treatments-empty-text: treatments-empty-text;
+                treatment-header-date: treatment-header-date;
+                treatment-header-substance: treatment-header-substance;
+                treatment-header-product: treatment-header-product;
+                treatment-header-dose: treatment-header-dose;
+                treatment-header-notes: treatment-header-notes;
+                treatment-rows: treatment-rows;
+                treatment-form-section: treatment-form-section;
+                treatment-label-date: treatment-label-date;
+                treatment-label-substance: treatment-label-substance;
+                treatment-label-product: treatment-label-product;
+                treatment-label-dose: treatment-label-dose;
+                treatment-label-unit: treatment-label-unit;
+                treatment-label-notes: treatment-label-notes;
+                treatment-placeholder-substance: treatment-placeholder-substance;
+                treatment-placeholder-product: treatment-placeholder-product;
+                treatment-placeholder-dose: treatment-placeholder-dose;
+                treatment-placeholder-unit: treatment-placeholder-unit;
+                treatment-placeholder-notes: treatment-placeholder-notes;
+                treatment-record-button: treatment-record-button;
+                treatment-delete-button: treatment-delete-button;
+                treatment-status-text: treatment-status-text;
+                treatment-status-is-error: treatment-status-is-error;
+                new-treatment-date <=> new-treatment-date;
+                new-treatment-substance <=> new-treatment-substance;
+                new-treatment-product <=> new-treatment-product;
+                new-treatment-dose <=> new-treatment-dose;
+                new-treatment-unit <=> new-treatment-unit;
+                new-treatment-notes <=> new-treatment-notes;
                 go-back => { detail-go-back(); }
                 record-harvest => { record-harvest(); }
+                record-treatment => { record-treatment(); }
+                delete-treatment(id) => { delete-treatment(id); }
             }
 
             // ------- Cultures -------

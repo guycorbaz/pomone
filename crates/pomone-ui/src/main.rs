@@ -15,28 +15,28 @@ use fluent::FluentArgs;
 use pomone_app::{
     bed_usage_series, create_crop, create_family, create_location, create_recurring_task,
     create_strata, create_task, create_task_type, create_variety, delete_crop, delete_family,
-    delete_location, delete_strata, delete_task, delete_task_type, delete_variety,
-    extend_series_if_needed, get_crop_for_edit, get_family_for_edit, get_location_for_edit,
-    get_planting_detail, get_task_for_edit, get_task_type_for_edit, get_variety_for_edit,
-    list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops, list_families_admin,
-    list_family_options, list_location_kind_options, list_location_options, list_locations_tree,
-    list_parent_options, list_planting_choices, list_planting_tasks, list_plantings,
-    list_strata_options, list_strata_rows, list_task_category_options, list_task_type_options,
-    list_task_types_admin, list_varieties_for_crop, list_variety_options,
-    list_yearly_harvests_for_planting, move_planting_to_location, parse_id, planting_status_key,
-    recurrence_unit_str, reschedule_task, services, split_planting, test_backend, update_crop,
-    update_family, update_location, update_task, update_task_type, update_variety,
-    AgendaRow as AppAgendaRow, App, AppConfig, AppError, BackendConfig,
-    BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry, CalendarEntryKind,
-    CalendarEventKind, CropEditForm, CropInput, CropMapBar as AppCropMapBar,
+    delete_location, delete_strata, delete_task, delete_task_type, delete_treatment,
+    delete_variety, extend_series_if_needed, get_crop_for_edit, get_family_for_edit,
+    get_location_for_edit, get_planting_detail, get_task_for_edit, get_task_type_for_edit,
+    get_variety_for_edit, list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops,
+    list_families_admin, list_family_options, list_location_kind_options, list_location_options,
+    list_locations_tree, list_parent_options, list_planting_choices, list_planting_tasks,
+    list_plantings, list_strata_options, list_strata_rows, list_task_category_options,
+    list_task_type_options, list_task_types_admin, list_treatments_for_planting,
+    list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting,
+    move_planting_to_location, parse_id, planting_status_key, recurrence_unit_str, reschedule_task,
+    services, split_planting, test_backend, update_crop, update_family, update_location,
+    update_task, update_task_type, update_variety, AgendaRow as AppAgendaRow, App, AppConfig,
+    AppError, BackendConfig, BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry,
+    CalendarEntryKind, CalendarEventKind, CropEditForm, CropInput, CropMapBar as AppCropMapBar,
     CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyAdminRow,
     FamilyEditForm, FamilyOption, Lang, LifespanKind, LocationEditForm, LocationInput,
     LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
     PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
     PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
     StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
-    TaskTypeEditForm, TaskTypeOption, VarietyEditForm, VarietyInput, VarietyOption,
-    VarietyProfileKind, VarietyRow as AppVarietyRow, WindowGeometry,
+    TaskTypeEditForm, TaskTypeOption, TreatmentRow as AppTreatmentRow, VarietyEditForm,
+    VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow, WindowGeometry,
     YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{
@@ -67,8 +67,8 @@ use generated::{
     PlantingRow as SlintPlantingRow, PlantingTaskRow as SlintPlantingTaskRow,
     StrataItem as SlintStrataItem, TaskCalendarDay as SlintTaskCalendarDay,
     TaskCategoryChip as SlintTaskCategoryChip, TaskRow as SlintTaskRow,
-    TaskTypeAdminItem as SlintTaskTypeAdminItem, VarietyRow as SlintVarietyRow,
-    YearlyHarvestRow as SlintYearlyHarvestRow,
+    TaskTypeAdminItem as SlintTaskTypeAdminItem, TreatmentRow as SlintTreatmentRow,
+    VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
 /// A destructive action awaiting the user's confirmation in the shared dialog
@@ -90,6 +90,8 @@ enum PendingDelete {
     Location(String),
     /// Family id (a row in the Familles catalog).
     Family(String),
+    /// Treatment id (a row in the detail page's treatments table). Issue #82.
+    Treatment(String),
 }
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -724,6 +726,7 @@ fn main() -> Result<()> {
                 Some(PendingDelete::Variety(id)) => do_delete_variety(&window, &mut s, &id),
                 Some(PendingDelete::Location(id)) => do_delete_location(&window, &mut s, &id),
                 Some(PendingDelete::Family(id)) => do_delete_family(&window, &mut s, &id),
+                Some(PendingDelete::Treatment(id)) => do_delete_treatment_row(&window, &mut s, &id),
                 None => {}
             }
         });
@@ -1024,6 +1027,60 @@ fn main() -> Result<()> {
                     window.set_harvest_status_is_error(is_err);
                 }
             }
+        });
+    }
+
+    // --- Record a phytosanitary treatment from the detail screen (issue #82) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_record_treatment(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            match try_record_treatment(&window, &mut s) {
+                Ok(()) => {
+                    window.set_new_treatment_date(SharedString::from(""));
+                    window.set_new_treatment_substance(SharedString::from(""));
+                    window.set_new_treatment_product(SharedString::from(""));
+                    window.set_new_treatment_dose(SharedString::from(""));
+                    window.set_new_treatment_unit(SharedString::from(""));
+                    window.set_new_treatment_notes(SharedString::from(""));
+                    let pid = s.detail_planting_id.clone();
+                    // Refresh first: it clears the status banners, so the
+                    // success message must be set afterwards to survive.
+                    if let Err(e) = refresh_planting_detail(&window, &mut s, &pid) {
+                        tracing::error!(error = %e, "failed to refresh detail after treatment");
+                    }
+                    window.set_treatment_status_text(SharedString::from(
+                        s.app.i18n().t("status-treatment-recorded"),
+                    ));
+                    window.set_treatment_status_is_error(false);
+                }
+                Err(e) => {
+                    let (text, is_err) = render_form_error(s.app.i18n(), e);
+                    window.set_treatment_status_text(text);
+                    window.set_treatment_status_is_error(is_err);
+                }
+            }
+        });
+    }
+
+    // --- Delete a treatment row (goes through the shared confirm dialog) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_delete_treatment(move |id| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            s.pending_delete = Some(PendingDelete::Treatment(id.to_string()));
+            window.set_confirm_message(SharedString::from(
+                s.app.i18n().t("confirm-delete-treatment"),
+            ));
+            window.set_confirm_visible(true);
         });
     }
 
@@ -2215,6 +2272,34 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_harvest_placeholder_kg(SharedString::from(i18n.t("placeholder-harvest-kg")));
     window.set_harvest_placeholder_notes(SharedString::from(i18n.t("placeholder-harvest-notes")));
     window.set_harvest_record_button(SharedString::from(i18n.t("button-record-harvest")));
+
+    // Treatments section labels (issue #82) — rows come from refresh_planting_detail.
+    window.set_treatments_section_title(SharedString::from(i18n.t("section-treatments")));
+    window.set_treatments_empty_text(SharedString::from(i18n.t("empty-treatments")));
+    window.set_treatment_header_date(SharedString::from(i18n.t("treatment-header-date")));
+    window.set_treatment_header_substance(SharedString::from(i18n.t("treatment-header-substance")));
+    window.set_treatment_header_product(SharedString::from(i18n.t("treatment-header-product")));
+    window.set_treatment_header_dose(SharedString::from(i18n.t("treatment-header-dose")));
+    window.set_treatment_header_notes(SharedString::from(i18n.t("treatment-header-notes")));
+    window.set_treatment_form_section(SharedString::from(i18n.t("section-record-treatment")));
+    window.set_treatment_label_date(SharedString::from(i18n.t("label-treatment-date")));
+    window.set_treatment_label_substance(SharedString::from(i18n.t("label-treatment-substance")));
+    window.set_treatment_label_product(SharedString::from(i18n.t("label-treatment-product")));
+    window.set_treatment_label_dose(SharedString::from(i18n.t("label-treatment-dose")));
+    window.set_treatment_label_unit(SharedString::from(i18n.t("label-treatment-unit")));
+    window.set_treatment_label_notes(SharedString::from(i18n.t("label-treatment-notes")));
+    window.set_treatment_placeholder_substance(SharedString::from(
+        i18n.t("placeholder-treatment-substance"),
+    ));
+    window.set_treatment_placeholder_product(SharedString::from(
+        i18n.t("placeholder-treatment-product"),
+    ));
+    window.set_treatment_placeholder_dose(SharedString::from(i18n.t("placeholder-treatment-dose")));
+    window.set_treatment_placeholder_unit(SharedString::from(i18n.t("placeholder-treatment-unit")));
+    window
+        .set_treatment_placeholder_notes(SharedString::from(i18n.t("placeholder-treatment-notes")));
+    window.set_treatment_record_button(SharedString::from(i18n.t("button-record-treatment")));
+    window.set_treatment_delete_button(SharedString::from(i18n.t("button-delete-treatment")));
 
     // Locations page
     window.set_locations_title_text(SharedString::from(i18n.t("title-locations")));
@@ -3856,6 +3941,70 @@ fn try_record_harvest(window: &MainWindow, state: &mut UiState) -> Result<(), Fo
         .map_err(FormError::Service)
 }
 
+/// Validate + submit the "record a treatment" form on the detail page
+/// (issue #82). Every field except notes is required.
+fn try_record_treatment(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+    let i18n = state.app.i18n();
+    if state.detail_planting_id.is_empty() {
+        return Err(FormError::Service(AppError::Inconsistent(
+            "no planting selected for treatment record".into(),
+        )));
+    }
+    let planting_id: PlantingId =
+        parse_id(&state.detail_planting_id).map_err(FormError::Service)?;
+    let applied_on = validate_iso_date(&window.get_new_treatment_date(), i18n)?;
+    let substance = validate_required_name(&window.get_new_treatment_substance(), i18n)?;
+    let product = validate_required_name(&window.get_new_treatment_product(), i18n)?;
+    let dose = validate_positive_decimal(&window.get_new_treatment_dose(), i18n)?;
+    let unit = validate_required_name(&window.get_new_treatment_unit(), i18n)?;
+    let notes = optional_text(&window.get_new_treatment_notes());
+
+    state
+        .runtime
+        .block_on(async {
+            services::record_treatment(
+                state.app.repo(),
+                planting_id,
+                applied_on,
+                substance,
+                product,
+                dose,
+                unit,
+                notes,
+            )
+            .await
+            .map(|_| ())
+        })
+        .map_err(FormError::Service)
+}
+
+/// Execute a confirmed treatment deletion (issue #82) and repaint the detail
+/// page. Named `_row` to avoid clashing with the app-layer `delete_treatment`.
+fn do_delete_treatment_row(window: &MainWindow, s: &mut UiState, id: &str) {
+    let result: Result<(), AppError> = s
+        .runtime
+        .block_on(async { delete_treatment(s.app.repo(), id).await });
+    match result {
+        Ok(()) => {
+            let pid = s.detail_planting_id.clone();
+            // Refresh first — it clears the status banners (see the record
+            // callback), so the success message must be set afterwards.
+            if let Err(e) = refresh_planting_detail(window, s, &pid) {
+                tracing::error!(error = %e, "failed to refresh detail after treatment delete");
+            }
+            window.set_treatment_status_text(SharedString::from(
+                s.app.i18n().t("status-treatment-deleted"),
+            ));
+            window.set_treatment_status_is_error(false);
+        }
+        Err(e) => {
+            let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
+            window.set_treatment_status_text(text);
+            window.set_treatment_status_is_error(is_err);
+        }
+    }
+}
+
 fn parse_i32(s: &str, field: &'static str) -> Result<i32, AppError> {
     s.trim()
         .parse::<i32>()
@@ -3913,6 +4062,7 @@ fn refresh_planting_detail(
         AppPlantingDetail,
         Vec<AppYearlyHarvestRow>,
         Vec<AppPlantingTaskRow>,
+        Vec<AppTreatmentRow>,
     );
     let today = Local::now().date_naive();
     let snapshot: Result<DetailSnapshot, AppError> = state.runtime.block_on(async {
@@ -3921,9 +4071,11 @@ fn refresh_planting_detail(
         // anyway keeps the code path uniform and the SQL is a no-op.
         let harvests = list_yearly_harvests_for_planting(state.app.repo(), planting_id).await?;
         let tasks = list_planting_tasks(state.app.repo(), planting_id, today).await?;
-        Ok((detail, harvests, tasks))
+        let treatments = list_treatments_for_planting(state.app.repo(), planting_id).await?;
+        Ok((detail, harvests, tasks, treatments))
     });
-    let (detail, harvests, tasks) = snapshot.context("failed to load planting detail")?;
+    let (detail, harvests, tasks, treatments) =
+        snapshot.context("failed to load planting detail")?;
 
     planting_id.clone_into(&mut state.detail_planting_id);
 
@@ -3975,14 +4127,29 @@ fn refresh_planting_detail(
         })
         .collect();
 
+    let treatment_rows: Vec<SlintTreatmentRow> = treatments
+        .into_iter()
+        .map(|t| SlintTreatmentRow {
+            treatment_id: SharedString::from(t.treatment_id),
+            applied_on: SharedString::from(t.applied_on),
+            active_substance: SharedString::from(t.active_substance),
+            product_name: SharedString::from(t.product_name),
+            dose_label: SharedString::from(t.dose_label),
+            notes: SharedString::from(t.notes),
+        })
+        .collect();
+
     window.set_detail_schedule_lines(ModelRc::new(VecModel::from(lines)));
     window.set_detail_task_rows(ModelRc::new(VecModel::from(task_rows)));
     window.set_detail_has_detail(true);
     window.set_detail_is_perennial(detail.is_perennial);
     window.set_harvest_rows(ModelRc::new(VecModel::from(harvest_rows)));
+    window.set_treatment_rows(ModelRc::new(VecModel::from(treatment_rows)));
     // Clear stale form/status from the previous detail open.
     window.set_harvest_status_text(SharedString::from(""));
     window.set_harvest_status_is_error(false);
+    window.set_treatment_status_text(SharedString::from(""));
+    window.set_treatment_status_is_error(false);
     Ok(())
 }
 

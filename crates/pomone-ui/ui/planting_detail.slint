@@ -21,6 +21,15 @@ export struct YearlyHarvestRow {
     notes: string,
 }
 
+export struct TreatmentRow {
+    treatment-id: string,
+    applied-on: string,
+    active-substance: string,
+    product-name: string,
+    dose-label: string,
+    notes: string,
+}
+
 export struct PlantingTaskRow {
     task-id: string,
     planned-on: string,
@@ -106,8 +115,42 @@ export component PlantingDetailPage inherits Rectangle {
     in-out property <string> new-harvest-actual;
     in-out property <string> new-harvest-notes;
 
+    // ---------- Treatments section (phytosanitary traceability, issue #82) ----------
+    in property <string> treatments-section-title;
+    in property <string> treatments-empty-text;
+    in property <string> treatment-header-date;
+    in property <string> treatment-header-substance;
+    in property <string> treatment-header-product;
+    in property <string> treatment-header-dose;
+    in property <string> treatment-header-notes;
+    in property <[TreatmentRow]> treatment-rows;
+    in property <string> treatment-form-section;
+    in property <string> treatment-label-date;
+    in property <string> treatment-label-substance;
+    in property <string> treatment-label-product;
+    in property <string> treatment-label-dose;
+    in property <string> treatment-label-unit;
+    in property <string> treatment-label-notes;
+    in property <string> treatment-placeholder-substance;
+    in property <string> treatment-placeholder-product;
+    in property <string> treatment-placeholder-dose;
+    in property <string> treatment-placeholder-unit;
+    in property <string> treatment-placeholder-notes;
+    in property <string> treatment-record-button;
+    in property <string> treatment-delete-button;
+    in property <string> treatment-status-text;
+    in property <bool> treatment-status-is-error: false;
+    in-out property <string> new-treatment-date;
+    in-out property <string> new-treatment-substance;
+    in-out property <string> new-treatment-product;
+    in-out property <string> new-treatment-dose;
+    in-out property <string> new-treatment-unit;
+    in-out property <string> new-treatment-notes;
+
     callback go-back();
     callback record-harvest();
+    callback record-treatment();
+    callback delete-treatment(string);   // treatment-id
 
     // The detail page has up to three stacked Cards (schedule, summary,
     // yearly-harvest) and can overflow on smaller windows — wrap the body
@@ -614,6 +657,215 @@ export component PlantingDetailPage inherits Rectangle {
                     Text {
                         text: harvest-status-text;
                         color: harvest-status-is-error ? Palette.danger : Palette.success;
+                        font-size: Theme.font-size-label;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+
+        // ---------- Treatments (phytosanitary traceability, issue #82) ----------
+        if has-detail: Card {
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-md;
+
+                SectionHeader { text: treatments-section-title; }
+
+                VerticalLayout {
+                    spacing: Theme.space-xs;
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: treatment-header-date;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            width: 100px;
+                        }
+                        Text {
+                            text: treatment-header-substance;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            width: 140px;
+                        }
+                        Text {
+                            text: treatment-header-product;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            width: 160px;
+                        }
+                        Text {
+                            text: treatment-header-dose;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            width: 110px;
+                        }
+                        Text {
+                            text: treatment-header-notes;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            horizontal-stretch: 1;
+                        }
+                        // Spacer over the per-row delete button column.
+                        Rectangle { width: 80px; }
+                    }
+
+                    if treatment-rows.length == 0: Text {
+                        text: treatments-empty-text;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-body;
+                        horizontal-alignment: center;
+                    }
+
+                    for row in treatment-rows: HorizontalLayout {
+                        spacing: Theme.space-md;
+                        Text {
+                            text: row.applied-on;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            font-weight: Theme.font-weight-semibold;
+                            vertical-alignment: center;
+                            width: 100px;
+                        }
+                        Text {
+                            text: row.active-substance;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            vertical-alignment: center;
+                            width: 140px;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: row.product-name;
+                            color: Palette.text-primary;
+                            font-size: Theme.font-size-body;
+                            vertical-alignment: center;
+                            width: 160px;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: row.dose-label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-body;
+                            vertical-alignment: center;
+                            width: 110px;
+                        }
+                        Text {
+                            text: row.notes;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-body;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                            overflow: elide;
+                        }
+                        SecondaryButton {
+                            text: treatment-delete-button;
+                            compact: true;
+                            danger: true;
+                            clicked => { root.delete-treatment(row.treatment-id); }
+                        }
+                    }
+                }
+
+                Rectangle { height: 1px; background: Palette.border; }
+
+                // Record form
+                SectionHeader { text: treatment-form-section; }
+
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: treatment-label-date;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-treatment-date;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: treatment-label-substance;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-treatment-substance;
+                            placeholder-text: treatment-placeholder-substance;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: treatment-label-product;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-treatment-product;
+                            placeholder-text: treatment-placeholder-product;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: treatment-label-dose;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-treatment-dose;
+                            placeholder-text: treatment-placeholder-dose;
+                            input-type: decimal;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: treatment-label-unit;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        ThemedLineEdit {
+                            text <=> new-treatment-unit;
+                            placeholder-text: treatment-placeholder-unit;
+                        }
+                    }
+                }
+
+                VerticalLayout {
+                    spacing: Theme.space-xs;
+                    Text {
+                        text: treatment-label-notes;
+                        color: Palette.text-secondary;
+                        font-size: Theme.font-size-label;
+                    }
+                    ThemedLineEdit {
+                        text <=> new-treatment-notes;
+                        placeholder-text: treatment-placeholder-notes;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: Theme.space-md;
+                    PrimaryButton {
+                        text: treatment-record-button;
+                        clicked => { record-treatment(); }
+                    }
+                    Text {
+                        text: treatment-status-text;
+                        color: treatment-status-is-error ? Palette.danger : Palette.success;
                         font-size: Theme.font-size-label;
                         vertical-alignment: center;
                         horizontal-stretch: 1;

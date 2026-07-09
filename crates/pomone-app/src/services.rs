@@ -8,7 +8,7 @@ use chrono::NaiveDate;
 use pomone_db::Repository;
 use pomone_domain::{
     date_calc, LocationId, Planting, PlantingId, PlantingSchedule, PlantingStatus, StrataId,
-    VarietyId, VarietyProfile, YearlyHarvest,
+    Treatment, VarietyId, VarietyProfile, YearlyHarvest,
 };
 use rust_decimal::Decimal;
 
@@ -310,6 +310,39 @@ pub async fn record_yearly_harvest(
     let harvest = YearlyHarvest::new(planting_id, year, expected_yield_kg, actual_yield_kg, notes)?;
     repo.yearly_harvest_upsert(&harvest).await?;
     Ok(harvest)
+}
+
+/// Record a phytosanitary treatment applied to a planting (issue #82).
+/// Unlike yearly harvests, treatments make sense for every planting kind
+/// (annual or perennial), so the only guard is that the planting exists.
+#[allow(clippy::too_many_arguments)]
+pub async fn record_treatment(
+    repo: &dyn Repository,
+    planting_id: PlantingId,
+    applied_on: NaiveDate,
+    active_substance: String,
+    product_name: String,
+    dose: Decimal,
+    dose_unit: String,
+    notes: Option<String>,
+) -> AppResult<Treatment> {
+    if repo.planting_get(planting_id).await?.is_none() {
+        return Err(AppError::NotFound {
+            kind: "planting",
+            id: planting_id.to_string(),
+        });
+    }
+    let treatment = Treatment::new(
+        planting_id,
+        applied_on,
+        active_substance,
+        product_name,
+        dose,
+        dose_unit,
+        notes,
+    )?;
+    repo.treatment_create(&treatment).await?;
+    Ok(treatment)
 }
 
 #[cfg(test)]

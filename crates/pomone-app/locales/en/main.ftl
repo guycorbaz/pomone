@@ -149,6 +149,31 @@ placeholder-harvest-notes = late frost, hard pruning…
 button-record-harvest = Record
 status-harvest-recorded = Harvest recorded
 
+## Treatments (phytosanitary traceability, issue #82)
+section-treatments = Phytosanitary treatments
+section-record-treatment = Record a treatment
+empty-treatments = No treatment recorded yet.
+treatment-header-date = Date
+treatment-header-substance = Active substance
+treatment-header-product = Product
+treatment-header-dose = Dose
+treatment-header-notes = Notes
+label-treatment-date = Date (YYYY-MM-DD)
+label-treatment-substance = Active substance
+label-treatment-product = Product (brand)
+label-treatment-dose = Dose
+label-treatment-unit = Unit
+label-treatment-notes = Notes (optional)
+placeholder-treatment-substance = copper, sulphur…
+placeholder-treatment-product = Bordeaux mixture
+placeholder-treatment-dose = 1.25
+placeholder-treatment-unit = kg/ha
+placeholder-treatment-notes = weather, operator…
+button-record-treatment = Record
+button-delete-treatment = Delete
+status-treatment-recorded = Treatment recorded
+status-treatment-deleted = Treatment deleted
+
 ## Calendar screen
 calendar-prev = ‹
 calendar-next = ›
@@ -311,6 +336,7 @@ confirm-delete-title = Confirm deletion
 confirm-ok = Delete
 confirm-cancel = Cancel
 confirm-delete-strata = Delete this stratum? This cannot be undone.
+confirm-delete-treatment = Delete this treatment? This cannot be undone.
 confirm-delete-task = Delete this task? This cannot be undone.
 confirm-delete-task-type = Delete this task type? This cannot be undone.
 confirm-delete-planting = Delete this planting? This cannot be undone, and is only allowed when no activity has been recorded.

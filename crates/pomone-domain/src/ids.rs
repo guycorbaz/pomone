@@ -109,6 +109,10 @@ define_id!(
 );
 define_id!(TaskId, "Identifier for a concrete task / operation.");
 define_id!(
+    TreatmentId,
+    "Identifier for a phytosanitary treatment applied to a planting."
+);
+define_id!(
     TaskSeriesId,
     "Identifier for a recurring task series (template that materializes \
      into one Task per occurrence)."
