@@ -155,6 +155,18 @@ fn default_families() -> Vec<Family> {
             "châtaignier, chêne, hêtre",
             "#244529",
         ),
+        (
+            "Poacées",
+            "Poaceae",
+            "blé, orge, maïs, avoine, seigle",
+            "#C2A24B",
+        ),
+        (
+            "Amaranthacées",
+            "Amaranthaceae",
+            "betterave, épinard, blette, quinoa",
+            "#8E4A68",
+        ),
     ]
     .into_iter()
     .map(|(name, latin, desc, color)| {

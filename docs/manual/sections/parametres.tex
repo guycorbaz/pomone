@@ -42,6 +42,22 @@ Le bouton \textbf{Enregistrer et migrer} sauvegarde la configuration et \emph{co
 La migration peut prendre quelques secondes pour une base de taille modeste. Pour les bases volumineuses, prévoyez une fenêtre de maintenance.
 \end{warnbox}
 
+\section{Unités d'affichage}
+\label{sec:parametres-unites}
+
+La carte \textbf{Unités d'affichage} choisit les unités utilisées pour afficher \emph{et saisir} les surfaces et les rendements :
+
+\begin{itemize}
+  \item \textbf{Surfaces} : m² (par défaut, adapté au maraîchage) ou \textbf{ha} (grandes cultures) ;
+  \item \textbf{Rendements} : \textbf{kg} (par défaut) ou \textbf{t} (tonnes).
+\end{itemize}
+
+Le changement est immédiat : les listes (plantations, lieux), la fiche de détail et les libellés des formulaires basculent dans l'unité choisie. Les champs de saisie suivent aussi : en mode hectares, saisir \texttt{8} dans le formulaire de plantation crée une plantation de 8~ha.
+
+\begin{notebox}
+Les données sont toujours \textbf{stockées} en m² et en kg, quelle que soit l'unité d'affichage — changer d'unité ne modifie jamais vos données et se fait sans risque, dans les deux sens. Voir le chapitre~\ref{chap:grandes-cultures} pour l'utilisation de Pomone en grandes cultures.
+\end{notebox}
+
 \section{Langue}
 
 Pomone est disponible en \textbf{français} et en \textbf{anglais}. Le bouton de bascule se trouve dans le pied de la barre latérale. La langue choisie est persistée et restaurée au prochain démarrage.
