@@ -1,0 +1,36 @@
+\chapter{Grandes cultures}
+\label{chap:grandes-cultures}
+
+Pomone n'est pas réservé au maraîchage : céréales, pomme de terre, betterave sucrière ou maïs se gèrent avec les mêmes écrans. Ce chapitre rassemble ce qui change quand on passe des planches de quelques dizaines de m² à des pièces de plusieurs hectares.
+
+\section{Passer en hectares et en tonnes}
+
+Première étape pour une ferme de grandes cultures : dans \textbf{Paramètres → Unités d'affichage}, choisissez \textbf{ha} pour les surfaces et \textbf{t} pour les rendements (voir section~\ref{sec:parametres-unites}). Tous les écrans et tous les formulaires basculent alors en hectares et en tonnes : une pièce de blé se saisit « 8 » (ha) et non « 80000 » (m²).
+
+Les données restent stockées en m² et en kg — une même base peut donc servir une exploitation mixte : l'atelier maraîcher travaille en m²/kg, l'assolement grandes cultures en ha/t, en basculant simplement le réglage.
+
+\section{Modéliser l'exploitation}
+
+\begin{itemize}
+  \item \textbf{Lieux} : créez une parcelle racine pour l'ensemble (par ex. « Les Grandes Terres », 20~ha) et une sous-parcelle par pièce culturale (« Pièce du Moulin », 8~ha…). La hiérarchie est la même que pour les planches de maraîchage (chapitre~\ref{chap:lieux}).
+  \item \textbf{Cultures et variétés} : les grandes cultures sont des cultures \emph{annuelles} ordinaires. Le profil de variété (semis → récolte) accepte des cycles longs : un blé d'hiver semé mi-octobre avec 270 jours jusqu'à maturité est récolté à la mi-juillet suivante.
+  \item \textbf{Familles} : les familles \textbf{Poacées} (blé, orge, maïs…) et \textbf{Amaranthacées} (betterave…) font partie du catalogue par défaut, aux côtés des Solanacées (pomme de terre) et des autres familles.
+\end{itemize}
+
+\begin{notebox}
+La commande \texttt{pomone-cli seed-demo} crée, en plus du jardin maraîcher, une ferme de démonstration de 20~ha avec quatre cultures de référence : blé tendre d'hiver, maïs grain, pomme de terre et betterave sucrière. C'est un bon point de départ pour explorer les écrans à l'échelle grandes cultures.
+\end{notebox}
+
+\section{Semis d'automne et calendrier}
+
+Un blé d'hiver est semé à l'automne de l'année $n-1$ et récolté l'été de l'année $n$. Saisissez simplement la vraie date de semis (par ex. 15 octobre) : les tâches de semis et de récolte sont générées aux bonnes dates et la récolte apparaît sur le Gantt de la saison en cours.
+
+\section{Limites actuelles}
+
+Certains besoins spécifiques aux grandes cultures ne sont pas encore couverts :
+
+\begin{itemize}
+  \item les \textbf{densités de semis} s'expriment pour l'instant en nombre de plants (pas en kg de semences/ha ni en plants/ha) ;
+  \item le \textbf{suivi des rendements} par récolte annuelle est réservé aux cultures pérennes — pour une culture annuelle, notez le rendement dans les notes de la plantation ;
+  \item les \textbf{rotations} avec alertes de conflit et les \textbf{itinéraires techniques} types (labour, faux semis, déchaumage…) sont prévus dans la feuille de route de convergence avec Qrop.
+\end{itemize}

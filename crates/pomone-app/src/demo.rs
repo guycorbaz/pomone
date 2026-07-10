@@ -4,12 +4,16 @@
 //! Unlike [`crate::test_helpers::seed_test_data`] (which only adds the
 //! bare minimum the unit-tests need), this populates:
 //!
-//! - 5 crops (Tomate, Carotte, Laitue, Courgette, Pommier) using the
-//!   already-seeded families + strata + location kinds.
-//! - 7 varieties spread across those crops.
+//! - 9 crops (Tomate, Carotte, Laitue, Courgette, Pommier + the field
+//!   crops Blé tendre, Maïs grain, Pomme de terre, Betterave sucrière)
+//!   using the already-seeded families + strata + location kinds.
+//! - 11 varieties spread across those crops.
 //! - 1 root location ("Jardin de démo") with 5 child beds + 1 greenhouse,
-//!   plus a separate "Verger Est" root for the perennial planting.
-//! - 7 annual plantings + 1 perennial planting laid out around the
+//!   a separate "Verger Est" root for the perennial planting, and a
+//!   field-crop farm root ("Les Grandes Terres", 20 ha) with 4 hectare-
+//!   scale parcels (issue #29 — the demo exercises both m²- and ha-scale
+//!   data).
+//! - 10 annual plantings + 1 perennial planting laid out around the
 //!   reference date — every one triggers the operational auto-gen so
 //!   the Tasks calendar is non-empty too.
 //! - 1 recurring weekly weeding series on a bed.
@@ -76,6 +80,8 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     let asteracees = find_family(repo, "Astéracées").await?;
     let cucurbitacees = find_family(repo, "Cucurbitacées").await?;
     let rosacees = find_family(repo, "Rosacées").await?;
+    let poacees = find_family(repo, "Poacées").await?;
+    let amaranthacees = find_family(repo, "Amaranthacées").await?;
     let herbacee = find_strata(repo, "Herbacée").await?;
     let racinaire = find_strata(repo, "Racinaire").await?;
     let sous_etage = find_strata(repo, "Sous-étage").await?;
@@ -92,6 +98,8 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         Some(asteracees),
         Some(cucurbitacees),
         Some(rosacees),
+        Some(poacees),
+        Some(amaranthacees),
         Some(herbacee),
         Some(racinaire),
         Some(sous_etage),
@@ -105,6 +113,8 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         asteracees,
         cucurbitacees,
         rosacees,
+        poacees,
+        amaranthacees,
         herbacee,
         racinaire,
         sous_etage,
@@ -158,7 +168,41 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         PruningSeason::Winter,
     )?;
     repo.crop_create(&pommier).await?;
-    s.crops_created = 5;
+    // Field crops (issue #29): hectare-scale references alongside the
+    // market-garden set.
+    let ble = Crop::new(
+        poacees.id,
+        "Blé tendre",
+        Some("Triticum aestivum".to_owned()),
+        Lifespan::Annual,
+        PruningSeason::None,
+    )?;
+    repo.crop_create(&ble).await?;
+    let mais = Crop::new(
+        poacees.id,
+        "Maïs grain",
+        Some("Zea mays".to_owned()),
+        Lifespan::Annual,
+        PruningSeason::None,
+    )?;
+    repo.crop_create(&mais).await?;
+    let pomme_de_terre = Crop::new(
+        solanacees.id,
+        "Pomme de terre",
+        Some("Solanum tuberosum".to_owned()),
+        Lifespan::Annual,
+        PruningSeason::None,
+    )?;
+    repo.crop_create(&pomme_de_terre).await?;
+    let betterave = Crop::new(
+        amaranthacees.id,
+        "Betterave sucrière",
+        Some("Beta vulgaris".to_owned()),
+        Lifespan::Annual,
+        PruningSeason::None,
+    )?;
+    repo.crop_create(&betterave).await?;
+    s.crops_created = 9;
 
     // Two tomato varieties, one carrot, two lettuces, one zucchini, one apple.
     let marmande = annual_variety(tomate.id, "Marmande", Some(35), 70, 60)?;
@@ -180,6 +224,13 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             None,
         )?),
     )?;
+    // Field-crop varieties — direct-sown (no transplant phase), season-long
+    // cycles: winter wheat ~270 days sowing→harvest, grain maize ~170,
+    // Charlotte potato ~100 with a long lifting window, sugar beet ~190.
+    let arina = annual_variety(ble.id, "Arina", None, 270, 10)?;
+    let lg_mais = annual_variety(mais.id, "LG 30.222", None, 170, 15)?;
+    let charlotte = annual_variety(pomme_de_terre.id, "Charlotte", None, 100, 45)?;
+    let belamia = annual_variety(betterave.id, "Belamia", None, 190, 30)?;
     for v in [
         &marmande,
         &roma,
@@ -188,10 +239,14 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
         &romaine,
         &verte_milan,
         &reine_reinettes,
+        &arina,
+        &lg_mais,
+        &charlotte,
+        &belamia,
     ] {
         repo.variety_create(v).await?;
     }
-    s.varieties_created = 7;
+    s.varieties_created = 11;
 
     // ---------------- Locations ----------------
     let jardin = Location::new(
@@ -240,7 +295,37 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     ] {
         repo.location_create(l).await?;
     }
-    s.locations_created = 7;
+
+    // Field-crop farm (issue #29): a 20 ha root with hectare-scale parcels,
+    // so the demo shows both m²- and ha-scale data side by side.
+    let grandes_terres = Location::new(
+        parcelle_kind.id,
+        "Les Grandes Terres",
+        Decimal::from(500),
+        Decimal::from(400),
+        None,
+        Some("ferme grandes cultures de démonstration (20 ha)".to_owned()),
+    )?;
+    repo.location_create(&grandes_terres).await?;
+    let parcel = |name: &str, length_m: i64, width_m: i64| -> AppResult<Location> {
+        Location::new(
+            parcelle_kind.id,
+            name,
+            Decimal::from(length_m),
+            Decimal::from(width_m),
+            Some(grandes_terres.id),
+            None,
+        )
+        .map_err(Into::into)
+    };
+    let piece_moulin = parcel("Pièce du Moulin", 400, 200)?; // 8 ha
+    let piece_lac = parcel("Pièce du Lac", 250, 200)?; // 5 ha
+    let piece_longue = parcel("Pièce Longue", 300, 100)?; // 3 ha
+    let piece_vernes = parcel("Pièce des Vernes", 200, 150)?; // 3 ha
+    for l in [&piece_moulin, &piece_lac, &piece_longue, &piece_vernes] {
+        repo.location_create(l).await?;
+    }
+    s.locations_created = 12;
 
     // ---------------- Plantings ----------------
     // Dates anchored on the year of `today` so the demo always looks
@@ -326,6 +411,63 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     )
     .await?;
     s.plantings_created += 6;
+
+    // Field-crop plantings (issue #29), hectare-scale areas and realistic
+    // plant densities. Winter wheat is sown the *previous* autumn so its
+    // harvest (~270 days later) lands in the current season.
+    let previous_autumn = NaiveDate::from_ymd_opt(year - 1, 10, 15).unwrap_or(today);
+    let early_april = NaiveDate::from_ymd_opt(year, 4, 5).unwrap_or(today);
+    let late_april = NaiveDate::from_ymd_opt(year, 4, 25).unwrap_or(today);
+    let late_march = NaiveDate::from_ymd_opt(year, 3, 20).unwrap_or(today);
+    create_annual_planting_from_sowing(
+        repo,
+        arina.id,
+        piece_moulin.id,
+        herbacee.id,
+        previous_autumn,
+        Decimal::from(80_000), // 8 ha
+        28_000_000,            // ~3.5 M plants/ha
+        Some("démo: blé d'hiver".to_owned()),
+        None,
+    )
+    .await?;
+    create_annual_planting_from_sowing(
+        repo,
+        lg_mais.id,
+        piece_lac.id,
+        herbacee.id,
+        late_april,
+        Decimal::from(50_000), // 5 ha
+        450_000,               // ~90 000 plants/ha
+        Some("démo: maïs grain".to_owned()),
+        None,
+    )
+    .await?;
+    create_annual_planting_from_sowing(
+        repo,
+        charlotte.id,
+        piece_longue.id,
+        racinaire.id,
+        early_april,
+        Decimal::from(30_000), // 3 ha
+        120_000,               // ~40 000 plants/ha
+        Some("démo: pomme de terre Charlotte".to_owned()),
+        None,
+    )
+    .await?;
+    create_annual_planting_from_sowing(
+        repo,
+        belamia.id,
+        piece_vernes.id,
+        racinaire.id,
+        late_march,
+        Decimal::from(30_000), // 3 ha
+        300_000,               // ~100 000 plants/ha
+        Some("démo: betterave sucrière".to_owned()),
+        None,
+    )
+    .await?;
+    s.plantings_created += 4;
 
     // Perennial: 1 apple tree on the orchard.
     create_perennial_planting(
@@ -418,7 +560,10 @@ fn _ensure_variety_id_in_scope(_v: VarietyId) {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pomone_db::{seed_defaults, CropRepo, LocationRepo, SqliteRepository, VarietyRepo};
+    use pomone_db::{
+        seed_defaults, CropRepo, LocationKindRepo, LocationRepo, SqliteRepository, StrataRepo,
+        VarietyRepo,
+    };
 
     #[tokio::test]
     async fn seed_demo_populates_expected_counts() {
@@ -426,16 +571,102 @@ mod tests {
         seed_defaults(&repo).await.unwrap();
         let today = NaiveDate::from_ymd_opt(2026, 5, 25).unwrap();
         let summary = seed_demo_data(&repo, today).await.unwrap();
-        assert_eq!(summary.crops_created, 5);
-        assert_eq!(summary.varieties_created, 7);
-        assert_eq!(summary.locations_created, 7);
-        assert_eq!(summary.plantings_created, 7);
+        assert_eq!(summary.crops_created, 9);
+        assert_eq!(summary.varieties_created, 11);
+        assert_eq!(summary.locations_created, 12);
+        assert_eq!(summary.plantings_created, 11);
         assert_eq!(summary.recurring_series_created, 1);
 
         // Sanity: the DB now has the corresponding rows.
-        assert_eq!(repo.crop_list().await.unwrap().len(), 5);
-        assert_eq!(repo.variety_list().await.unwrap().len(), 7);
-        assert_eq!(repo.location_list().await.unwrap().len(), 7);
+        assert_eq!(repo.crop_list().await.unwrap().len(), 9);
+        assert_eq!(repo.variety_list().await.unwrap().len(), 11);
+        assert_eq!(repo.location_list().await.unwrap().len(), 12);
+    }
+
+    /// Issue #29 — "80 ha cereal farm" scenario: hectare-scale areas must
+    /// survive the full stack (services → storage → view formatting) with
+    /// no precision loss in either display unit.
+    #[tokio::test]
+    async fn field_crop_scenario_80ha_formats_in_both_units() {
+        use crate::locations_view::list_locations_tree;
+        use crate::plantings_view::list_plantings;
+        use crate::units::AreaUnit;
+
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 5, 25).unwrap();
+        seed_demo_data(&repo, today).await.unwrap();
+
+        // One 80 ha wheat block on top of the demo farm.
+        let kinds = repo.location_kind_list().await.unwrap();
+        let parcelle = kinds.iter().find(|k| k.name == "Parcelle").unwrap();
+        let big_field = Location::new(
+            parcelle.id,
+            "Grande pièce 80 ha",
+            Decimal::from(1000),
+            Decimal::from(800),
+            None,
+            None,
+        )
+        .unwrap();
+        repo.location_create(&big_field).await.unwrap();
+        let arina = repo
+            .variety_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|v| v.name == "Arina")
+            .unwrap();
+        let herbacee = repo
+            .strata_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|s| s.name == "Herbacée")
+            .unwrap();
+        create_annual_planting_from_sowing(
+            &repo,
+            arina.id,
+            big_field.id,
+            herbacee.id,
+            NaiveDate::from_ymd_opt(2025, 10, 15).unwrap(),
+            Decimal::from(800_000), // 80 ha
+            280_000_000,            // ~3.5 M plants/ha over 80 ha
+            None,
+            None,
+        )
+        .await
+        .unwrap();
+
+        // Plantings list: exact in both units, no scientific notation, no
+        // rounding artefacts.
+        let rows_ha = list_plantings(&repo, AreaUnit::Hectares).await.unwrap();
+        let wheat = rows_ha
+            .iter()
+            .find(|r| r.area_m2 == Decimal::from(800_000))
+            .unwrap();
+        assert_eq!(wheat.area_label, "80 ha");
+        assert_eq!(wheat.plants_count, 280_000_000);
+        let rows_m2 = list_plantings(&repo, AreaUnit::SquareMeters).await.unwrap();
+        let wheat_m2 = rows_m2
+            .iter()
+            .find(|r| r.area_m2 == Decimal::from(800_000))
+            .unwrap();
+        assert_eq!(wheat_m2.area_label, "800000 m²");
+
+        // Locations tree: the 80 ha field and the demo's 8 ha parcel both
+        // format exactly.
+        let tree = list_locations_tree(&repo, AreaUnit::Hectares)
+            .await
+            .unwrap();
+        let field = tree
+            .iter()
+            .find(|l| l.name == "Grande pièce 80 ha")
+            .unwrap();
+        assert_eq!(field.area_label, "80 ha");
+        assert_eq!(field.dimensions_label, "1000 × 800 m = 80 ha");
+        let moulin = tree.iter().find(|l| l.name == "Pièce du Moulin").unwrap();
+        assert_eq!(moulin.area_label, "8 ha");
     }
 
     #[tokio::test]
