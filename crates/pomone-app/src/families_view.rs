@@ -149,7 +149,7 @@ mod tests {
     async fn list_admin_returns_seeded_families_with_colors() {
         let repo = fresh().await;
         let rows = list_families_admin(&repo).await.unwrap();
-        assert_eq!(rows.len(), 11);
+        assert_eq!(rows.len(), 13);
         // Sorted by display name.
         assert!(rows.windows(2).all(|w| w[0].name <= w[1].name));
         // Every seeded family has a valid-looking hex colour.

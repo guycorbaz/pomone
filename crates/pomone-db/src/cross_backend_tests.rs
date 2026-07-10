@@ -25,7 +25,7 @@ async fn scenario_seed_defaults(repo: &dyn Repository) {
     seed_defaults(repo).await.unwrap();
     assert_eq!(repo.strata_list().await.unwrap().len(), 7);
     assert_eq!(repo.location_kind_list().await.unwrap().len(), 6);
-    assert_eq!(repo.family_list().await.unwrap().len(), 11);
+    assert_eq!(repo.family_list().await.unwrap().len(), 13);
 
     // Idempotency
     seed_defaults(repo).await.unwrap();
