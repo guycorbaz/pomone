@@ -463,6 +463,16 @@ export component MainWindow inherits Window {
     in property <[string]> settings-holiday-region-labels;
     in-out property <int> settings-holiday-region-index;
     callback settings-holiday-region-changed(int);
+    in property <string> settings-units-section;
+    in property <string> settings-units-explain;
+    in property <string> settings-area-unit-label;
+    in property <string> settings-mass-unit-label;
+    in property <[string]> settings-area-unit-labels;
+    in property <[string]> settings-mass-unit-labels;
+    in-out property <int> settings-area-unit-index;
+    in-out property <int> settings-mass-unit-index;
+    callback settings-area-unit-changed(int);
+    callback settings-mass-unit-changed(int);
 
     // ------- Task Calendar page state -------
     in property <string> task-calendar-title-text;
@@ -1296,6 +1306,16 @@ export component MainWindow inherits Window {
                 holiday-region-labels: settings-holiday-region-labels;
                 holiday-region-index <=> settings-holiday-region-index;
                 holiday-region-changed(i) => { settings-holiday-region-changed(i); }
+                units-section: settings-units-section;
+                units-explain-text: settings-units-explain;
+                area-unit-label: settings-area-unit-label;
+                mass-unit-label: settings-mass-unit-label;
+                area-unit-labels: settings-area-unit-labels;
+                mass-unit-labels: settings-mass-unit-labels;
+                area-unit-index <=> settings-area-unit-index;
+                mass-unit-index <=> settings-mass-unit-index;
+                area-unit-changed(i) => { settings-area-unit-changed(i); }
+                mass-unit-changed(i) => { settings-mass-unit-changed(i); }
             }
 
             // ------- Strata -------

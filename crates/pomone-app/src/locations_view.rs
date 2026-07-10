@@ -6,6 +6,7 @@
 //! `depth` field the UI uses to indent visually.
 
 use crate::error::{AppError, AppResult};
+use crate::units::AreaUnit;
 use pomone_db::Repository;
 use pomone_domain::{Location, LocationId, LocationKindId};
 use rust_decimal::Decimal;
@@ -56,7 +57,10 @@ pub struct ParentLocationOption {
 
 /// Return all locations as a flat, depth-tagged list in pre-order. Siblings
 /// are sorted alphabetically.
-pub async fn list_locations_tree(repo: &dyn Repository) -> AppResult<Vec<LocationListItem>> {
+pub async fn list_locations_tree(
+    repo: &dyn Repository,
+    area_unit: AreaUnit,
+) -> AppResult<Vec<LocationListItem>> {
     let locations = repo.location_list().await?;
     let kinds = repo.location_kind_list().await?;
     let kind_by_id: HashMap<_, _> = kinds.iter().map(|k| (k.id, k)).collect();
@@ -86,6 +90,7 @@ pub async fn list_locations_tree(repo: &dyn Repository) -> AppResult<Vec<Locatio
         &kind_by_id,
         &by_id,
         &planted,
+        area_unit,
         &mut out,
     );
     Ok(out)
@@ -99,6 +104,7 @@ fn walk(
     kind_by_id: &HashMap<LocationKindId, &pomone_domain::LocationKind>,
     by_id: &HashMap<LocationId, &Location>,
     planted: &std::collections::HashSet<LocationId>,
+    area_unit: AreaUnit,
     out: &mut Vec<LocationListItem>,
 ) {
     if depth > MAX_TREE_DEPTH {
@@ -118,8 +124,13 @@ fn walk(
             kind_label: kind_by_id
                 .get(&child.kind_id)
                 .map_or_else(|| "?".to_owned(), |k| k.name.clone()),
-            area_label: format_area(child.area_m2()),
-            dimensions_label: format_dimensions(child.length_m, child.width_m, child.area_m2()),
+            area_label: area_unit.format(child.area_m2()),
+            dimensions_label: format_dimensions(
+                child.length_m,
+                child.width_m,
+                child.area_m2(),
+                area_unit,
+            ),
             parent_label,
             full_path: build_full_path(child, by_id),
             depth,
@@ -132,6 +143,7 @@ fn walk(
             kind_by_id,
             by_id,
             planted,
+            area_unit,
             out,
         );
     }
@@ -156,16 +168,10 @@ fn build_full_path(loc: &Location, by_id: &HashMap<LocationId, &Location>) -> St
     segments.join(" / ")
 }
 
-fn format_area(area: Decimal) -> String {
-    let s = area.normalize().to_string();
-    format!("{s} m²")
-}
-
-fn format_dimensions(length: Decimal, width: Decimal, area: Decimal) -> String {
+fn format_dimensions(length: Decimal, width: Decimal, area_m2: Decimal, unit: AreaUnit) -> String {
     let l = length.normalize();
     let w = width.normalize();
-    let a = area.normalize();
-    format!("{l} × {w} m = {a} m²")
+    format!("{l} × {w} m = {}", unit.format(area_m2))
 }
 
 /// `LocationKind` options as a dropdown, sorted by name.
@@ -195,7 +201,8 @@ pub async fn list_parent_options(
     repo: &dyn Repository,
     none_label: &str,
 ) -> AppResult<Vec<ParentLocationOption>> {
-    let tree = list_locations_tree(repo).await?;
+    // Only ids and full paths are used here, so the display unit is irrelevant.
+    let tree = list_locations_tree(repo, AreaUnit::default()).await?;
     let mut out = Vec::with_capacity(tree.len() + 1);
     out.push(ParentLocationOption {
         id: String::new(),
@@ -358,7 +365,9 @@ mod tests {
     #[tokio::test]
     async fn list_tree_returns_seeded_parent_then_child() {
         let repo = fresh_repo().await;
-        let tree = list_locations_tree(&repo).await.unwrap();
+        let tree = list_locations_tree(&repo, AreaUnit::SquareMeters)
+            .await
+            .unwrap();
         assert_eq!(tree.len(), 2);
         assert_eq!(tree[0].depth, 0);
         assert_eq!(tree[0].name, "Jardin Pomone");
@@ -413,7 +422,9 @@ mod tests {
         .await
         .unwrap();
         assert!(loc.parent_id.is_none());
-        let tree = list_locations_tree(&repo).await.unwrap();
+        let tree = list_locations_tree(&repo, AreaUnit::SquareMeters)
+            .await
+            .unwrap();
         assert!(tree.iter().any(|l| l.name == "Verger Sud" && l.depth == 0));
     }
 
@@ -449,7 +460,9 @@ mod tests {
         .await
         .unwrap();
         assert!(loc.parent_id.is_some());
-        let tree = list_locations_tree(&repo).await.unwrap();
+        let tree = list_locations_tree(&repo, AreaUnit::SquareMeters)
+            .await
+            .unwrap();
         let row = tree.iter().find(|l| l.name == "Planche B").unwrap();
         assert_eq!(row.depth, 1);
         assert_eq!(row.parent_label, "Jardin Pomone");
@@ -524,7 +537,9 @@ mod tests {
             .unwrap();
             last_id = loc.id.to_string();
         }
-        let tree = list_locations_tree(&repo).await.unwrap();
+        let tree = list_locations_tree(&repo, AreaUnit::SquareMeters)
+            .await
+            .unwrap();
         assert_eq!(tree.len(), 4);
         let leaf = tree.iter().find(|l| l.name == "D").unwrap();
         assert_eq!(leaf.depth, 3);
@@ -536,7 +551,7 @@ mod tests {
     #[tokio::test]
     async fn update_location_changes_name() {
         let repo = fresh_repo().await;
-        let planche = list_locations_tree(&repo)
+        let planche = list_locations_tree(&repo, AreaUnit::SquareMeters)
             .await
             .unwrap()
             .into_iter()
@@ -557,7 +572,9 @@ mod tests {
         )
         .await
         .unwrap();
-        let after = list_locations_tree(&repo).await.unwrap();
+        let after = list_locations_tree(&repo, AreaUnit::SquareMeters)
+            .await
+            .unwrap();
         assert!(after.iter().any(|l| l.name == "Planche B"));
         assert!(after.iter().all(|l| l.name != "Planche A"));
     }
@@ -565,7 +582,9 @@ mod tests {
     #[tokio::test]
     async fn update_location_rejects_parent_cycle() {
         let repo = fresh_repo().await; // Jardin Pomone → Planche A
-        let tree = list_locations_tree(&repo).await.unwrap();
+        let tree = list_locations_tree(&repo, AreaUnit::SquareMeters)
+            .await
+            .unwrap();
         let jardin = tree.iter().find(|l| l.name == "Jardin Pomone").unwrap();
         let planche = tree.iter().find(|l| l.name == "Planche A").unwrap();
         let form = get_location_for_edit(&repo, &jardin.id).await.unwrap();
@@ -590,7 +609,7 @@ mod tests {
     #[tokio::test]
     async fn delete_location_refused_when_it_has_children() {
         let repo = fresh_repo().await; // Jardin Pomone (parent) → Planche A
-        let jardin = list_locations_tree(&repo)
+        let jardin = list_locations_tree(&repo, AreaUnit::SquareMeters)
             .await
             .unwrap()
             .into_iter()
@@ -604,7 +623,7 @@ mod tests {
     #[tokio::test]
     async fn delete_location_removes_an_unused_leaf() {
         let repo = fresh_repo().await;
-        let planche = list_locations_tree(&repo)
+        let planche = list_locations_tree(&repo, AreaUnit::SquareMeters)
             .await
             .unwrap()
             .into_iter()
@@ -612,7 +631,7 @@ mod tests {
             .unwrap();
         assert!(!planche.in_use);
         delete_location(&repo, &planche.id).await.unwrap();
-        assert!(list_locations_tree(&repo)
+        assert!(list_locations_tree(&repo, AreaUnit::SquareMeters)
             .await
             .unwrap()
             .iter()
@@ -627,7 +646,7 @@ mod tests {
         let repo = fresh_repo().await;
         let variety = repo.variety_list().await.unwrap()[0].id;
         let strata = repo.strata_list().await.unwrap()[0].id;
-        let planche = list_locations_tree(&repo)
+        let planche = list_locations_tree(&repo, AreaUnit::SquareMeters)
             .await
             .unwrap()
             .into_iter()
@@ -647,7 +666,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let planche = list_locations_tree(&repo)
+        let planche = list_locations_tree(&repo, AreaUnit::SquareMeters)
             .await
             .unwrap()
             .into_iter()

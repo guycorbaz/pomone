@@ -9,6 +9,7 @@ use crate::config::{AppConfig, BackendConfig};
 use crate::error::{AppError, AppResult};
 use crate::i18n::{I18n, Lang};
 use crate::migration::{copy_all, MigrationReport};
+use crate::units::{AreaUnit, MassUnit};
 use pomone_db::{seed_defaults, MariaDbRepository, Repository, SqliteRepository};
 use std::path::PathBuf;
 
@@ -75,6 +76,30 @@ impl App {
     /// `region` is a `HolidayRegion::code()` or the empty string (off).
     pub fn set_holiday_region(&mut self, region: &str) -> AppResult<()> {
         region.clone_into(&mut self.config.holiday_region);
+        self.config.save_default()
+    }
+
+    /// Display unit for areas (issue #29), parsed from the persisted code.
+    #[must_use]
+    pub fn area_unit(&self) -> AreaUnit {
+        AreaUnit::parse(&self.config.area_unit)
+    }
+
+    /// Display unit for masses/yields (issue #29), parsed from the persisted code.
+    #[must_use]
+    pub fn mass_unit(&self) -> MassUnit {
+        MassUnit::parse(&self.config.mass_unit)
+    }
+
+    /// Set the area display unit (issue #29) and persist the config.
+    pub fn set_area_unit(&mut self, unit: AreaUnit) -> AppResult<()> {
+        unit.code().clone_into(&mut self.config.area_unit);
+        self.config.save_default()
+    }
+
+    /// Set the mass display unit (issue #29) and persist the config.
+    pub fn set_mass_unit(&mut self, unit: MassUnit) -> AppResult<()> {
+        unit.code().clone_into(&mut self.config.mass_unit);
         self.config.save_default()
     }
 
@@ -179,6 +204,8 @@ mod tests {
             },
             language: "fr".to_owned(),
             holiday_region: "ch-vd".to_owned(),
+            area_unit: "m2".to_owned(),
+            mass_unit: "kg".to_owned(),
         };
         let repo = SqliteRepository::in_memory().await.unwrap();
         App::with_repo(config, Box::new(repo)).await.unwrap()
@@ -232,6 +259,8 @@ mod tests {
             backend: BackendConfig::Sqlite { path: db.clone() },
             language: "fr".to_owned(),
             holiday_region: "ch-vd".to_owned(),
+            area_unit: "m2".to_owned(),
+            mass_unit: "kg".to_owned(),
         };
         let repo = SqliteRepository::in_memory().await.unwrap();
         let app = App::with_repo(config, Box::new(repo)).await.unwrap();
@@ -251,6 +280,8 @@ mod tests {
             },
             language: "fr".to_owned(),
             holiday_region: "ch-vd".to_owned(),
+            area_unit: "m2".to_owned(),
+            mass_unit: "kg".to_owned(),
         };
         let repo = SqliteRepository::in_memory().await.unwrap();
         let app = App::with_repo(config, Box::new(repo)).await.unwrap();
@@ -267,6 +298,8 @@ mod tests {
             },
             language: "klingon".to_owned(),
             holiday_region: "ch-vd".to_owned(),
+            area_unit: "m2".to_owned(),
+            mass_unit: "kg".to_owned(),
         };
         let repo = SqliteRepository::in_memory().await.unwrap();
         let err = App::with_repo(bad_config, Box::new(repo))

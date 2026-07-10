@@ -6,6 +6,7 @@
 //! placeholder so the table column is always non-empty.
 
 use crate::error::{AppError, AppResult};
+use crate::units::MassUnit;
 use pomone_db::Repository;
 use pomone_domain::{PlantingId, YearlyHarvest};
 use rust_decimal::Decimal;
@@ -22,30 +23,30 @@ pub struct YearlyHarvestRow {
     pub notes: String,
 }
 
-/// Format an optional `Decimal` kilograms value as `"X.Y kg"` or `"—"`.
-fn fmt_kg(opt: Option<Decimal>) -> String {
+/// Format an optional stored-kg value in the display unit, `"—"` when unset.
+fn fmt_mass(opt: Option<Decimal>, unit: MassUnit) -> String {
     match opt {
-        Some(v) => format!("{} kg", v.normalize()),
+        Some(v) => unit.format(v),
         None => "—".to_owned(),
     }
 }
 
 /// Format the variance (actual − expected) with a leading sign when both
 /// sides are known, or `"—"` when one is missing.
-fn fmt_variance(h: &YearlyHarvest) -> String {
+fn fmt_variance(h: &YearlyHarvest, unit: MassUnit) -> String {
     match h.variance_kg() {
-        Some(v) if v >= Decimal::ZERO => format!("+{} kg", v.normalize()),
-        Some(v) => format!("{} kg", v.normalize()),
+        Some(v) if v >= Decimal::ZERO => format!("+{}", unit.format(v)),
+        Some(v) => unit.format(v),
         None => "—".to_owned(),
     }
 }
 
-fn to_row(h: &YearlyHarvest) -> YearlyHarvestRow {
+fn to_row(h: &YearlyHarvest, unit: MassUnit) -> YearlyHarvestRow {
     YearlyHarvestRow {
         year: h.year,
-        expected_label: fmt_kg(h.expected_yield_kg),
-        actual_label: fmt_kg(h.actual_yield_kg),
-        variance_label: fmt_variance(h),
+        expected_label: fmt_mass(h.expected_yield_kg, unit),
+        actual_label: fmt_mass(h.actual_yield_kg, unit),
+        variance_label: fmt_variance(h, unit),
         notes: h.notes.clone().unwrap_or_default(),
     }
 }
@@ -54,6 +55,7 @@ fn to_row(h: &YearlyHarvest) -> YearlyHarvestRow {
 pub async fn list_yearly_harvests_for_planting(
     repo: &dyn Repository,
     planting_id_str: &str,
+    mass_unit: MassUnit,
 ) -> AppResult<Vec<YearlyHarvestRow>> {
     let uuid = Uuid::from_str(planting_id_str).map_err(|e| {
         AppError::Inconsistent(format!("invalid PlantingId '{planting_id_str}': {e}"))
@@ -61,7 +63,7 @@ pub async fn list_yearly_harvests_for_planting(
     let id = PlantingId::from(uuid);
     let mut harvests = repo.yearly_harvest_list_for_planting(id).await?;
     harvests.sort_by_key(|h| h.year);
-    Ok(harvests.iter().map(to_row).collect())
+    Ok(harvests.iter().map(|h| to_row(h, mass_unit)).collect())
 }
 
 #[cfg(test)]
@@ -130,7 +132,7 @@ mod tests {
     #[tokio::test]
     async fn list_is_empty_until_a_harvest_is_recorded() {
         let (repo, pid) = setup_perennial().await;
-        let rows = list_yearly_harvests_for_planting(&repo, &pid)
+        let rows = list_yearly_harvests_for_planting(&repo, &pid, MassUnit::Kilograms)
             .await
             .unwrap();
         assert!(rows.is_empty());
@@ -158,7 +160,7 @@ mod tests {
             .await
             .unwrap();
 
-        let rows = list_yearly_harvests_for_planting(&repo, &pid)
+        let rows = list_yearly_harvests_for_planting(&repo, &pid, MassUnit::Kilograms)
             .await
             .unwrap();
         let years: Vec<_> = rows.iter().map(|r| r.year).collect();
@@ -175,7 +177,7 @@ mod tests {
     #[tokio::test]
     async fn invalid_uuid_is_rejected_cleanly() {
         let repo = SqliteRepository::in_memory().await.unwrap();
-        let err = list_yearly_harvests_for_planting(&repo, "not-a-uuid")
+        let err = list_yearly_harvests_for_planting(&repo, "not-a-uuid", MassUnit::Kilograms)
             .await
             .unwrap_err();
         assert!(matches!(err, AppError::Inconsistent(_)));

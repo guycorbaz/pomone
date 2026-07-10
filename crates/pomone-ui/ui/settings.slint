@@ -68,6 +68,19 @@ export component SettingsPage inherits Rectangle {
     // Emitted on selection change; the host persists + repaints the calendar.
     callback holiday-region-changed(int);
 
+    // -------- Display units (issue #29) --------
+    in property <string> units-section;
+    in property <string> units-explain-text;
+    in property <string> area-unit-label;
+    in property <string> mass-unit-label;
+    in property <[string]> area-unit-labels;
+    in property <[string]> mass-unit-labels;
+    in-out property <int> area-unit-index;
+    in-out property <int> mass-unit-index;
+    // Emitted on selection change; the host persists + repaints the views.
+    callback area-unit-changed(int);
+    callback mass-unit-changed(int);
+
     // Callbacks pass the form values as arguments instead of relying on
     // `<=>` chains to propagate them back to the host — the chain across
     // the MainWindow ↔ SettingsPage boundary turned out to leave the
@@ -345,6 +358,60 @@ export component SettingsPage inherits Rectangle {
                                 min-width: 280px;
                                 changed current-index => {
                                     root.holiday-region-changed(self.current-index);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // -------- Display units (issue #29) --------
+            Card {
+                VerticalLayout {
+                    padding: Theme.space-xl;
+                    spacing: Theme.space-md;
+
+                    SectionHeader { text: units-section; }
+
+                    Text {
+                        text: units-explain-text;
+                        color: Palette.text-muted;
+                        font-size: Theme.font-size-label;
+                        wrap: word-wrap;
+                    }
+
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        alignment: start;
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text {
+                                text: area-unit-label;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedComboBox {
+                                model: area-unit-labels;
+                                current-index <=> area-unit-index;
+                                min-width: 160px;
+                                changed current-index => {
+                                    root.area-unit-changed(self.current-index);
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: Theme.space-xs;
+                            Text {
+                                text: mass-unit-label;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                            ThemedComboBox {
+                                model: mass-unit-labels;
+                                current-index <=> mass-unit-index;
+                                min-width: 160px;
+                                changed current-index => {
+                                    root.mass-unit-changed(self.current-index);
                                 }
                             }
                         }

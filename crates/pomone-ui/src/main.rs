@@ -27,14 +27,14 @@ use pomone_app::{
     move_planting_to_location, parse_id, planting_status_key, recurrence_unit_str, reschedule_task,
     services, split_planting, test_backend, update_crop, update_family, update_location,
     update_task, update_task_type, update_variety, AgendaRow as AppAgendaRow, App, AppConfig,
-    AppError, BackendConfig, BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry,
-    CalendarEntryKind, CalendarEventKind, CropEditForm, CropInput, CropMapBar as AppCropMapBar,
-    CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyAdminRow,
-    FamilyEditForm, FamilyOption, Lang, LifespanKind, LocationEditForm, LocationInput,
-    LocationKindOption, LocationListItem, LocationOption, MigrationReport, ParentLocationOption,
-    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
-    PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
-    StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
+    AppError, AreaUnit, BackendConfig, BedUsagePoint as AppBedUsagePoint,
+    CalendarEntry as AppCalendarEntry, CalendarEntryKind, CalendarEventKind, CropEditForm,
+    CropInput, CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow,
+    CycleDates, FamilyAdminRow, FamilyEditForm, FamilyOption, Lang, LifespanKind, LocationEditForm,
+    LocationInput, LocationKindOption, LocationListItem, LocationOption, MassUnit, MigrationReport,
+    ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
+    PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput,
+    StrataOption, StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
     TaskTypeEditForm, TaskTypeOption, TreatmentRow as AppTreatmentRow, VarietyEditForm,
     VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow, WindowGeometry,
     YearlyHarvestRow as AppYearlyHarvestRow,
@@ -1031,6 +1031,54 @@ fn main() -> Result<()> {
         });
     }
 
+    // --- Display-unit pickers (issue #29) ---
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_settings_area_unit_changed(move |index| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let unit = area_unit_from_index(index);
+            // The combo fires once at startup when apply_translations sets
+            // the initial index — don't rewrite the config for a no-op.
+            if s.app.area_unit() == unit {
+                return;
+            }
+            match s.app.set_area_unit(unit) {
+                Ok(()) => on_units_saved(&window, &mut s),
+                Err(e) => {
+                    let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
+                    window.set_settings_status_text(text);
+                    window.set_settings_status_is_error(is_err);
+                }
+            }
+        });
+    }
+    {
+        let state = Rc::clone(&state);
+        let weak = window.as_weak();
+        window.on_settings_mass_unit_changed(move |index| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let unit = mass_unit_from_index(index);
+            if s.app.mass_unit() == unit {
+                return;
+            }
+            match s.app.set_mass_unit(unit) {
+                Ok(()) => on_units_saved(&window, &mut s),
+                Err(e) => {
+                    let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
+                    window.set_settings_status_text(text);
+                    window.set_settings_status_is_error(is_err);
+                }
+            }
+        });
+    }
+
     // --- Planting row click → open detail ---
     {
         let state = Rc::clone(&state);
@@ -1937,7 +1985,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     tips.set_planting_sown_on(t("tooltip-planting-sown-on"));
     tips.set_planting_established_on(t("tooltip-planting-established-on"));
     tips.set_planting_removal_on(t("tooltip-planting-removal-on"));
-    tips.set_planting_area(t("tooltip-planting-area"));
+    // tooltip-planting-area is set by `apply_unit_labels` (issue #29).
     tips.set_planting_count(t("tooltip-planting-count"));
     tips.set_planting_create(t("tooltip-planting-create"));
     tips.set_task_type(t("tooltip-task-type"));
@@ -1972,7 +2020,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_crop_map_split_part_a_label(SharedString::from(i18n.t("crop-map-split-part-a")));
     window.set_crop_map_split_part_b_label(SharedString::from(i18n.t("crop-map-split-part-b")));
     window.set_crop_map_split_location_label(SharedString::from(i18n.t("crop-map-split-location")));
-    window.set_crop_map_split_area_label(SharedString::from(i18n.t("crop-map-split-area")));
+    // crop-map-split-area is set by `apply_unit_labels` (issue #29).
     window.set_crop_map_split_count_label(SharedString::from(i18n.t("crop-map-split-count")));
     window.set_crop_map_split_placeholder_area(SharedString::from(
         i18n.t("crop-map-split-placeholder-area"),
@@ -2084,6 +2132,27 @@ fn apply_translations(window: &MainWindow, app: &App) {
     );
     window.set_settings_holiday_region_labels(ModelRc::new(VecModel::from(region_labels)));
     window.set_settings_holiday_region_index(holiday_region_index(&app.config().holiday_region));
+
+    // Display-unit pickers (issue #29). Combo order mirrors `AreaUnit::ALL`
+    // / `MassUnit::ALL`; the suffixes themselves ("m²", "ha", "kg", "t")
+    // are not translated.
+    window.set_settings_units_section(SharedString::from(i18n.t("settings-units-section")));
+    window.set_settings_units_explain(SharedString::from(i18n.t("settings-units-explain")));
+    window.set_settings_area_unit_label(SharedString::from(i18n.t("settings-area-unit-label")));
+    window.set_settings_mass_unit_label(SharedString::from(i18n.t("settings-mass-unit-label")));
+    let area_unit_labels: Vec<SharedString> = AreaUnit::ALL
+        .iter()
+        .map(|u| SharedString::from(u.suffix()))
+        .collect();
+    window.set_settings_area_unit_labels(ModelRc::new(VecModel::from(area_unit_labels)));
+    let mass_unit_labels: Vec<SharedString> = MassUnit::ALL
+        .iter()
+        .map(|u| SharedString::from(u.suffix()))
+        .collect();
+    window.set_settings_mass_unit_labels(ModelRc::new(VecModel::from(mass_unit_labels)));
+    window.set_settings_area_unit_index(area_unit_index(app.area_unit()));
+    window.set_settings_mass_unit_index(mass_unit_index(app.mass_unit()));
+    apply_unit_labels(window, app);
 
     // Weekday header labels, shared by the unified calendar grid below.
     let weekday_labels: Vec<SharedString> = [
@@ -2263,7 +2332,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_label_established_on(SharedString::from(i18n.t("label-established-on")));
     window.set_label_removal_on(SharedString::from(i18n.t("label-removal-on")));
     window.set_placeholder_removal_date(SharedString::from(i18n.t("placeholder-removal-date")));
-    window.set_label_area(SharedString::from(i18n.t("label-area")));
+    // label-area is set by `apply_unit_labels` (issue #29).
     window.set_label_count(SharedString::from(i18n.t("label-plants-count")));
     window.set_placeholder_date(SharedString::from(i18n.t("placeholder-date")));
     window.set_placeholder_area(SharedString::from(i18n.t("placeholder-area")));
@@ -2400,8 +2469,7 @@ fn apply_translations(window: &MainWindow, app: &App) {
     window.set_harvest_header_notes(SharedString::from(i18n.t("harvest-header-notes")));
     window.set_harvest_form_section(SharedString::from(i18n.t("section-record-harvest")));
     window.set_harvest_label_year(SharedString::from(i18n.t("label-harvest-year")));
-    window.set_harvest_label_expected(SharedString::from(i18n.t("label-harvest-expected")));
-    window.set_harvest_label_actual(SharedString::from(i18n.t("label-harvest-actual")));
+    // label-harvest-expected/actual are set by `apply_unit_labels` (issue #29).
     window.set_harvest_label_notes(SharedString::from(i18n.t("label-harvest-notes")));
     window.set_harvest_placeholder_year(SharedString::from(i18n.t("placeholder-harvest-year")));
     window.set_harvest_placeholder_kg(SharedString::from(i18n.t("placeholder-harvest-kg")));
@@ -2530,7 +2598,7 @@ fn refresh_plantings(window: &MainWindow, state: &mut UiState) -> Result<()> {
         let varieties = list_variety_options(state.app.repo()).await?;
         let locations = list_location_options(state.app.repo()).await?;
         let strata = list_strata_options(state.app.repo()).await?;
-        let plantings = list_plantings(state.app.repo()).await?;
+        let plantings = list_plantings(state.app.repo(), state.app.area_unit()).await?;
         Ok(PlantingsSnapshot {
             varieties,
             locations,
@@ -2729,7 +2797,11 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
     let variety_id: VarietyId = parse_id(variety_id_str).map_err(FormError::Service)?;
     let location_id: LocationId = parse_id(location_id_str).map_err(FormError::Service)?;
     let strata_id: StrataId = parse_id(strata_id_str).map_err(FormError::Service)?;
-    let area_m2 = validate_positive_decimal(&window.get_area_text(), i18n)?;
+    // The form field is in the display unit (issue #29); storage stays m².
+    let area_m2 = state
+        .app
+        .area_unit()
+        .to_m2(validate_positive_decimal(&window.get_area_text(), i18n)?);
     let plants_count = validate_positive_count(&window.get_count_text(), i18n)?;
 
     if is_annual {
@@ -3289,7 +3361,7 @@ fn refresh_locations(window: &MainWindow, state: &mut UiState) -> Result<()> {
     // "(aucun) / (none)" label for the synthetic root-parent option.
     let none_label = state.app.i18n().t("parent-none");
     let snapshot: Result<LocationsSnapshot, AppError> = state.runtime.block_on(async {
-        let items = list_locations_tree(state.app.repo()).await?;
+        let items = list_locations_tree(state.app.repo(), state.app.area_unit()).await?;
         let kinds = list_location_kind_options(state.app.repo()).await?;
         let parents = list_parent_options(state.app.repo(), &none_label).await?;
         Ok(LocationsSnapshot {
@@ -4094,8 +4166,12 @@ fn try_record_harvest(window: &MainWindow, state: &mut UiState) -> Result<(), Fo
     let planting_id: PlantingId =
         parse_id(&state.detail_planting_id).map_err(FormError::Service)?;
     let year = validate_year(&window.get_new_harvest_year(), i18n)?;
-    let expected = validate_optional_decimal(&window.get_new_harvest_expected(), i18n)?;
-    let actual = validate_optional_decimal(&window.get_new_harvest_actual(), i18n)?;
+    // The yield fields are in the display unit (issue #29); storage stays kg.
+    let mass_unit = state.app.mass_unit();
+    let expected = validate_optional_decimal(&window.get_new_harvest_expected(), i18n)?
+        .map(|v| mass_unit.to_kg(v));
+    let actual = validate_optional_decimal(&window.get_new_harvest_actual(), i18n)?
+        .map(|v| mass_unit.to_kg(v));
     let notes = optional_text(&window.get_new_harvest_notes());
 
     state
@@ -4177,6 +4253,92 @@ fn do_delete_treatment_row(window: &MainWindow, s: &mut UiState, id: &str) {
             window.set_treatment_status_is_error(is_err);
         }
     }
+}
+
+/// After a display-unit change: confirm in the status line, refresh the
+/// labels embedding the unit, and repaint every view that formats areas
+/// or masses (plantings, locations, and the open planting detail).
+fn on_units_saved(window: &MainWindow, state: &mut UiState) {
+    let msg = state.app.i18n().t("status-units-saved");
+    window.set_settings_status_text(SharedString::from(msg));
+    window.set_settings_status_is_error(false);
+    apply_unit_labels(window, &state.app);
+    if let Err(e) = refresh_plantings(window, state) {
+        tracing::error!(error = %e, "failed to refresh plantings after unit change");
+    }
+    if let Err(e) = refresh_locations(window, state) {
+        tracing::error!(error = %e, "failed to refresh locations after unit change");
+    }
+    if !state.detail_planting_id.is_empty() {
+        let pid = state.detail_planting_id.clone();
+        if let Err(e) = refresh_planting_detail(window, state, &pid) {
+            tracing::error!(error = %e, "failed to refresh planting detail after unit change");
+        }
+    }
+}
+
+/// (Re)apply the form labels and tooltips that embed the current display
+/// units (issue #29). Split out of `apply_translations` so a unit change
+/// can refresh them without redoing the whole catalogue.
+fn apply_unit_labels(window: &MainWindow, app: &App) {
+    let i18n = app.i18n();
+    let mut area_args = FluentArgs::new();
+    area_args.set("unit", app.area_unit().suffix());
+    let mut mass_args = FluentArgs::new();
+    mass_args.set("unit", app.mass_unit().suffix());
+    window.set_label_area(SharedString::from(i18n.t_args("label-area", &area_args)));
+    window.set_crop_map_split_area_label(SharedString::from(
+        i18n.t_args("crop-map-split-area", &area_args),
+    ));
+    window
+        .global::<TooltipCatalog>()
+        .set_planting_area(SharedString::from(
+            i18n.t_args("tooltip-planting-area", &area_args),
+        ));
+    window.set_harvest_label_expected(SharedString::from(
+        i18n.t_args("label-harvest-expected", &mass_args),
+    ));
+    window.set_harvest_label_actual(SharedString::from(
+        i18n.t_args("label-harvest-actual", &mass_args),
+    ));
+}
+
+/// Combo index of an area display unit — `AreaUnit::ALL` order. Inverse of
+/// [`area_unit_from_index`].
+fn area_unit_index(unit: AreaUnit) -> i32 {
+    AreaUnit::ALL
+        .iter()
+        .position(|u| *u == unit)
+        .and_then(|p| i32::try_from(p).ok())
+        .unwrap_or(0)
+}
+
+/// Area unit for a combo index, defaulting to m² when out of range.
+fn area_unit_from_index(index: i32) -> AreaUnit {
+    usize::try_from(index)
+        .ok()
+        .and_then(|i| AreaUnit::ALL.get(i))
+        .copied()
+        .unwrap_or_default()
+}
+
+/// Combo index of a mass display unit — `MassUnit::ALL` order. Inverse of
+/// [`mass_unit_from_index`].
+fn mass_unit_index(unit: MassUnit) -> i32 {
+    MassUnit::ALL
+        .iter()
+        .position(|u| *u == unit)
+        .and_then(|p| i32::try_from(p).ok())
+        .unwrap_or(0)
+}
+
+/// Mass unit for a combo index, defaulting to kg when out of range.
+fn mass_unit_from_index(index: i32) -> MassUnit {
+    usize::try_from(index)
+        .ok()
+        .and_then(|i| MassUnit::ALL.get(i))
+        .copied()
+        .unwrap_or_default()
 }
 
 /// Combo index of a persisted holiday-region code: 0 = none/unknown, then
@@ -4262,10 +4424,13 @@ fn refresh_planting_detail(
     );
     let today = Local::now().date_naive();
     let snapshot: Result<DetailSnapshot, AppError> = state.runtime.block_on(async {
-        let detail = get_planting_detail(state.app.repo(), planting_id).await?;
+        let detail =
+            get_planting_detail(state.app.repo(), planting_id, state.app.area_unit()).await?;
         // The yearly-harvest table is empty for annuals; querying it
         // anyway keeps the code path uniform and the SQL is a no-op.
-        let harvests = list_yearly_harvests_for_planting(state.app.repo(), planting_id).await?;
+        let harvests =
+            list_yearly_harvests_for_planting(state.app.repo(), planting_id, state.app.mass_unit())
+                .await?;
         let tasks = list_planting_tasks(state.app.repo(), planting_id, today).await?;
         let treatments = list_treatments_for_planting(state.app.repo(), planting_id).await?;
         Ok((detail, harvests, tasks, treatments))
@@ -5362,7 +5527,12 @@ fn prefill_split_form(window: &MainWindow, state: &UiState, planting_id: &str) -
     } else {
         source_idx
     };
-    let half_area = planting.area_m2 / Decimal::from(2);
+    // Prefill in the display unit (issue #29), mirroring the parse side in
+    // `try_confirm_split`.
+    let half_area = state
+        .app
+        .area_unit()
+        .to_display(planting.area_m2 / Decimal::from(2));
     let half_count = planting.plants_count / 2;
     let remainder_count = planting.plants_count - half_count;
 
@@ -5386,6 +5556,7 @@ fn try_confirm_split(window: &MainWindow, state: &mut UiState) -> Result<(), For
     if pid.is_empty() {
         return Err(FormError::Validation(i18n.t("error-no-planting-selected")));
     }
+    let area_unit = state.app.area_unit();
     let part = |loc_idx: i32,
                 area_text: SharedString,
                 count_text: SharedString|
@@ -5396,6 +5567,7 @@ fn try_confirm_split(window: &MainWindow, state: &mut UiState) -> Result<(), For
             .get(usize_idx)
             .cloned()
             .ok_or_else(|| FormError::Validation(i18n.t("error-location-required")))?;
+        // The area field is in the display unit (issue #29); storage stays m².
         let area: Decimal = Decimal::from_str(area_text.trim())
             .map_err(|_| FormError::Validation(i18n.t("error-number-invalid")))?;
         let count: u32 = count_text
@@ -5404,7 +5576,7 @@ fn try_confirm_split(window: &MainWindow, state: &mut UiState) -> Result<(), For
             .map_err(|_| FormError::Validation(i18n.t("error-number-invalid")))?;
         Ok(SplitPart {
             location_id,
-            area_m2: area,
+            area_m2: area_unit.to_m2(area),
             plants_count: count,
         })
     };
@@ -5472,5 +5644,7 @@ fn _config_for_dev_fallback() -> AppConfig {
         },
         language: "fr".into(),
         holiday_region: "ch-vd".to_owned(),
+        area_unit: "m2".to_owned(),
+        mass_unit: "kg".to_owned(),
     }
 }

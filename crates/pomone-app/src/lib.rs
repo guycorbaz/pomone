@@ -30,6 +30,7 @@ pub mod task_types_view;
 pub mod tasks_view;
 pub mod treatments_view;
 pub mod unified_calendar_view;
+pub mod units;
 
 #[cfg(test)]
 mod test_helpers;
@@ -91,3 +92,4 @@ pub use tasks_view::{
 };
 pub use treatments_view::{delete_treatment, list_treatments_for_planting, TreatmentRow};
 pub use unified_calendar_view::{list_calendar_entries, CalendarEntry, CalendarEntryKind};
+pub use units::{AreaUnit, MassUnit};
