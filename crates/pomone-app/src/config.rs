@@ -22,10 +22,25 @@ pub struct AppConfig {
     /// Switzerland); `#[serde(default)]` keeps pre-#35 config files loading.
     #[serde(default = "default_holiday_region")]
     pub holiday_region: String,
+    /// Display unit for areas (issue #29): `"m2"` (default) or `"ha"`.
+    /// Storage stays m²; see `crate::units::AreaUnit`.
+    #[serde(default = "default_area_unit")]
+    pub area_unit: String,
+    /// Display unit for masses/yields (issue #29): `"kg"` (default) or `"t"`.
+    #[serde(default = "default_mass_unit")]
+    pub mass_unit: String,
 }
 
 fn default_holiday_region() -> String {
     "ch-vd".to_owned()
+}
+
+fn default_area_unit() -> String {
+    "m2".to_owned()
+}
+
+fn default_mass_unit() -> String {
+    "kg".to_owned()
 }
 
 /// Database backend selection.
@@ -49,6 +64,8 @@ impl AppConfig {
             },
             language: "fr".to_owned(),
             holiday_region: default_holiday_region(),
+            area_unit: default_area_unit(),
+            mass_unit: default_mass_unit(),
         }
     }
 
@@ -163,6 +180,8 @@ mod tests {
             },
             language: "en".to_owned(),
             holiday_region: "ch-vd".to_owned(),
+            area_unit: "m2".to_owned(),
+            mass_unit: "kg".to_owned(),
         };
         original.save_to(&path).unwrap();
         let loaded = AppConfig::load_from(&path).unwrap();
@@ -186,6 +205,8 @@ mod tests {
             },
             language: "fr".to_owned(),
             holiday_region: "ch-vd".to_owned(),
+            area_unit: "m2".to_owned(),
+            mass_unit: "kg".to_owned(),
         };
         let text = toml::to_string(&cfg).unwrap();
         assert!(text.contains("kind = \"mariadb\""));

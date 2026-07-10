@@ -6,6 +6,7 @@
 //! UI-friendly formatting.
 
 use crate::error::{AppError, AppResult};
+use crate::units::AreaUnit;
 use chrono::NaiveDate;
 use pomone_db::Repository;
 use pomone_domain::{Location, LocationId, PlantingStatus};
@@ -95,13 +96,6 @@ fn crop_initials(crop_name: &str) -> String {
         .take(2)
         .collect::<String>()
         .to_uppercase()
-}
-
-/// Format a `Decimal` area as a French-style number with `m²` suffix.
-fn format_area(area: Decimal) -> String {
-    // Normalise trailing zeros: "20.000" → "20", "12.500" → "12.5".
-    let s = area.normalize().to_string();
-    format!("{s} m²")
 }
 
 /// Format the start/end of a planting in a compact summary line.
@@ -194,7 +188,10 @@ pub async fn list_location_options(repo: &dyn Repository) -> AppResult<Vec<Locat
 /// resolve variety+crop+location names; fine for the dataset sizes Pomone
 /// targets (tens to a few hundred plantings per farm), can be replaced with a
 /// JOIN once profiles say so.
-pub async fn list_plantings(repo: &dyn Repository) -> AppResult<Vec<PlantingRow>> {
+pub async fn list_plantings(
+    repo: &dyn Repository,
+    area_unit: AreaUnit,
+) -> AppResult<Vec<PlantingRow>> {
     let plantings = repo.planting_list().await?;
     let varieties = repo.variety_list().await?;
     let crops = repo.crop_list().await?;
@@ -257,7 +254,7 @@ pub async fn list_plantings(repo: &dyn Repository) -> AppResult<Vec<PlantingRow>
                 location_label,
                 strata_label,
                 schedule_summary: schedule_summary(p),
-                area_label: format_area(p.area_m2),
+                area_label: area_unit.format(p.area_m2),
                 area_m2: p.area_m2,
                 plants_count: p.plants_count,
                 cycle_dates,
@@ -326,7 +323,7 @@ mod tests {
     async fn plantings_list_is_empty_on_fresh_seed() {
         let repo = fresh_repo().await;
         seed_test_data(&repo).await.unwrap();
-        let rows = list_plantings(&repo).await.unwrap();
+        let rows = list_plantings(&repo, AreaUnit::SquareMeters).await.unwrap();
         assert!(rows.is_empty());
     }
 
@@ -352,7 +349,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let rows = list_plantings(&repo).await.unwrap();
+        let rows = list_plantings(&repo, AreaUnit::SquareMeters).await.unwrap();
         assert_eq!(rows.len(), 1);
         assert!(rows[0].variety_label.starts_with("Tomate · "));
         assert!(rows[0].location_label.contains(" / "));

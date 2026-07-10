@@ -6,10 +6,10 @@
 //! instance, keeping this module independent of the translation layer.
 
 use crate::error::{AppError, AppResult};
+use crate::units::AreaUnit;
 use chrono::NaiveDate;
 use pomone_db::Repository;
 use pomone_domain::{Planting, PlantingId, PlantingSchedule, PlantingStatus};
-use rust_decimal::Decimal;
 use std::collections::HashMap;
 use std::str::FromStr;
 use uuid::Uuid;
@@ -119,11 +119,6 @@ fn fmt_date_opt(d: Option<NaiveDate>) -> String {
     }
 }
 
-fn fmt_area(area: Decimal) -> String {
-    let s = area.normalize().to_string();
-    format!("{s} m²")
-}
-
 fn schedule_lines(planting: &Planting) -> Vec<DetailLine> {
     match planting.schedule {
         PlantingSchedule::Cycle {
@@ -167,7 +162,11 @@ fn schedule_lines(planting: &Planting) -> Vec<DetailLine> {
 
 /// Load one Planting and resolve the labels needed by the detail screen.
 /// Returns `NotFound` if no planting matches `id_str`.
-pub async fn get_planting_detail(repo: &dyn Repository, id_str: &str) -> AppResult<PlantingDetail> {
+pub async fn get_planting_detail(
+    repo: &dyn Repository,
+    id_str: &str,
+    area_unit: AreaUnit,
+) -> AppResult<PlantingDetail> {
     let uuid = Uuid::from_str(id_str)
         .map_err(|e| AppError::Inconsistent(format!("invalid PlantingId '{id_str}': {e}")))?;
     let planting_id = PlantingId::from(uuid);
@@ -210,7 +209,7 @@ pub async fn get_planting_detail(repo: &dyn Repository, id_str: &str) -> AppResu
         variety_label,
         location_label,
         strata_label,
-        area_label: fmt_area(planting.area_m2),
+        area_label: area_unit.format(planting.area_m2),
         plants_count: planting.plants_count,
         name: planting.name.clone(),
         notes: planting.notes.clone(),
@@ -261,7 +260,7 @@ mod tests {
         .await
         .unwrap();
 
-        let detail = get_planting_detail(&repo, &planting.id.to_string())
+        let detail = get_planting_detail(&repo, &planting.id.to_string(), AreaUnit::SquareMeters)
             .await
             .unwrap();
 
@@ -355,14 +354,18 @@ mod tests {
     async fn missing_planting_returns_not_found() {
         let repo = fresh_repo().await;
         let fake = uuid::Uuid::new_v4().to_string();
-        let err = get_planting_detail(&repo, &fake).await.unwrap_err();
+        let err = get_planting_detail(&repo, &fake, AreaUnit::SquareMeters)
+            .await
+            .unwrap_err();
         assert!(matches!(err, AppError::Inconsistent(_)));
     }
 
     #[tokio::test]
     async fn invalid_uuid_is_rejected_cleanly() {
         let repo = fresh_repo().await;
-        let err = get_planting_detail(&repo, "not-a-uuid").await.unwrap_err();
+        let err = get_planting_detail(&repo, "not-a-uuid", AreaUnit::SquareMeters)
+            .await
+            .unwrap_err();
         assert!(matches!(err, AppError::Inconsistent(_)));
     }
 }
