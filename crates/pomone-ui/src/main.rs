@@ -16,27 +16,26 @@ use pomone_app::{
     bed_usage_series, create_recurring_task, create_task, create_task_type, delete_crop,
     delete_family, delete_location, delete_strata, delete_task, delete_task_type, delete_treatment,
     delete_variety, extend_series_if_needed, get_planting_detail, get_task_for_edit,
-    get_task_type_for_edit, list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops,
-    list_families_admin, list_family_options, list_location_kind_options, list_location_options,
-    list_locations_tree, list_parent_options, list_planting_choices, list_planting_tasks,
-    list_plantings, list_strata_options, list_strata_rows, list_task_category_options,
-    list_task_type_options, list_task_types_admin, list_treatments_for_planting,
-    list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting,
-    move_planting_to_location, parse_id, planting_status_key, recurrence_unit_str, reschedule_task,
-    services, split_planting, update_task, update_task_type, AgendaRow as AppAgendaRow, App,
-    AppConfig, AppError, AreaUnit, BackendConfig, BedUsagePoint as AppBedUsagePoint,
-    CalendarEntry as AppCalendarEntry, CalendarEntryKind, CalendarEventKind,
-    CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates,
-    FamilyAdminRow, FamilyOption, LocationKindOption, LocationListItem, LocationOption, MassUnit,
-    ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
-    PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataOption,
-    StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
-    TaskTypeEditForm, TaskTypeOption, TreatmentRow as AppTreatmentRow, VarietyOption,
-    VarietyRow as AppVarietyRow, WindowGeometry, YearlyHarvestRow as AppYearlyHarvestRow,
+    get_task_type_for_edit, list_agenda, list_calendar_entries, list_crops, list_families_admin,
+    list_family_options, list_location_kind_options, list_location_options, list_locations_tree,
+    list_parent_options, list_planting_choices, list_planting_tasks, list_plantings,
+    list_strata_options, list_strata_rows, list_task_category_options, list_task_type_options,
+    list_task_types_admin, list_treatments_for_planting, list_varieties_for_crop,
+    list_variety_options, list_yearly_harvests_for_planting, parse_id, planting_status_key,
+    recurrence_unit_str, reschedule_task, services, update_task, update_task_type,
+    AgendaRow as AppAgendaRow, App, AppConfig, AppError, AreaUnit, BackendConfig,
+    BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry, CalendarEntryKind,
+    CalendarEventKind, CropRow as AppCropRow, CycleDates, FamilyAdminRow, FamilyOption,
+    LocationKindOption, LocationListItem, LocationOption, MassUnit, ParentLocationOption,
+    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
+    PlantingTaskRow as AppPlantingTaskRow, StrataOption, StrataRow as AppStrataRow,
+    TaskCategoryOption, TaskEditForm, TaskTypeAdminRow, TaskTypeEditForm, TaskTypeOption,
+    TreatmentRow as AppTreatmentRow, VarietyOption, VarietyRow as AppVarietyRow, WindowGeometry,
+    YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{
-    holidays_in_year, HolidayRegion, LocationId, PlantingId, PlantingStatus, RecurrenceUnit,
-    StrataId, VarietyId, DEFAULT_FAMILY_COLOR,
+    holidays_in_year, HolidayRegion, PlantingId, PlantingStatus, RecurrenceUnit,
+    DEFAULT_FAMILY_COLOR,
 };
 use rust_decimal::Decimal;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
@@ -54,9 +53,7 @@ mod generated {
     slint::include_modules!();
 }
 use generated::{
-    AgendaRow as SlintAgendaRow, CropMapBarItem as SlintCropMapBar,
-    CropMapLaneItem as SlintCropMapLane, CropMapLocationOption as SlintCropMapLocationOption,
-    CropRow as SlintCropRow, DetailLine as SlintDetailLine,
+    AgendaRow as SlintAgendaRow, CropRow as SlintCropRow, DetailLine as SlintDetailLine,
     FamilyAdminItem as SlintFamilyAdminItem, GanttBar as SlintGanttBar,
     LocationItem as SlintLocationItem, MainWindow, PaletteColor as SlintPaletteColor,
     PlantingRow as SlintPlantingRow, PlantingTaskRow as SlintPlantingTaskRow,
@@ -353,48 +350,6 @@ fn main() -> Result<()> {
             window.set_status_is_error(is_err);
         });
     }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_navigate_plantings(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            if let Err(e) = refresh_plantings(&window, &mut state.borrow_mut()) {
-                tracing::error!(error = %e, "failed to refresh plantings");
-            }
-            window.set_current_page(SharedString::from("plantings"));
-            window.set_status_text(SharedString::from(""));
-            window.set_status_is_error(false);
-        });
-    }
-
-    // --- Plantings page callback ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_create_planting(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            match try_create_planting(&window, &mut s) {
-                Ok(()) => {
-                    let i18n = s.app.i18n();
-                    window.set_status_text(SharedString::from(i18n.t("status-planting-created")));
-                    window.set_status_is_error(false);
-                    if let Err(e) = refresh_plantings(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh plantings after create");
-                    }
-                }
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), e);
-                    window.set_status_text(text);
-                    window.set_status_is_error(is_err);
-                }
-            }
-        });
-    }
 
     // --- Per-screen wiring (one call per screen — see wiring/mod.rs) ---
     wiring::settings::wire_settings(&window, &state);
@@ -402,6 +357,9 @@ fn main() -> Result<()> {
     wiring::locations::wire_locations(&window, &state);
     wiring::strata::wire_strata(&window, &state);
     wiring::families::wire_families(&window, &state);
+    wiring::plantings::wire_plantings(&window, &state);
+    wiring::crop_map::wire_crop_map(&window, &state);
+    wiring::planting_detail::wire_planting_detail(&window, &state);
 
     // --- Confirmation dialog: run or drop the pending destructive action ---
     {
@@ -436,326 +394,6 @@ fn main() -> Result<()> {
             };
             window.set_confirm_visible(false);
             state.borrow_mut().pending_delete = None;
-        });
-    }
-    // --- Crop Map navigation + selection / move / split callbacks ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_navigate_crop_map(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            if let Err(e) = refresh_crop_map(&window, &mut s) {
-                tracing::error!(error = %e, "failed to refresh crop map");
-            }
-            window.set_current_page(SharedString::from("crop-map"));
-            window.set_crop_map_selected_planting_id(SharedString::from(""));
-            window.set_crop_map_move_picker_visible(false);
-            window.set_crop_map_split_form_visible(false);
-            window.set_crop_map_split_status_text(SharedString::from(""));
-        });
-    }
-    {
-        let weak = window.as_weak();
-        window.on_crop_map_bar_clicked(move |pid| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            // Toggle: clicking the same bar deselects.
-            let current = window.get_crop_map_selected_planting_id();
-            if current.as_str() == pid.as_str() {
-                window.set_crop_map_selected_planting_id(SharedString::from(""));
-            } else {
-                window.set_crop_map_selected_planting_id(pid);
-            }
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_crop_map_move_to(move |pid, lid| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let result = s
-                .runtime
-                .block_on(async { move_planting_to_location(s.app.repo(), &pid, &lid).await });
-            if let Err(e) = result {
-                tracing::error!(error = %e, "failed to move planting");
-                let mut args = FluentArgs::new();
-                args.set("message", localize_app_error(s.app.i18n(), &e));
-                window.set_status_text(SharedString::from(
-                    s.app.i18n().t_args("status-planting-failed", &args),
-                ));
-                window.set_status_is_error(true);
-                return;
-            }
-            if let Err(e) = refresh_crop_map(&window, &mut s) {
-                tracing::error!(error = %e, "failed to refresh crop map after move");
-            }
-            window.set_crop_map_selected_planting_id(SharedString::from(""));
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_crop_map_split_clicked(move |pid| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let s = state.borrow();
-            // Pre-fill the split form with a 50/50 default + the source's
-            // current location in part A, the next location in the list
-            // for part B (so the user only needs to confirm in the
-            // happy case).
-            if let Err(e) = prefill_split_form(&window, &s, &pid) {
-                tracing::warn!(error = %e, "failed to prefill split form");
-            }
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_crop_map_split_confirm(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            match try_confirm_split(&window, &mut s) {
-                Ok(()) => {
-                    window.set_crop_map_split_form_visible(false);
-                    window.set_crop_map_selected_planting_id(SharedString::from(""));
-                    if let Err(e) = refresh_crop_map(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh crop map after split");
-                    }
-                }
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), e);
-                    window.set_crop_map_split_status_text(text);
-                    window.set_crop_map_split_status_is_error(is_err);
-                }
-            }
-        });
-    }
-    {
-        let weak = window.as_weak();
-        window.on_crop_map_split_cancel(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            window.set_crop_map_split_form_visible(false);
-            window.set_crop_map_split_status_text(SharedString::from(""));
-        });
-    }
-
-    // --- Planting row click → open detail ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_planting_row_clicked(move |pid| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            open_planting_detail(&window, &mut state.borrow_mut(), &pid, "plantings");
-        });
-    }
-
-    // --- Plantings table: click a column header to sort (toggle direction on
-    //     the active column, else switch to the new column ascending) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_plantings_sort(move |column| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let column = column.to_string();
-            if s.plantings_sort_column == column {
-                s.plantings_sort_asc = !s.plantings_sort_asc;
-            } else {
-                s.plantings_sort_column = column;
-                s.plantings_sort_asc = true;
-            }
-            if let Err(e) = refresh_plantings(&window, &mut s) {
-                tracing::error!(error = %e, "failed to refresh plantings after sort");
-            }
-        });
-    }
-
-    // --- Record yearly harvest from the detail screen ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_record_harvest(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            match try_record_harvest(&window, &mut s) {
-                Ok(()) => {
-                    let i18n = s.app.i18n();
-                    window.set_harvest_status_text(SharedString::from(
-                        i18n.t("status-harvest-recorded"),
-                    ));
-                    window.set_harvest_status_is_error(false);
-                    window.set_new_harvest_year(SharedString::from(""));
-                    window.set_new_harvest_expected(SharedString::from(""));
-                    window.set_new_harvest_actual(SharedString::from(""));
-                    window.set_new_harvest_notes(SharedString::from(""));
-                    let pid = s.detail_planting_id.clone();
-                    if let Err(e) = refresh_planting_detail(&window, &mut s, &pid) {
-                        tracing::error!(error = %e, "failed to refresh detail after harvest");
-                    }
-                }
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), e);
-                    window.set_harvest_status_text(text);
-                    window.set_harvest_status_is_error(is_err);
-                }
-            }
-        });
-    }
-
-    // --- Record a phytosanitary treatment from the detail screen (issue #82) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_record_treatment(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            match try_record_treatment(&window, &mut s) {
-                Ok(()) => {
-                    window.set_new_treatment_date(SharedString::from(""));
-                    window.set_new_treatment_substance(SharedString::from(""));
-                    window.set_new_treatment_product(SharedString::from(""));
-                    window.set_new_treatment_dose(SharedString::from(""));
-                    window.set_new_treatment_unit(SharedString::from(""));
-                    window.set_new_treatment_notes(SharedString::from(""));
-                    let pid = s.detail_planting_id.clone();
-                    // Refresh first: it clears the status banners, so the
-                    // success message must be set afterwards to survive.
-                    if let Err(e) = refresh_planting_detail(&window, &mut s, &pid) {
-                        tracing::error!(error = %e, "failed to refresh detail after treatment");
-                    }
-                    window.set_treatment_status_text(SharedString::from(
-                        s.app.i18n().t("status-treatment-recorded"),
-                    ));
-                    window.set_treatment_status_is_error(false);
-                }
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), e);
-                    window.set_treatment_status_text(text);
-                    window.set_treatment_status_is_error(is_err);
-                }
-            }
-        });
-    }
-
-    // --- Delete a treatment row (goes through the shared confirm dialog) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_delete_treatment(move |id| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            s.pending_delete = Some(PendingDelete::Treatment(id.to_string()));
-            window.set_confirm_message(SharedString::from(
-                s.app.i18n().t("confirm-delete-treatment"),
-            ));
-            window.set_confirm_visible(true);
-        });
-    }
-
-    // --- Detail "Back" button ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_detail_go_back(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let target = s.detail_previous_page.clone();
-            // Refresh the destination so it picks up any changes made while
-            // the user was browsing the detail. Default to "plantings" if
-            // the stored previous-page value is unknown.
-            // Refresh the destination so it reflects any change made while
-            // browsing the detail. The unified calendar ("tasks") is the only
-            // non-plantings origin (milestone click); everything else lands on
-            // the plantings list.
-            if target == "tasks" {
-                if let Err(e) = refresh_task_calendar(&window, &mut s) {
-                    tracing::error!(error = %e, "refresh calendar on back");
-                }
-            } else if let Err(e) = refresh_plantings(&window, &mut s) {
-                tracing::error!(error = %e, "refresh plantings on back");
-            }
-            window.set_current_page(SharedString::from(target));
-            window.set_status_text(SharedString::from(""));
-            window.set_status_is_error(false);
-        });
-    }
-
-    // --- Detail: change planting life-cycle status (issue #63) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_detail_change_status(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let id = s.detail_planting_id.clone();
-            let status = status_from_index(window.get_detail_status_index());
-            let result: Result<(), AppError> = s.runtime.block_on(async {
-                let pid: PlantingId = parse_id(&id)?;
-                services::set_planting_status(s.app.repo(), pid, status).await
-            });
-            match result {
-                Ok(()) => {
-                    if let Err(e) = refresh_planting_detail(&window, &mut s, &id) {
-                        tracing::error!(error = %e, "refresh detail after status change");
-                    }
-                    window.set_detail_lifecycle_status_text(SharedString::from(
-                        s.app.i18n().t("status-planting-status-updated"),
-                    ));
-                    window.set_detail_lifecycle_status_is_error(false);
-                }
-                Err(e) => {
-                    let msg = localize_app_error(s.app.i18n(), &e);
-                    window.set_detail_lifecycle_status_text(SharedString::from(msg));
-                    window.set_detail_lifecycle_status_is_error(true);
-                }
-            }
-        });
-    }
-
-    // --- Detail: request planting deletion (issue #63) ---
-    // Routed through the shared confirmation dialog; the activity guard lives
-    // in the service, so a planting with history is refused with a localized
-    // message rather than silently wiped.
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_detail_delete_planting(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let id = s.detail_planting_id.clone();
-            s.pending_delete = Some(PendingDelete::Planting(id));
-            window.set_confirm_message(SharedString::from(
-                s.app.i18n().t("confirm-delete-planting"),
-            ));
-            window.set_confirm_visible(true);
         });
     }
 
@@ -1014,22 +652,6 @@ fn main() -> Result<()> {
                 return;
             };
             open_planting_detail(&window, &mut state.borrow_mut(), &planting_id_str, "tasks");
-        });
-    }
-    // Click on a task row in the planting-detail task list → open the same
-    // edit form, but remember to route back to the detail page on save/cancel.
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_detail_task_clicked(move |task_id_str| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            "planting-detail".clone_into(&mut s.task_form_previous_page);
-            if let Err(e) = open_task_form_for_edit(&window, &mut s, &task_id_str) {
-                tracing::error!(error = %e, "failed to open task form from planting detail");
-            }
         });
     }
     // Click on "+ Nouvelle tâche" header button → reset the form and
@@ -2092,92 +1714,6 @@ fn to_gantt_bar(row: &AppPlantingRow, today_year: i32) -> Option<SlintGanttBar> 
     })
 }
 
-/// Read the form fields, validate them, build typed IDs, and call the right
-/// service depending on whether the picked variety is annual or perennial.
-/// Client-side validation surfaces localized messages; service-side errors
-/// pass through unchanged.
-fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
-    let i18n = state.app.i18n();
-    let variety_idx = i32_to_usize(window.get_variety_index());
-    let location_idx = i32_to_usize(window.get_location_index());
-    let strata_idx = i32_to_usize(window.get_strata_index());
-    let variety_id_str = state
-        .variety_ids
-        .get(variety_idx)
-        .ok_or_else(|| FormError::Service(AppError::Inconsistent("no variety selected".into())))?;
-    let location_id_str = state
-        .location_ids
-        .get(location_idx)
-        .ok_or_else(|| FormError::Service(AppError::Inconsistent("no location selected".into())))?;
-    let strata_id_str = state
-        .strata_ids
-        .get(strata_idx)
-        .ok_or_else(|| FormError::Service(AppError::Inconsistent("no strata selected".into())))?;
-    let is_annual = state
-        .variety_is_annuals_plantings
-        .get(variety_idx)
-        .copied()
-        .unwrap_or(true);
-
-    let variety_id: VarietyId = parse_id(variety_id_str).map_err(FormError::Service)?;
-    let location_id: LocationId = parse_id(location_id_str).map_err(FormError::Service)?;
-    let strata_id: StrataId = parse_id(strata_id_str).map_err(FormError::Service)?;
-    // The form field is in the display unit (issue #29); storage stays m².
-    let area_m2 = state
-        .app
-        .area_unit()
-        .to_m2(validate_positive_decimal(&window.get_area_text(), i18n)?);
-    let plants_count = validate_positive_count(&window.get_count_text(), i18n)?;
-
-    if is_annual {
-        // The sown-on field holds the sowing date (direct / raised) or the
-        // planting date (bought plants), per the chosen establishment method.
-        let date = validate_iso_date(&window.get_sown_on_text(), i18n)?;
-        let method = establishment_method_from_index(window.get_planting_method_index());
-        state.runtime.block_on(async {
-            services::create_annual_planting(
-                state.app.repo(),
-                variety_id,
-                location_id,
-                strata_id,
-                method,
-                date,
-                area_m2,
-                plants_count,
-                None,
-                None,
-            )
-            .await
-            .map(|_| ())
-        })?;
-    } else {
-        let established_on = validate_iso_date(&window.get_established_on_text(), i18n)?;
-        let removal_text = window.get_removal_on_text();
-        let expected_removal_on = if removal_text.trim().is_empty() {
-            None
-        } else {
-            Some(validate_iso_date(&removal_text, i18n)?)
-        };
-        state.runtime.block_on(async {
-            services::create_perennial_planting(
-                state.app.repo(),
-                variety_id,
-                location_id,
-                strata_id,
-                established_on,
-                expected_removal_on,
-                area_m2,
-                plants_count,
-                None,
-                None,
-            )
-            .await
-            .map(|_| ())
-        })?;
-    }
-    Ok(())
-}
-
 fn parse_u16(s: &str, field: &'static str) -> Result<u16, AppError> {
     s.trim()
         .parse::<u16>()
@@ -2283,16 +1819,6 @@ fn variety_to_slint(row: AppVarietyRow) -> SlintVarietyRow {
         description: SharedString::from(row.description),
         profile_label: SharedString::from(row.profile_label),
         in_use: row.in_use,
-    }
-}
-
-/// Map the establishment-method dropdown index to the service enum. Order must
-/// match the `planting-method-labels` model built in `refresh_i18n`.
-fn establishment_method_from_index(idx: i32) -> services::EstablishmentMethod {
-    match idx {
-        1 => services::EstablishmentMethod::RaisedTransplant,
-        2 => services::EstablishmentMethod::BoughtPlants,
-        _ => services::EstablishmentMethod::DirectSow,
     }
 }
 
@@ -2757,19 +2283,7 @@ fn do_delete_task_type(window: &MainWindow, s: &mut UiState, id: &str) {
     }
 }
 
-/// Map the life-cycle status combo index to a [`PlantingStatus`] (issue #63).
-/// Parallel to the `detail-status-options` model built at startup. Out-of-range
-/// indices fall back to `Active`.
-fn status_from_index(index: i32) -> PlantingStatus {
-    match index {
-        1 => PlantingStatus::Completed,
-        2 => PlantingStatus::Failed,
-        3 => PlantingStatus::Abandoned,
-        _ => PlantingStatus::Active,
-    }
-}
-
-/// Inverse of [`status_from_index`].
+/// Inverse of `status_from_index` (in `wiring::planting_detail`).
 fn status_to_index(status: PlantingStatus) -> i32 {
     match status {
         PlantingStatus::Active => 0,
@@ -2857,82 +2371,6 @@ fn open_planting_detail(
             window.set_current_page(SharedString::from("planting-detail"));
         }
     }
-}
-
-/// Read the harvest form fields, validate them, then call the existing
-/// `record_yearly_harvest` service. The form expects a year (required) and
-/// optional expected/actual kg + notes; either yield being set is enough
-/// to make the entry useful.
-fn try_record_harvest(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
-    let i18n = state.app.i18n();
-    if state.detail_planting_id.is_empty() {
-        return Err(FormError::Service(AppError::Inconsistent(
-            "no planting selected for harvest record".into(),
-        )));
-    }
-    let planting_id: PlantingId =
-        parse_id(&state.detail_planting_id).map_err(FormError::Service)?;
-    let year = validate_year(&window.get_new_harvest_year(), i18n)?;
-    // The yield fields are in the display unit (issue #29); storage stays kg.
-    let mass_unit = state.app.mass_unit();
-    let expected = validate_optional_decimal(&window.get_new_harvest_expected(), i18n)?
-        .map(|v| mass_unit.to_kg(v));
-    let actual = validate_optional_decimal(&window.get_new_harvest_actual(), i18n)?
-        .map(|v| mass_unit.to_kg(v));
-    let notes = optional_text(&window.get_new_harvest_notes());
-
-    state
-        .runtime
-        .block_on(async {
-            services::record_yearly_harvest(
-                state.app.repo(),
-                planting_id,
-                year,
-                expected,
-                actual,
-                notes,
-            )
-            .await
-            .map(|_| ())
-        })
-        .map_err(FormError::Service)
-}
-
-/// Validate + submit the "record a treatment" form on the detail page
-/// (issue #82). Every field except notes is required.
-fn try_record_treatment(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
-    let i18n = state.app.i18n();
-    if state.detail_planting_id.is_empty() {
-        return Err(FormError::Service(AppError::Inconsistent(
-            "no planting selected for treatment record".into(),
-        )));
-    }
-    let planting_id: PlantingId =
-        parse_id(&state.detail_planting_id).map_err(FormError::Service)?;
-    let applied_on = validate_iso_date(&window.get_new_treatment_date(), i18n)?;
-    let substance = validate_required_name(&window.get_new_treatment_substance(), i18n)?;
-    let product = validate_required_name(&window.get_new_treatment_product(), i18n)?;
-    let dose = validate_positive_decimal(&window.get_new_treatment_dose(), i18n)?;
-    let unit = validate_required_name(&window.get_new_treatment_unit(), i18n)?;
-    let notes = optional_text(&window.get_new_treatment_notes());
-
-    state
-        .runtime
-        .block_on(async {
-            services::record_treatment(
-                state.app.repo(),
-                planting_id,
-                applied_on,
-                substance,
-                product,
-                dose,
-                unit,
-                notes,
-            )
-            .await
-            .map(|_| ())
-        })
-        .map_err(FormError::Service)
 }
 
 /// Execute a confirmed treatment deletion (issue #82) and repaint the detail
@@ -4016,159 +3454,6 @@ fn refresh_task_filter_chips(window: &MainWindow, state: &mut UiState) -> Result
         })
         .collect();
     window.set_task_calendar_filter_chips(ModelRc::new(VecModel::from(chips)));
-    Ok(())
-}
-
-/// Push the Crop Map data to Slint: lanes + month labels + parallel
-/// `(label, id)` table for the move-picker and split-form ComboBoxes.
-fn refresh_crop_map(window: &MainWindow, state: &mut UiState) -> Result<()> {
-    let lanes: Vec<AppCropMapLane> = state
-        .runtime
-        .block_on(async { list_crop_map_lanes(state.app.repo()).await })
-        .context("failed to load crop map")?;
-
-    // Parallel id table — same ordering as the lanes so move-picker /
-    // split ComboBoxes are interchangeable. We also derive the label
-    // model from the same list.
-    state.crop_map_location_ids = lanes.iter().map(|l| l.location_id.clone()).collect();
-    let move_targets: Vec<SlintCropMapLocationOption> = lanes
-        .iter()
-        .map(|l| SlintCropMapLocationOption {
-            location_id: SharedString::from(l.location_id.clone()),
-            label: SharedString::from(l.label.clone()),
-        })
-        .collect();
-    window.set_crop_map_move_target_options(ModelRc::new(VecModel::from(move_targets)));
-    let split_labels: Vec<SharedString> = lanes
-        .iter()
-        .map(|l| SharedString::from(l.label.clone()))
-        .collect();
-    window.set_crop_map_split_target_labels(ModelRc::new(VecModel::from(split_labels)));
-
-    let slint_lanes: Vec<SlintCropMapLane> = lanes
-        .into_iter()
-        .map(|l| SlintCropMapLane {
-            location_id: SharedString::from(l.location_id),
-            label: SharedString::from(l.label),
-            dimensions_label: SharedString::from(l.dimensions_label),
-            bars: ModelRc::new(VecModel::from(
-                l.bars.into_iter().map(bar_to_slint).collect::<Vec<_>>(),
-            )),
-        })
-        .collect();
-    window.set_crop_map_lanes(ModelRc::new(VecModel::from(slint_lanes)));
-
-    // Month labels — re-use the Gantt translations so the season axis
-    // stays consistent across screens.
-    let i18n = state.app.i18n();
-    let months: Vec<SharedString> = (1..=12)
-        .map(|m| SharedString::from(i18n.t(&format!("gantt-month-{m}"))))
-        .collect();
-    window.set_crop_map_month_labels(ModelRc::new(VecModel::from(months)));
-    Ok(())
-}
-
-fn bar_to_slint(b: AppCropMapBar) -> SlintCropMapBar {
-    SlintCropMapBar {
-        planting_id: SharedString::from(b.planting_id),
-        label: SharedString::from(b.label),
-        color: parse_hex_color(&b.color_hex),
-        start_doy: b.start_doy,
-        end_doy: b.end_doy,
-    }
-}
-
-/// Pre-fill the split form with sensible defaults so the happy path is
-/// a single Confirm click: part A = source's current location with half
-/// the area+count; part B = next location in the list (cycles back to
-/// the first if the source is the last one) with the other half.
-fn prefill_split_form(window: &MainWindow, state: &UiState, planting_id: &str) -> Result<()> {
-    let p_id: PlantingId = parse_id(planting_id)?;
-    let planting = state
-        .runtime
-        .block_on(async { state.app.repo().planting_get(p_id).await })?
-        .context("planting referenced by the split form vanished")?;
-    let source_location_str = planting.location_id.to_string();
-    let source_idx = state
-        .crop_map_location_ids
-        .iter()
-        .position(|id| id == &source_location_str)
-        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
-    // Pick a *different* location for part B when possible.
-    let next_idx = if state.crop_map_location_ids.len() > 1 {
-        let n = state.crop_map_location_ids.len();
-        let i = usize::try_from(source_idx).unwrap_or(0);
-        i32::try_from((i + 1) % n).unwrap_or(0)
-    } else {
-        source_idx
-    };
-    // Prefill in the display unit (issue #29), mirroring the parse side in
-    // `try_confirm_split`.
-    let half_area = state
-        .app
-        .area_unit()
-        .to_display(planting.area_m2 / Decimal::from(2));
-    let half_count = planting.plants_count / 2;
-    let remainder_count = planting.plants_count - half_count;
-
-    window.set_crop_map_split_part_a_location_index(source_idx);
-    window.set_crop_map_split_part_b_location_index(next_idx);
-    window.set_crop_map_split_part_a_area(SharedString::from(half_area.normalize().to_string()));
-    window.set_crop_map_split_part_b_area(SharedString::from(half_area.normalize().to_string()));
-    window.set_crop_map_split_part_a_count(SharedString::from(half_count.to_string()));
-    window.set_crop_map_split_part_b_count(SharedString::from(remainder_count.to_string()));
-    window.set_crop_map_split_status_text(SharedString::from(""));
-    window.set_crop_map_split_status_is_error(false);
-    Ok(())
-}
-
-/// Validate the split form fields and call `split_planting`. Validation
-/// errors are surfaced as `FormError::Validation` so the existing
-/// `render_form_error` template picks them up.
-fn try_confirm_split(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
-    let i18n = state.app.i18n();
-    let pid = window.get_crop_map_selected_planting_id().to_string();
-    if pid.is_empty() {
-        return Err(FormError::Validation(i18n.t("error-no-planting-selected")));
-    }
-    let area_unit = state.app.area_unit();
-    let part = |loc_idx: i32,
-                area_text: SharedString,
-                count_text: SharedString|
-     -> Result<SplitPart, FormError> {
-        let usize_idx = usize::try_from(loc_idx.max(0)).unwrap_or(0);
-        let location_id = state
-            .crop_map_location_ids
-            .get(usize_idx)
-            .cloned()
-            .ok_or_else(|| FormError::Validation(i18n.t("error-location-required")))?;
-        // The area field is in the display unit (issue #29); storage stays m².
-        let area: Decimal = Decimal::from_str(area_text.trim())
-            .map_err(|_| FormError::Validation(i18n.t("error-number-invalid")))?;
-        let count: u32 = count_text
-            .trim()
-            .parse()
-            .map_err(|_| FormError::Validation(i18n.t("error-number-invalid")))?;
-        Ok(SplitPart {
-            location_id,
-            area_m2: area_unit.to_m2(area),
-            plants_count: count,
-        })
-    };
-    let part_a = part(
-        window.get_crop_map_split_part_a_location_index(),
-        window.get_crop_map_split_part_a_area(),
-        window.get_crop_map_split_part_a_count(),
-    )?;
-    let part_b = part(
-        window.get_crop_map_split_part_b_location_index(),
-        window.get_crop_map_split_part_b_area(),
-        window.get_crop_map_split_part_b_count(),
-    )?;
-    state
-        .runtime
-        .block_on(async { split_planting(state.app.repo(), &pid, &[part_a, part_b]).await })
-        .map_err(FormError::Service)?;
     Ok(())
 }
 
