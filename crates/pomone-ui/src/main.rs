@@ -25,16 +25,16 @@ use pomone_app::{
     list_task_type_options, list_task_types_admin, list_treatments_for_planting,
     list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting,
     move_planting_to_location, parse_id, planting_status_key, recurrence_unit_str, reschedule_task,
-    services, split_planting, test_backend, update_crop, update_family, update_location,
-    update_task, update_task_type, update_variety, AgendaRow as AppAgendaRow, App, AppConfig,
-    AppError, AreaUnit, BackendConfig, BedUsagePoint as AppBedUsagePoint,
-    CalendarEntry as AppCalendarEntry, CalendarEntryKind, CalendarEventKind, CropEditForm,
-    CropInput, CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow,
-    CycleDates, FamilyAdminRow, FamilyEditForm, FamilyOption, Lang, LifespanKind, LocationEditForm,
-    LocationInput, LocationKindOption, LocationListItem, LocationOption, MassUnit, MigrationReport,
-    ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
-    PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput,
-    StrataOption, StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
+    services, split_planting, update_crop, update_family, update_location, update_task,
+    update_task_type, update_variety, AgendaRow as AppAgendaRow, App, AppConfig, AppError,
+    AreaUnit, BackendConfig, BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry,
+    CalendarEntryKind, CalendarEventKind, CropEditForm, CropInput, CropMapBar as AppCropMapBar,
+    CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyAdminRow,
+    FamilyEditForm, FamilyOption, LifespanKind, LocationEditForm, LocationInput,
+    LocationKindOption, LocationListItem, LocationOption, MassUnit, ParentLocationOption,
+    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
+    PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
+    StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
     TaskTypeEditForm, TaskTypeOption, TreatmentRow as AppTreatmentRow, VarietyEditForm,
     VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow, WindowGeometry,
     YearlyHarvestRow as AppYearlyHarvestRow,
@@ -70,6 +70,8 @@ use generated::{
     TaskTypeAdminItem as SlintTaskTypeAdminItem, TooltipCatalog, TreatmentRow as SlintTreatmentRow,
     VarietyRow as SlintVarietyRow, YearlyHarvestRow as SlintYearlyHarvestRow,
 };
+
+mod wiring;
 
 /// A destructive action awaiting the user's confirmation in the shared dialog
 /// (issue #61). Stored on [`UiState`] between "delete requested" and the
@@ -302,7 +304,7 @@ fn main() -> Result<()> {
     refresh_cultures(&window, &mut state.borrow_mut())?;
     refresh_locations(&window, &mut state.borrow_mut())?;
     refresh_strata(&window, &mut state.borrow_mut())?;
-    refresh_settings(&window, &state.borrow());
+    wiring::settings::refresh_settings(&window, &state.borrow());
     // Materialize any pending occurrences of open-ended series up to the
     // 1-year horizon. Idempotent and cheap on a small DB.
     {
@@ -354,22 +356,6 @@ fn main() -> Result<()> {
             };
             window.set_status_text(SharedString::from(i18n.t(key)));
             window.set_status_is_error(is_err);
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_toggle_language(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let next = match s.app.i18n().lang() {
-                Lang::Fr => Lang::En,
-                Lang::En => Lang::Fr,
-            };
-            s.app.set_lang(next);
-            apply_translations(&window, &s.app);
         });
     }
     {
@@ -743,20 +729,8 @@ fn main() -> Result<()> {
         });
     }
 
-    // --- Settings navigation + test / save / save-and-migrate ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_navigate_settings(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            refresh_settings(&window, &state.borrow());
-            window.set_current_page(SharedString::from("settings"));
-            window.set_settings_status_text(SharedString::from(""));
-            window.set_settings_status_is_error(false);
-        });
-    }
+    // --- Settings family: settings / backend / backup / holidays / units / language ---
+    wiring::settings::wire_settings(&window, &state);
     // --- Crop Map navigation + selection / move / split callbacks ---
     {
         let state = Rc::clone(&state);
@@ -867,215 +841,6 @@ fn main() -> Result<()> {
             };
             window.set_crop_map_split_form_visible(false);
             window.set_crop_map_split_status_text(SharedString::from(""));
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_settings_test_backend(
-            move |kind, sqlite_path, host, port, user, password, db| {
-                let Some(window) = weak.upgrade() else {
-                    return;
-                };
-                let s = state.borrow();
-                let form = SettingsFormValues {
-                    kind,
-                    sqlite_path: sqlite_path.into(),
-                    host: host.into(),
-                    port: port.into(),
-                    user: user.into(),
-                    password: password.into(),
-                    database: db.into(),
-                };
-                tracing::info!(?form, "test backend invoked");
-                let new_backend = match form.into_backend() {
-                    Ok(b) => b,
-                    Err(text) => {
-                        window.set_settings_status_text(SharedString::from(text));
-                        window.set_settings_status_is_error(true);
-                        return;
-                    }
-                };
-                match s.runtime.block_on(test_backend(&new_backend)) {
-                    Ok(()) => {
-                        window.set_settings_status_text(SharedString::from(
-                            s.app.i18n().t("settings-test-ok"),
-                        ));
-                        window.set_settings_status_is_error(false);
-                    }
-                    Err(e) => {
-                        let i18n = s.app.i18n();
-                        let mut args = FluentArgs::new();
-                        args.set("message", localize_app_error(i18n, &e));
-                        window.set_settings_status_text(SharedString::from(
-                            i18n.t_args("status-planting-failed", &args),
-                        ));
-                        window.set_settings_status_is_error(true);
-                    }
-                }
-            },
-        );
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_settings_save_backend(
-            move |kind, sqlite_path, host, port, user, password, db| {
-                let Some(window) = weak.upgrade() else {
-                    return;
-                };
-                let form = SettingsFormValues {
-                    kind,
-                    sqlite_path: sqlite_path.into(),
-                    host: host.into(),
-                    port: port.into(),
-                    user: user.into(),
-                    password: password.into(),
-                    database: db.into(),
-                };
-                tracing::info!(?form, "save backend invoked");
-                try_swap_backend(&window, state.clone(), form, false);
-            },
-        );
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_settings_save_and_migrate(
-            move |kind, sqlite_path, host, port, user, password, db| {
-                let Some(window) = weak.upgrade() else {
-                    return;
-                };
-                let form = SettingsFormValues {
-                    kind,
-                    sqlite_path: sqlite_path.into(),
-                    host: host.into(),
-                    port: port.into(),
-                    user: user.into(),
-                    password: password.into(),
-                    database: db.into(),
-                };
-                tracing::info!(?form, "save+migrate backend invoked");
-                try_swap_backend(&window, state.clone(), form, true);
-            },
-        );
-    }
-
-    // --- Manual backup from the settings page (issue #58) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_settings_backup_now(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let s = state.borrow();
-            let i18n = s.app.i18n();
-            match s.app.backup_now() {
-                Ok(path) => {
-                    let mut args = FluentArgs::new();
-                    args.set("path", path.display().to_string());
-                    window.set_settings_backup_status_text(SharedString::from(
-                        i18n.t_args("settings-backup-done", &args),
-                    ));
-                    window.set_settings_backup_status_is_error(false);
-                }
-                Err(AppError::Inconsistent(ref code)) if code == "backup_sqlite_only" => {
-                    window.set_settings_backup_status_text(SharedString::from(
-                        i18n.t("error-backup-sqlite-only"),
-                    ));
-                    window.set_settings_backup_status_is_error(true);
-                }
-                Err(e) => {
-                    let mut args = FluentArgs::new();
-                    args.set("message", localize_app_error(i18n, &e));
-                    window.set_settings_backup_status_text(SharedString::from(
-                        i18n.t_args("status-planting-failed", &args),
-                    ));
-                    window.set_settings_backup_status_is_error(true);
-                }
-            }
-        });
-    }
-
-    // --- Public-holiday region picker (issue #35) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_settings_holiday_region_changed(move |index| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let code = holiday_region_code(index);
-            // The combo fires once at startup when apply_translations sets
-            // the initial index — don't rewrite the config for a no-op.
-            if s.app.config().holiday_region == code {
-                return;
-            }
-            match s.app.set_holiday_region(&code) {
-                Ok(()) => {
-                    let msg = s.app.i18n().t("status-holiday-region-saved");
-                    window.set_settings_status_text(SharedString::from(msg));
-                    window.set_settings_status_is_error(false);
-                    if let Err(e) = refresh_task_calendar(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh calendar after region change");
-                    }
-                }
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
-                    window.set_settings_status_text(text);
-                    window.set_settings_status_is_error(is_err);
-                }
-            }
-        });
-    }
-
-    // --- Display-unit pickers (issue #29) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_settings_area_unit_changed(move |index| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let unit = area_unit_from_index(index);
-            // The combo fires once at startup when apply_translations sets
-            // the initial index — don't rewrite the config for a no-op.
-            if s.app.area_unit() == unit {
-                return;
-            }
-            match s.app.set_area_unit(unit) {
-                Ok(()) => on_units_saved(&window, &mut s),
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
-                    window.set_settings_status_text(text);
-                    window.set_settings_status_is_error(is_err);
-                }
-            }
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_settings_mass_unit_changed(move |index| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let unit = mass_unit_from_index(index);
-            if s.app.mass_unit() == unit {
-                return;
-            }
-            match s.app.set_mass_unit(unit) {
-                Ok(()) => on_units_saved(&window, &mut s),
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), FormError::Service(e));
-                    window.set_settings_status_text(text);
-                    window.set_settings_status_is_error(is_err);
-                }
-            }
         });
     }
 
@@ -3507,264 +3272,6 @@ fn today_iso() -> String {
     Local::now().date_naive().format("%Y-%m-%d").to_string()
 }
 
-/// Push the active backend onto the Settings header and pre-fill the edit
-/// form so the user can tweak it without retyping everything.
-fn refresh_settings(window: &MainWindow, state: &UiState) {
-    let cfg = state.app.config();
-    let value = backend_display(&cfg.backend);
-    window.set_settings_current_value(SharedString::from(value));
-
-    match &cfg.backend {
-        BackendConfig::Sqlite { path } => {
-            window.set_settings_backend_kind_index(0);
-            window.set_settings_sqlite_path(SharedString::from(path.display().to_string()));
-        }
-        BackendConfig::Mariadb { url } => {
-            window.set_settings_backend_kind_index(1);
-            // Best-effort split of the URL back into structured fields so
-            // the user sees something usable. Falls back to leaving fields
-            // empty if the URL doesn't match the canonical shape.
-            let (host, port, user, password, db) = split_mariadb_url(url);
-            window.set_settings_mariadb_host(SharedString::from(host));
-            window.set_settings_mariadb_port(SharedString::from(port));
-            window.set_settings_mariadb_user(SharedString::from(user));
-            window.set_settings_mariadb_password(SharedString::from(password));
-            window.set_settings_mariadb_database(SharedString::from(db));
-        }
-    }
-}
-
-/// Human-readable rendering of a backend for the Settings header.
-fn backend_display(b: &BackendConfig) -> String {
-    match b {
-        BackendConfig::Sqlite { path } => format!("SQLite — {}", path.display()),
-        BackendConfig::Mariadb { url } => format!("MariaDB — {}", redact_password(url)),
-    }
-}
-
-/// Replace the password in `mysql://user:pass@host…` with `***` so the
-/// banner doesn't leak credentials when the user takes screenshots.
-fn redact_password(url: &str) -> String {
-    if let Some(scheme_end) = url.find("://") {
-        let (scheme, rest) = url.split_at(scheme_end + 3);
-        if let Some(at_pos) = rest.find('@') {
-            let (creds, tail) = rest.split_at(at_pos);
-            if let Some(colon_pos) = creds.find(':') {
-                let (user, _) = creds.split_at(colon_pos);
-                return format!("{scheme}{user}:***{tail}");
-            }
-        }
-    }
-    url.to_owned()
-}
-
-/// Best-effort decomposition of a `mysql://user:pass@host:port/db` URL into
-/// its five components. Returns empty strings for anything missing.
-fn split_mariadb_url(url: &str) -> (String, String, String, String, String) {
-    let mut port = "3306".to_owned();
-    let mut user = String::new();
-    let mut password = String::new();
-    let rest = url.strip_prefix("mysql://").unwrap_or(url);
-    let (creds, tail) = match rest.find('@') {
-        Some(p) => (&rest[..p], &rest[p + 1..]),
-        None => ("", rest),
-    };
-    if !creds.is_empty() {
-        if let Some(colon) = creds.find(':') {
-            creds[..colon].clone_into(&mut user);
-            creds[colon + 1..].clone_into(&mut password);
-        } else {
-            creds.clone_into(&mut user);
-        }
-    }
-    let (hostport, after) = match tail.find('/') {
-        Some(p) => (&tail[..p], &tail[p + 1..]),
-        None => (tail, ""),
-    };
-    let host = if let Some(colon) = hostport.find(':') {
-        hostport[colon + 1..].clone_into(&mut port);
-        hostport[..colon].to_owned()
-    } else {
-        hostport.to_owned()
-    };
-    let db = after.split('?').next().unwrap_or("").to_owned();
-    (host, port, user, password, db)
-}
-
-/// Snapshot of the Settings form values, captured at the moment a button
-/// is clicked. Going through callback args (rather than property reads)
-/// dodges any propagation hiccup in the `<=>` chain between MainWindow
-/// and the SettingsPage subcomponent.
-#[derive(Debug, Clone)]
-struct SettingsFormValues {
-    kind: i32,
-    sqlite_path: String,
-    host: String,
-    port: String,
-    user: String,
-    password: String,
-    database: String,
-}
-
-impl SettingsFormValues {
-    fn into_backend(self) -> Result<BackendConfig, String> {
-        if self.kind == 0 {
-            let trimmed = self.sqlite_path.trim();
-            if trimmed.is_empty() {
-                return Err("SQLite path is required".to_owned());
-            }
-            Ok(BackendConfig::Sqlite {
-                path: PathBuf::from(trimmed),
-            })
-        } else {
-            let host = self.host.trim().to_owned();
-            let port = self.port.trim().to_owned();
-            let user = self.user.trim().to_owned();
-            let password = self.password;
-            let db = self.database.trim().to_owned();
-            if host.is_empty() || user.is_empty() || db.is_empty() {
-                return Err("MariaDB host, user and database are required".to_owned());
-            }
-            let port = if port.is_empty() {
-                "3306".to_owned()
-            } else {
-                port
-            };
-            // sqlx accepts `mysql://user:pass@host:port/db`. Password may
-            // contain URL-reserved chars; for v1 we trust the user — a
-            // proper percent-encoder is a follow-up if needed.
-            let url = if password.is_empty() {
-                format!("mysql://{user}@{host}:{port}/{db}")
-            } else {
-                format!("mysql://{user}:{password}@{host}:{port}/{db}")
-            };
-            Ok(BackendConfig::Mariadb { url })
-        }
-    }
-}
-
-/// Localized one-liner summarising a [`MigrationReport`].
-fn format_migration_report(report: &MigrationReport, i18n: &pomone_app::I18n) -> String {
-    fn n(v: usize) -> i64 {
-        i64::try_from(v).unwrap_or(i64::MAX)
-    }
-    let mut args = FluentArgs::new();
-    args.set("families", n(report.families));
-    args.set("strata", n(report.strata));
-    args.set("kinds", n(report.location_kinds));
-    args.set("locations", n(report.locations));
-    args.set("crops", n(report.crops));
-    args.set("varieties", n(report.varieties));
-    args.set("plantings", n(report.plantings));
-    args.set("harvests", n(report.yearly_harvests));
-    args.set("tasktypes", n(report.task_types));
-    args.set("taskmethods", n(report.task_methods));
-    args.set("taskimplements", n(report.task_implements));
-    args.set("taskseries", n(report.task_series));
-    args.set("tasks", n(report.tasks));
-    args.set("treatments", n(report.treatments));
-    i18n.t_args("settings-report", &args)
-}
-
-/// Wire the Save / Save+Migrate buttons. Validates the form, calls
-/// `App::swap_backend`, refreshes every screen so the new data shows up,
-/// and writes a localized status line.
-fn try_swap_backend(
-    window: &MainWindow,
-    state: Rc<RefCell<UiState>>,
-    form: SettingsFormValues,
-    migrate: bool,
-) {
-    let new_backend = match form.into_backend() {
-        Ok(b) => b,
-        Err(text) => {
-            window.set_settings_status_text(SharedString::from(text));
-            window.set_settings_status_is_error(true);
-            return;
-        }
-    };
-    let mut s = state.borrow_mut();
-    // Split-borrow: swap_backend needs `&mut app` but the runtime needs to
-    // outlive that mutable borrow. Destructuring through reborrow gives the
-    // compiler two independent slots from the same `RefMut`.
-    let result: Result<MigrationReport, AppError> = {
-        let UiState {
-            ref runtime,
-            ref mut app,
-            ..
-        } = *s;
-        runtime.block_on(async { app.swap_backend(new_backend, migrate).await })
-    };
-    match result {
-        Ok(report) => {
-            let i18n = s.app.i18n();
-            let backend_text = backend_display(&s.app.config().backend);
-            let mut args = FluentArgs::new();
-            args.set("backend", backend_text.clone());
-            let mut msg = if migrate {
-                let report_text = format_migration_report(&report, i18n);
-                args.set("report", report_text);
-                i18n.t_args("settings-migrate-ok", &args)
-            } else {
-                i18n.t_args("settings-save-ok", &args)
-            };
-            // Surface the pre-swap auto-backup path (issue #58) so the user
-            // knows where the safety net lives.
-            if let Some(backup) = &report.pre_swap_backup {
-                let mut bargs = FluentArgs::new();
-                bargs.set("path", backup.display().to_string());
-                msg.push('\n');
-                msg.push_str(&i18n.t_args("settings-backup-note", &bargs));
-            }
-
-            // Every list-based screen now points at a different repo; reload
-            // them all. A failed reload is surfaced in the status (issue #69)
-            // instead of leaving a silently empty screen.
-            refresh_bed_usage(window, &s.app, &s.runtime);
-            let mut failed_screens: Vec<&str> = Vec::new();
-            // (nav key, result) — the key doubles as the localized screen
-            // name in the warning below.
-            let reloads: [(&str, Result<()>); 5] = [
-                ("nav-plantings", refresh_plantings(window, &mut s)),
-                ("nav-cultures", refresh_cultures(window, &mut s)),
-                ("nav-locations", refresh_locations(window, &mut s)),
-                ("nav-tasks", refresh_task_calendar(window, &mut s)),
-                ("nav-strata", refresh_strata(window, &mut s)),
-            ];
-            for (screen, result) in reloads {
-                if let Err(e) = result {
-                    tracing::error!(error = %e, screen, "failed to refresh after backend swap");
-                    failed_screens.push(screen);
-                }
-            }
-            refresh_settings(window, &s);
-            if !failed_screens.is_empty() {
-                let i18n = s.app.i18n();
-                let screens = failed_screens
-                    .iter()
-                    .map(|key| i18n.t(key))
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                let mut wargs = FluentArgs::new();
-                wargs.set("screens", screens);
-                msg.push('\n');
-                msg.push_str(&i18n.t_args("settings-refresh-warning", &wargs));
-            }
-            window.set_settings_status_text(SharedString::from(msg));
-            window.set_settings_status_is_error(false);
-        }
-        Err(e) => {
-            let i18n = s.app.i18n();
-            let mut args = FluentArgs::new();
-            args.set("message", localize_app_error(i18n, &e));
-            window.set_settings_status_text(SharedString::from(
-                i18n.t_args("status-planting-failed", &args),
-            ));
-            window.set_settings_status_is_error(true);
-        }
-    }
-}
-
 /// Either a localized client-validation message or a service error that
 /// still needs translation. Lets create handlers branch on prefix
 /// ("Validation:" vs "Creation failed:") instead of mixing the two.
@@ -4255,28 +3762,6 @@ fn do_delete_treatment_row(window: &MainWindow, s: &mut UiState, id: &str) {
     }
 }
 
-/// After a display-unit change: confirm in the status line, refresh the
-/// labels embedding the unit, and repaint every view that formats areas
-/// or masses (plantings, locations, and the open planting detail).
-fn on_units_saved(window: &MainWindow, state: &mut UiState) {
-    let msg = state.app.i18n().t("status-units-saved");
-    window.set_settings_status_text(SharedString::from(msg));
-    window.set_settings_status_is_error(false);
-    apply_unit_labels(window, &state.app);
-    if let Err(e) = refresh_plantings(window, state) {
-        tracing::error!(error = %e, "failed to refresh plantings after unit change");
-    }
-    if let Err(e) = refresh_locations(window, state) {
-        tracing::error!(error = %e, "failed to refresh locations after unit change");
-    }
-    if !state.detail_planting_id.is_empty() {
-        let pid = state.detail_planting_id.clone();
-        if let Err(e) = refresh_planting_detail(window, state, &pid) {
-            tracing::error!(error = %e, "failed to refresh planting detail after unit change");
-        }
-    }
-}
-
 /// (Re)apply the form labels and tooltips that embed the current display
 /// units (issue #29). Split out of `apply_translations` so a unit change
 /// can refresh them without redoing the whole catalogue.
@@ -4304,7 +3789,7 @@ fn apply_unit_labels(window: &MainWindow, app: &App) {
 }
 
 /// Combo index of an area display unit — `AreaUnit::ALL` order. Inverse of
-/// [`area_unit_from_index`].
+/// `wiring::settings::area_unit_from_index`.
 fn area_unit_index(unit: AreaUnit) -> i32 {
     AreaUnit::ALL
         .iter()
@@ -4313,17 +3798,8 @@ fn area_unit_index(unit: AreaUnit) -> i32 {
         .unwrap_or(0)
 }
 
-/// Area unit for a combo index, defaulting to m² when out of range.
-fn area_unit_from_index(index: i32) -> AreaUnit {
-    usize::try_from(index)
-        .ok()
-        .and_then(|i| AreaUnit::ALL.get(i))
-        .copied()
-        .unwrap_or_default()
-}
-
 /// Combo index of a mass display unit — `MassUnit::ALL` order. Inverse of
-/// [`mass_unit_from_index`].
+/// `wiring::settings::mass_unit_from_index`.
 fn mass_unit_index(unit: MassUnit) -> i32 {
     MassUnit::ALL
         .iter()
@@ -4332,17 +3808,8 @@ fn mass_unit_index(unit: MassUnit) -> i32 {
         .unwrap_or(0)
 }
 
-/// Mass unit for a combo index, defaulting to kg when out of range.
-fn mass_unit_from_index(index: i32) -> MassUnit {
-    usize::try_from(index)
-        .ok()
-        .and_then(|i| MassUnit::ALL.get(i))
-        .copied()
-        .unwrap_or_default()
-}
-
 /// Combo index of a persisted holiday-region code: 0 = none/unknown, then
-/// `HolidayRegion::ALL` order shifted by one. Inverse of [`holiday_region_code`].
+/// `HolidayRegion::ALL` order shifted by one. Inverse of `wiring::settings::holiday_region_code`.
 fn holiday_region_index(code: &str) -> i32 {
     HolidayRegion::parse(code).map_or(0, |r| {
         HolidayRegion::ALL
@@ -4351,16 +3818,6 @@ fn holiday_region_index(code: &str) -> i32 {
             .and_then(|p| i32::try_from(p + 1).ok())
             .unwrap_or(0)
     })
-}
-
-/// Persisted code for a combo index ("" = none). Inverse of
-/// [`holiday_region_index`].
-fn holiday_region_code(index: i32) -> String {
-    usize::try_from(index)
-        .ok()
-        .and_then(|i| i.checked_sub(1))
-        .and_then(|i| HolidayRegion::ALL.get(i))
-        .map_or_else(String::new, |r| r.code().to_owned())
 }
 
 fn parse_i32(s: &str, field: &'static str) -> Result<i32, AppError> {
