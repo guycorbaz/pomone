@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Pomone — Directions de design (réconciliation & plan)</title>
+<style>
+:root{
+  --bg:#FBF7F0;--surface:#FFF;--surface-alt:#F3EDE0;--text:#1F1810;--text2:#3F3528;--muted:#6B5D4D;
+  --border:#E2D7C2;--border-strong:#C8B89A;--primary:#3C6E47;--primary-h:#2F5938;--accent:#B85C38;
+  --focus:#6A9F77;--warn:#B07C25;--danger:#A64238;--settled:#8B8271;
+  --sp:4px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#EDE6D6;color:var(--text);font:16px/1.45 system-ui,sans-serif;padding:32px;max-width:1200px;margin:0 auto}
+h1{font-size:28px;color:var(--primary);margin-bottom:4px}
+.sub{color:var(--muted);margin-bottom:28px}
+h2{font-size:20px;margin:40px 0 6px;color:var(--text)}
+h2 .tag{font-size:12px;background:var(--primary);color:#fff;border-radius:10px;padding:2px 10px;vertical-align:middle;margin-left:8px}
+.note{color:var(--muted);font-size:14px;margin-bottom:12px}
+.mock{background:var(--bg);border:1px solid var(--border-strong);border-radius:10px;overflow:hidden;box-shadow:0 2px 8px #0002}
+.chrome{display:flex;justify-content:space-between;align-items:center;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 16px;font-size:15px}
+.chrome b{color:var(--primary)}
+.chrome .fresh{color:var(--muted);font-size:13px}
+.foot{display:flex;gap:14px;background:var(--surface);border-top:1px solid var(--border);padding:8px 16px;font-size:13px;color:var(--text2);flex-wrap:wrap}
+.foot span{white-space:nowrap}
+kbd{background:var(--surface-alt);border:1px solid var(--border-strong);border-bottom-width:2px;border-radius:4px;padding:0 6px;font:12px/1.6 inherit}
+.rowline{display:flex;align-items:center;gap:12px;padding:7px 16px;border-bottom:1px solid var(--border);background:var(--surface);font-size:15px}
+.rowline .box{width:17px;height:17px;border:2px solid var(--border-strong);border-radius:3px;flex:none;display:flex;align-items:center;justify-content:center;font-size:12px}
+.rowline .task{flex:1}
+.rowline .bed{color:var(--muted);font-size:13px;min-width:110px}
+.rowline .date{color:var(--muted);font-size:13px;min-width:70px;font-variant-numeric:tabular-nums}
+.rowline.cur{background:#6A9F7722;border-left:4px solid var(--focus);padding-left:12px}
+.rowline.done{color:var(--settled)}
+.rowline.done .box{border-color:var(--primary);color:var(--primary)}
+.rowline.skip{color:var(--settled);text-decoration:line-through}
+.rowline.old{border-left:4px solid var(--warn);padding-left:12px}
+.rowline:hover{background:#6A9F7711}
+.dayhead{background:var(--surface-alt);padding:5px 16px;font-weight:600;font-size:13px;color:var(--text2);border-bottom:1px solid var(--border)}
+.reason{display:flex;gap:8px;padding:6px 16px 10px 48px;background:#6A9F7711;border-bottom:1px solid var(--border);font-size:13px}
+.reason span{background:var(--surface);border:1px solid var(--border-strong);border-radius:4px;padding:2px 8px}
+.counter{font-variant-numeric:tabular-nums}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--surface)}
+th{background:var(--surface-alt);text-align:left;padding:6px 10px;font-size:12.5px;color:var(--text2);border-bottom:2px solid var(--border-strong);position:sticky;top:0}
+td{padding:5px 10px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}
+td.der{color:var(--settled);background:#F3EDE066;font-style:italic}
+tr.curr td{background:#6A9F7722}
+tr.curr td:first-child{border-left:4px solid var(--focus)}
+td.edit{outline:2px solid var(--focus);outline-offset:-2px;background:#fff}
+.badgey{font-size:11.5px;border:1px solid var(--border-strong);border-radius:9px;padding:1px 8px;color:var(--text2);background:var(--surface-alt)}
+.split{display:flex}
+.sheetmini{width:230px;flex:none;background:var(--surface-alt);border-right:1px solid var(--border-strong);padding:10px;font-size:12px}
+.sheetmini .d{background:var(--surface);border:1px solid var(--border);border-radius:4px;margin-bottom:6px;padding:4px 6px}
+.sheetmini .d b{display:block;font-size:11px;color:var(--text2)}
+.sheetmini .ln{color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheetmini .ln.on{color:var(--primary);font-weight:600}
+.verdict{background:var(--surface);border:1px solid var(--border-strong);border-left:5px solid var(--primary);border-radius:8px;padding:14px 18px;margin-top:36px}
+.pill{display:inline-block;font-size:12px;border-radius:10px;padding:2px 10px;margin-right:6px;background:var(--surface-alt);border:1px solid var(--border-strong)}
+</style>
+</head>
+<body>
+<h1>Pomone — Directions de design</h1>
+<div class="sub">Écran vedette : le corridor de réconciliation (4 directions) · la grille de plan (2 directions). Tokens Verger réels, densité sprint (~0.6), contenu réaliste. Survole les lignes ; la ligne verte = ligne courante (focus clavier).</div>
+
+<h2>Direction A — « Couloir strict » <span class="tag">une ligne à la fois</span></h2>
+<div class="note">Liste plate continue, chaque ligne porte son jour. Minimalisme maximal, zéro regroupement — la feuille défile comme un ruban.</div>
+<div class="mock">
+  <div class="chrome"><span><b>Depuis lundi 6.7</b> — 14 lignes · feuille du 6–12.7</span><span class="fresh">Dernière saisie : il y a 6 jours</span><span class="counter">9 sur 14</span></div>
+  <div class="rowline done"><div class="box">✓</div><div class="task">Semis direct — Carotte Nantaise</div><div class="bed">Planche B2</div><div class="date">lun. 6.7</div></div>
+  <div class="rowline done"><div class="box">✓</div><div class="task">Désherbage — Laitue Batavia</div><div class="bed">Planche C1</div><div class="date">lun. 6.7</div></div>
+  <div class="rowline skip"><div class="box"></div><div class="task">Faux semis — Planche D4</div><div class="bed">Planche D4</div><div class="date">mar. 7.7</div></div>
+  <div class="rowline cur"><div class="box"></div><div class="task">Repiquage — Tomate Marmande (24 mottes)</div><div class="bed">Serre 1</div><div class="date">mer. 8.7</div></div>
+  <div class="rowline"><div class="box"></div><div class="task">Récolte — Courgette Verte de Milan</div><div class="bed">Planche A3</div><div class="date">jeu. 9.7</div></div>
+  <div class="rowline old"><div class="box"></div><div class="task">Taille — Groseilliers rang Est</div><div class="bed">Verger Est</div><div class="date">24.6</div></div>
+  <div class="foot"><span><kbd>␣</kbd> Fait</span><span><kbd>X</kbd> Abandonné</span><span><kbd>R</kbd> Reporter</span><span><kbd>N</kbd> Note</span><span><kbd>↵</kbd> Ouvrir</span><span><kbd>+</kbd> Ligne libre</span><span><kbd>Échap</kbd> Annuler</span><span style="margin-left:auto"><kbd>B</kbd> Boucler la semaine</span></div>
+</div>
+
+<h2>Direction B — « Journal groupé » <span class="tag">miroir de la feuille</span></h2>
+<div class="note">Regroupement par jour comme les colonnes de la feuille, tâches en ordre de tour de plaine dans chaque jour. La bande de raisons (X) est montrée dépliée.</div>
+<div class="mock">
+  <div class="chrome"><span><b>Depuis lundi 6.7</b> — 14 lignes · feuille du 6–12.7</span><span class="counter">9 sur 14</span></div>
+  <div class="dayhead">Lundi 6 juillet — 4 lignes, tout est saisi ✓</div>
+  <div class="dayhead">Mercredi 8 juillet — tour de plaine : Serre 1 → Planches A → C</div>
+  <div class="rowline cur"><div class="box"></div><div class="task">Repiquage — Tomate Marmande</div><div class="bed">Serre 1</div><div class="date">mer. 8.7</div></div>
+  <div class="reason"><b>Abandonner :</b><span><kbd>1</kbd> Trop tard</span><span><kbd>2</kbd> Météo</span><span><kbd>3</kbd> Inutile</span><span><kbd>4</kbd> Autre</span><span style="border:none;background:none;color:var(--muted)"><kbd>Échap</kbd> annuler</span></div>
+  <div class="rowline"><div class="box"></div><div class="task">Arrosage — Semis en pépinière</div><div class="bed">Serre 1</div><div class="date">mer. 8.7</div></div>
+  <div class="rowline"><div class="box"></div><div class="task">Désherbage — Carotte</div><div class="bed">Planche A1</div><div class="date">mer. 8.7</div></div>
+  <div class="dayhead">Jeudi 9 juillet</div>
+  <div class="rowline"><div class="box"></div><div class="task">Récolte — Courgette <span class="badgey">quantité kg</span></div><div class="bed">Planche A3</div><div class="date">jeu. 9.7</div></div>
+  <div class="foot"><span><kbd>␣</kbd> Fait</span><span><kbd>X</kbd> Abandonné</span><span><kbd>R</kbd> Reporter</span><span><kbd>+</kbd> Ligne libre</span><span style="margin-left:auto"><kbd>B</kbd> Boucler</span></div>
+</div>
+
+<h2>Direction C — « Feuille en regard » <span class="tag">split avec mini-feuille</span></h2>
+<div class="note">À gauche, la mini-carte de la feuille imprimée (jours en colonnes) suit la position ; à droite le couloir. Rassure le « recopieur » — coûte 230px de largeur.</div>
+<div class="mock"><div class="split">
+  <div class="sheetmini">
+    <div class="d"><b>LUN 6.7</b><div class="ln">✓ Semis carotte B2</div><div class="ln">✓ Désherbage C1</div></div>
+    <div class="d"><b>MAR 7.7</b><div class="ln" style="text-decoration:line-through">Faux semis D4</div></div>
+    <div class="d"><b>MER 8.7</b><div class="ln on">▶ Repiquage tomate S1</div><div class="ln">Arrosage pépinière</div></div>
+    <div class="d"><b>JEU 9.7</b><div class="ln">Récolte courgette A3</div></div>
+  </div>
+  <div style="flex:1">
+    <div class="chrome"><span><b>mer. 8.7</b></span><span class="counter">9/14</span></div>
+    <div class="rowline cur"><div class="box"></div><div class="task">Repiquage — Tomate Marmande</div><div class="bed">Serre 1</div></div>
+    <div class="rowline"><div class="box"></div><div class="task">Arrosage — pépinière</div><div class="bed">Serre 1</div></div>
+    <div class="rowline"><div class="box"></div><div class="task">Désherbage — Carotte</div><div class="bed">Planche A1</div></div>
+    <div class="foot"><span><kbd>␣</kbd> Fait</span><span><kbd>X</kbd> Abandonné</span><span><kbd>R</kbd> Reporter</span></div>
+  </div>
+</div></div>
+
+<h2>Direction D — « Table triage » <span class="tag">héritage QRop</span></h2>
+<div class="note">Table dense multi-colonnes avec colonne d'état — familière aux ex-QRop, mais navigation 2D (risque de mode error avec la grille du plan, et l'œil scanne au lieu de recopier).</div>
+<div class="mock">
+  <table>
+    <tr><th></th><th>Tâche</th><th>Culture · Variété</th><th>Lieu</th><th>Prévu</th><th>Fait le</th><th>État</th></tr>
+    <tr><td>✓</td><td>Semis direct</td><td>Carotte · Nantaise</td><td>B2</td><td>6.7</td><td>6.7</td><td><span class="badgey">fait</span></td></tr>
+    <tr class="curr"><td></td><td>Repiquage</td><td>Tomate · Marmande</td><td>Serre 1</td><td>8.7</td><td class="edit">8.7</td><td><span class="badgey">—</span></td></tr>
+    <tr><td></td><td>Récolte</td><td>Courgette · V. de Milan</td><td>A3</td><td>9.7</td><td></td><td><span class="badgey">—</span></td></tr>
+    <tr><td></td><td style="text-decoration:line-through">Faux semis</td><td>—</td><td>D4</td><td>7.7</td><td></td><td><span class="badgey">météo</span></td></tr>
+  </table>
+  <div class="foot"><span><kbd>␣</kbd> Fait</span><span><kbd>X</kbd> Abandonné</span><span>tri par colonnes, filtres…</span></div>
+</div>
+
+<h2 style="margin-top:56px">Grille de plan — Direction 1 « Tableur fidèle » <span class="tag">hiver, atelier</span></h2>
+<div class="note">Colonnes éditables (blanc) vs dérivées (italique gris = calculées depuis l'ITK — non éditables). Cellule en édition = liseré focus. Entrée avance d'une ligne, recopie vers le bas.</div>
+<div class="mock">
+  <table>
+    <tr><th>Culture · Variété</th><th>Séries</th><th>Interv.</th><th>Long. (m)</th><th>1er semis</th><th>Repiquage*</th><th>1re récolte*</th><th>Besoin graines*</th></tr>
+    <tr><td>Laitue · Batavia</td><td>6</td><td>14 j</td><td>15</td><td>15.2</td><td class="der">17.3</td><td class="der">25.4</td><td class="der">3 240</td></tr>
+    <tr class="curr"><td>Carotte · Nantaise</td><td class="edit">4</td><td>21 j</td><td>20</td><td>1.3</td><td class="der">—</td><td class="der">20.5</td><td class="der">12 000</td></tr>
+    <tr><td>Tomate · Marmande</td><td>2</td><td>30 j</td><td>12</td><td>1.3</td><td class="der">15.4</td><td class="der">5.7</td><td class="der">96</td></tr>
+    <tr><td style="color:var(--muted)">+ dupliquer la ligne précédente (Ctrl+D)…</td><td></td><td></td><td></td><td></td><td class="der"></td><td class="der"></td><td class="der"></td></tr>
+  </table>
+  <div class="foot"><span>* colonnes calculées (ITK)</span><span><kbd>↵</kbd> ligne suivante</span><span><kbd>Ctrl+D</kbd> dupliquer</span><span><kbd>Échap</kbd> restaurer</span></div>
+</div>
+
+<h2>Grille de plan — Direction 2 « Ligne-carte hybride »</h2>
+<div class="note">Chaque ligne de plan est une carte compacte dépliable (détails ITK dedans). Plus proche de l'existant Pomone, moins tableur — risque : 60 lignes = beaucoup de scroll.</div>
+<div class="mock" style="padding:10px 14px;background:var(--bg)">
+  <div class="rowline" style="border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--surface)"><div class="task"><b>Laitue · Batavia</b> — 6 séries · 14 j · 15 m</div><div class="date">15.2 → 25.4</div><div class="badgey">ITK standard</div></div>
+  <div class="rowline cur" style="border:1px solid var(--focus);border-radius:6px;margin-bottom:6px"><div class="task"><b>Carotte · Nantaise</b> — 4 séries · 21 j · 20 m</div><div class="date">1.3 → 20.5</div><div class="badgey">ITK modifié</div></div>
+  <div class="rowline" style="border:1px dashed var(--border-strong);border-radius:6px;color:var(--muted);background:none"><div class="task">＋ Nouvelle ligne (dupliquer : Ctrl+D)</div></div>
+</div>
+
+<div class="verdict">
+<b>Grille d'évaluation :</b> <span class="pill">l'œil recopie-t-il la feuille sans scanner ?</span><span class="pill">jouable ganté-fatigué, zéro souris ?</span><span class="pill">couloir ≠ atelier (pas de mode error) ?</span><span class="pill">60 lignes sans fatigue ?</span><span class="pill">sert la boucle papier ?</span>
+<div style="margin-top:8px;color:var(--text2);font-size:14px"><b>Ma recommandation :</b> corridor = <b>Direction B</b> (journal groupé, miroir de la feuille, tour de plaine) — la A comme état « liste courte », la C en option si le test du jeudi soir montre un besoin de repère visuel, la D écartée (navigation 2D = conflit avec la grille). Grille de plan = <b>Direction 1</b> (tableur fidèle — c'est Calc qu'on remplace, pas les cartes).</div>
+</div>
+
+<h2 style="margin-top:56px">La fiche-journal imprimée <span class="tag">l'artefact héros — A4, N&B</span></h2>
+<div class="note">Maquette du document vedette : colonnes datées (cocher dans la colonne = capturer la date), ordre tour de plaine dans chaque jour, zones de notes, en-tête complet par page, légende ≤6 symboles. C'est aussi la maquette du « test du jeudi soir ».</div>
+<div style="background:#fff;border:1px solid #999;max-width:760px;margin:0 auto;padding:22px 26px;font-family:'DejaVu Sans',sans-serif;color:#000;box-shadow:0 3px 12px #0003">
+  <div style="display:flex;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:6px;font-size:12px">
+    <b>POMONE — Fiche de semaine · Ferme du Grand Pré</b>
+    <span>Semaine du 13 au 19 juillet 2026</span>
+  </div>
+  <div style="display:flex;justify-content:space-between;font-size:10.5px;color:#333;padding:3px 0 8px">
+    <span>Imprimée le jeu. 9.7.2026 · Pomone v0.9 · glossaire v3</span>
+    <span><b>Dernière saisie : il y a 0 jour</b> · p. 1/2</span>
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:11.5px">
+    <tr>
+      <th style="border:1px solid #000;background:#e8e8e8;padding:3px;width:46%;text-align:left">LUNDI 13.7 — tour : Serre 1 → A → B</th>
+      <th style="border:1px solid #000;background:#e8e8e8;padding:3px;text-align:left">MARDI 14.7</th>
+    </tr>
+    <tr>
+      <td style="border:1px solid #000;padding:4px;vertical-align:top">
+        ☐ <b>Serre 1</b> · Arrosage pépinière<br>
+        ☐ <b>Serre 1</b> · Repiquage tomate Marmande (24)<br>
+        ☐ <b>Planche A3</b> · Récolte courgette — <i>qté: ......kg</i><br>
+        ☐ <b>Planche B2</b> · Désherbage carotte<br>
+        <div style="border-top:1px dotted #666;margin-top:5px;padding-top:3px;color:#444;font-size:10.5px">Notes : ................................................</div>
+      </td>
+      <td style="border:1px solid #000;padding:4px;vertical-align:top">
+        ☐ <b>Planche C1</b> · Semis laitue série 4/6<br>
+        ☐ <b>Planche D4</b> · Faux semis<br>
+        <span style="text-decoration:line-through;color:#555">Taille groseilliers (reportée → sem. 30)</span><br>
+        <div style="border-top:1px dotted #666;margin-top:5px;padding-top:3px;color:#444;font-size:10.5px">Notes : ................................................</div>
+      </td>
+    </tr>
+  </table>
+  <div style="border:1px solid #000;border-top:none;background:#f2f2f2;padding:4px 6px;font-size:10px;display:flex;gap:14px;flex-wrap:wrap">
+    <b>Légende :</b><span>☐ à faire → cocher ☒ fait</span><span>~~barré~~ = abandonné</span><span><b>gras</b> = lieu/planche</span><span>qté: __ = noter la quantité + unité</span><span>→ = reporté (noter la date)</span><span>marge = travail non prévu</span>
+  </div>
+</div>
+
+<h2 style="margin-top:56px">Placement & capacité — l'écran du dimanche <span class="tag">fauteuil, une direction</span></h2>
+<div class="note">La courbe d'occupation (plein-champ / abri séparés), le pic d'avril cliqué s'explique : la liste des séries qui le composent, prête pour l'arbitrage. Aération de carte existante — pas de densité sprint ici.</div>
+<div class="mock" style="padding:16px">
+  <div style="display:flex;gap:20px;flex-wrap:wrap">
+    <div style="flex:2;min-width:380px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px">
+      <b style="font-size:14px">Occupation des planches — 2027</b>
+      <svg viewBox="0 0 400 120" style="width:100%;margin-top:8px">
+        <line x1="0" y1="30" x2="400" y2="30" stroke="#E2D7C2" stroke-dasharray="4"/><text x="2" y="27" font-size="9" fill="#6B5D4D">100 %</text>
+        <path d="M0,110 L60,100 L100,70 L130,45 L150,18 L170,22 L200,40 L260,55 L320,80 L400,105" fill="none" stroke="#3C6E47" stroke-width="2.5"/>
+        <path d="M0,112 L80,105 L120,85 L150,60 L180,75 L240,90 L400,110" fill="none" stroke="#B85C38" stroke-width="2" stroke-dasharray="6 3"/>
+        <circle cx="150" cy="18" r="7" fill="#B07C25" opacity="0.85"/>
+        <text x="150" y="10" font-size="9" text-anchor="middle" fill="#B07C25" font-weight="bold">avril : 118 %</text>
+        <text x="330" y="98" font-size="9" fill="#3C6E47">— abri</text><text x="330" y="112" font-size="9" fill="#B85C38">- - plein champ</text>
+      </svg>
+    </div>
+    <div style="flex:1;min-width:260px;background:var(--surface);border:1px solid var(--warn);border-radius:8px;padding:14px">
+      <b style="font-size:14px;color:var(--warn)">Pic d'avril — 118 % sous abri</b>
+      <div style="font-size:13px;color:var(--text2);margin-top:8px;line-height:2">
+        Tomate Marmande s.1 — 12 m <span class="badgey">déplaçable mai</span><br>
+        Laitue Batavia s.2 — 15 m <span class="badgey">plein champ ?</span><br>
+        <b>Laitue Batavia s.3 — 15 m</b> <span class="badgey" style="border-color:var(--warn)">candidate</span><br>
+        Semis pépinière — 8 m
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-top:10px;border-top:1px solid var(--border);padding-top:8px">L'outil explique. La décision t'appartient : décaler, déplacer, ou renoncer à une série.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>
