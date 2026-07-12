@@ -20,4 +20,8 @@
 //! anti-pattern (see `_bmad-output/planning-artifacts/architecture.md`,
 //! «Structure Patterns»).
 
+pub(crate) mod cultures;
+pub(crate) mod families;
+pub(crate) mod locations;
 pub(crate) mod settings;
+pub(crate) mod strata;
