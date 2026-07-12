@@ -1,6 +1,6 @@
 # Story 0.1: Wiring skeleton and settings module extraction
 
-Status: review
+Status: done
 
 ## Story
 
@@ -29,6 +29,12 @@ So that new screens never add callbacks to a 5500-line file and the pattern is e
   - [x] `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`
   - [x] `grep -n 'on_settings\|on_toggle_language\|on_navigate_settings' crates/pomone-ui/src/main.rs` returns nothing (AC 2)
   - [x] Manual XDG-isolated smoke run (procedure in Dev Notes)
+
+### Review Findings
+
+- [x] [Review][Decision] Local `#[allow(clippy::too_many_lines)]` on `wire_settings` contradicts the story's "no local `#[allow]`" note — found by all three review layers. **Resolved 2026-07-12: PO accepted the exception** — matches the pre-existing codebase convention (4 identical allows already in `main.rs`, incl. `main()` itself); disclosed in Debug Log. [crates/pomone-ui/src/wiring/settings.rs:29]
+- [x] [Review][Patch] Completion note "the only textual change inside moved blocks is `Rc::clone`" is imprecise — the moved `holiday_region_code` doc comment was also rewritten (doc-link fix); and Task 1/Dev Notes still say `pub` where the shipped canonical signature is `pub(crate)`. Amended in Completion Notes. [story file]
+- [x] [Review][Patch] `sprint-status.yaml` `last_updated` format drifted to `2026-07-12T12:00` while sibling fields are date-only — normalized back to `YYYY-MM-DD`. [_bmad-output/implementation-artifacts/sprint-status.yaml:41]
 
 ## Dev Notes
 
@@ -147,7 +153,8 @@ Claude Fable 5 (claude-fable-5)
 
 ### Completion Notes List
 
-- Pure relocation as specified: 9 callback registrations + 11 settings-only helpers moved verbatim from `main.rs` into `crates/pomone-ui/src/wiring/settings.rs`; the only textual change inside moved blocks is `Rc::clone(&state)` → `Rc::clone(state)` (the `state` parameter is `&Rc`). `main.rs` went from 5650 to 5107 lines; no `.slint`, `.ftl`, migration, or repository change.
+- Pure relocation as specified: 9 callback registrations + 11 settings-only helpers moved verbatim from `main.rs` into `crates/pomone-ui/src/wiring/settings.rs`; textual changes inside moved code are limited to `Rc::clone(&state)` → `Rc::clone(state)` (the `state` parameter is `&Rc`) and the `holiday_region_code` doc comment (cross-file doc-link rewritten to plain text). `main.rs` went from 5650 to 5107 lines; no `.slint`, `.ftl`, migration, or repository change.
+- Canonical signature note: Task 1 / Dev Notes say `pub fn wire_<screen>`; the shipped form is `pub(crate) fn wire_<screen>` (workspace `unreachable_pub` lint). `wiring/mod.rs` is the canonical reference for future stories, not the task text.
 - `wiring/mod.rs` documents the `wire_<screen>` pattern and the "never register callbacks in `main.rs`" rule (AC 3). `wire_settings` and `refresh_settings` are `pub(crate)` (`unreachable_pub` is a workspace lint); everything else in the module is private.
 - Doc cross-references between the split index/from_index helper pairs updated to plain-text module paths (rustdoc-only concern; CI doesn't run rustdoc).
 - Verification: `cargo fmt --check` ✓, `clippy -D warnings` ✓, `cargo test --workspace` 388/388 ✓, AC2 grep empty ✓.
