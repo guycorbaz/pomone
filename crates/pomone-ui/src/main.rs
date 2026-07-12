@@ -13,35 +13,30 @@ use anyhow::{Context, Result};
 use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use fluent::FluentArgs;
 use pomone_app::{
-    bed_usage_series, create_crop, create_family, create_location, create_recurring_task,
-    create_strata, create_task, create_task_type, create_variety, delete_crop, delete_family,
-    delete_location, delete_strata, delete_task, delete_task_type, delete_treatment,
-    delete_variety, extend_series_if_needed, get_crop_for_edit, get_family_for_edit,
-    get_location_for_edit, get_planting_detail, get_task_for_edit, get_task_type_for_edit,
-    get_variety_for_edit, list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops,
+    bed_usage_series, create_recurring_task, create_task, create_task_type, delete_crop,
+    delete_family, delete_location, delete_strata, delete_task, delete_task_type, delete_treatment,
+    delete_variety, extend_series_if_needed, get_planting_detail, get_task_for_edit,
+    get_task_type_for_edit, list_agenda, list_calendar_entries, list_crop_map_lanes, list_crops,
     list_families_admin, list_family_options, list_location_kind_options, list_location_options,
     list_locations_tree, list_parent_options, list_planting_choices, list_planting_tasks,
     list_plantings, list_strata_options, list_strata_rows, list_task_category_options,
     list_task_type_options, list_task_types_admin, list_treatments_for_planting,
     list_varieties_for_crop, list_variety_options, list_yearly_harvests_for_planting,
     move_planting_to_location, parse_id, planting_status_key, recurrence_unit_str, reschedule_task,
-    services, split_planting, update_crop, update_family, update_location, update_task,
-    update_task_type, update_variety, AgendaRow as AppAgendaRow, App, AppConfig, AppError,
-    AreaUnit, BackendConfig, BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry,
-    CalendarEntryKind, CalendarEventKind, CropEditForm, CropInput, CropMapBar as AppCropMapBar,
-    CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates, FamilyAdminRow,
-    FamilyEditForm, FamilyOption, LifespanKind, LocationEditForm, LocationInput,
-    LocationKindOption, LocationListItem, LocationOption, MassUnit, ParentLocationOption,
-    PlantingChoice, PlantingDetail as AppPlantingDetail, PlantingRow as AppPlantingRow,
-    PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataInput, StrataOption,
+    services, split_planting, update_task, update_task_type, AgendaRow as AppAgendaRow, App,
+    AppConfig, AppError, AreaUnit, BackendConfig, BedUsagePoint as AppBedUsagePoint,
+    CalendarEntry as AppCalendarEntry, CalendarEntryKind, CalendarEventKind,
+    CropMapBar as AppCropMapBar, CropMapLane as AppCropMapLane, CropRow as AppCropRow, CycleDates,
+    FamilyAdminRow, FamilyOption, LocationKindOption, LocationListItem, LocationOption, MassUnit,
+    ParentLocationOption, PlantingChoice, PlantingDetail as AppPlantingDetail,
+    PlantingRow as AppPlantingRow, PlantingTaskRow as AppPlantingTaskRow, SplitPart, StrataOption,
     StrataRow as AppStrataRow, TaskCategoryOption, TaskEditForm, TaskTypeAdminRow,
-    TaskTypeEditForm, TaskTypeOption, TreatmentRow as AppTreatmentRow, VarietyEditForm,
-    VarietyInput, VarietyOption, VarietyProfileKind, VarietyRow as AppVarietyRow, WindowGeometry,
-    YearlyHarvestRow as AppYearlyHarvestRow,
+    TaskTypeEditForm, TaskTypeOption, TreatmentRow as AppTreatmentRow, VarietyOption,
+    VarietyRow as AppVarietyRow, WindowGeometry, YearlyHarvestRow as AppYearlyHarvestRow,
 };
 use pomone_domain::{
-    holidays_in_year, HolidayRegion, LocationId, PlantingId, PlantingStatus, PruningSeason,
-    RecurrenceUnit, StrataId, VarietyId, DEFAULT_FAMILY_COLOR,
+    holidays_in_year, HolidayRegion, LocationId, PlantingId, PlantingStatus, RecurrenceUnit,
+    StrataId, VarietyId, DEFAULT_FAMILY_COLOR,
 };
 use rust_decimal::Decimal;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
@@ -401,297 +396,12 @@ fn main() -> Result<()> {
         });
     }
 
-    // --- Cultures navigation ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_navigate_cultures(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            if let Err(e) = refresh_cultures(&window, &mut state.borrow_mut()) {
-                tracing::error!(error = %e, "failed to refresh cultures");
-            }
-            window.set_current_page(SharedString::from("cultures"));
-            window.set_status_text(SharedString::from(""));
-            window.set_status_is_error(false);
-        });
-    }
-
-    // --- Crop selection (master-detail) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_select_crop(move |idx| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            window.set_selected_crop_index(idx);
-            let mut s = state.borrow_mut();
-            // Update the bool that drives the variety form's conditional
-            // rendering. Default to true (annual) if the index is out of
-            // range — that matches the default form panel.
-            let is_annual = s
-                .crop_is_annuals
-                .get(i32_to_usize(idx))
-                .copied()
-                .unwrap_or(true);
-            window.set_selected_crop_is_annual(is_annual);
-            if let Err(e) = refresh_varieties_of_selected_crop(&window, &mut s) {
-                tracing::error!(error = %e, "failed to refresh varieties");
-            }
-        });
-    }
-
-    // --- Create crop ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_create_crop(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let was_edit = window.get_crop_is_edit_mode();
-            match try_save_crop(&window, &mut s) {
-                Ok(()) => {
-                    let key = if was_edit {
-                        "status-crop-updated"
-                    } else {
-                        "status-crop-created"
-                    };
-                    window.set_status_text(SharedString::from(s.app.i18n().t(key)));
-                    window.set_status_is_error(false);
-                    // Back to a clean create form (also clears edit mode).
-                    reset_crop_form_to_create(&window, &mut s);
-                    if let Err(e) = refresh_cultures(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh cultures after save");
-                    }
-                }
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), e);
-                    window.set_status_text(text);
-                    window.set_status_is_error(is_err);
-                }
-            }
-        });
-    }
-
-    // --- Edit / delete / cancel-edit a crop (Cultures screen) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_edit_crop(move |id| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            if let Err(e) = open_crop_form_for_edit(&window, &mut s, &id) {
-                tracing::error!(error = %e, "failed to open crop edit form");
-            }
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_delete_crop(move |id| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            s.pending_delete = Some(PendingDelete::Crop(id.to_string()));
-            window.set_confirm_message(SharedString::from(s.app.i18n().t("confirm-delete-crop")));
-            window.set_confirm_visible(true);
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_cancel_crop_edit(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            reset_crop_form_to_create(&window, &mut state.borrow_mut());
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_delete_variety(move |id| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            s.pending_delete = Some(PendingDelete::Variety(id.to_string()));
-            window
-                .set_confirm_message(SharedString::from(s.app.i18n().t("confirm-delete-variety")));
-            window.set_confirm_visible(true);
-        });
-    }
-
-    // --- Locations navigation ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_navigate_locations(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            if let Err(e) = refresh_locations(&window, &mut state.borrow_mut()) {
-                tracing::error!(error = %e, "failed to refresh locations");
-            }
-            window.set_current_page(SharedString::from("locations"));
-            window.set_status_text(SharedString::from(""));
-            window.set_status_is_error(false);
-        });
-    }
-
-    // --- Create location ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_create_location(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let was_edit = window.get_loc_is_edit_mode();
-            match try_save_location(&window, &mut s) {
-                Ok(()) => {
-                    let key = if was_edit {
-                        "status-location-updated"
-                    } else {
-                        "status-location-created"
-                    };
-                    window.set_status_text(SharedString::from(s.app.i18n().t(key)));
-                    window.set_status_is_error(false);
-                    reset_location_form_to_create(&window, &mut s);
-                    if let Err(e) = refresh_locations(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh locations after save");
-                    }
-                }
-                // Reparenting under a descendant — show the localized message.
-                Err(FormError::Service(AppError::Inconsistent(ref msg)))
-                    if msg == "location_cycle" =>
-                {
-                    window.set_status_text(SharedString::from(
-                        s.app.i18n().t("error-location-cycle"),
-                    ));
-                    window.set_status_is_error(true);
-                }
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), e);
-                    window.set_status_text(text);
-                    window.set_status_is_error(is_err);
-                }
-            }
-        });
-    }
-
-    // --- Edit / cancel-edit a location (Lieux screen) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_edit_location(move |id| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            if let Err(e) = open_location_form_for_edit(&window, &mut s, &id) {
-                tracing::error!(error = %e, "failed to open location edit form");
-            }
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_cancel_location_edit(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            reset_location_form_to_create(&window, &mut state.borrow_mut());
-        });
-    }
-
-    // --- Delete a location (Lieux screen) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_delete_location(move |id| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            s.pending_delete = Some(PendingDelete::Location(id.to_string()));
-            window.set_confirm_message(SharedString::from(
-                s.app.i18n().t("confirm-delete-location"),
-            ));
-            window.set_confirm_visible(true);
-        });
-    }
-
-    // --- Strata navigation + create + delete ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_navigate_strata(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            if let Err(e) = refresh_strata(&window, &mut state.borrow_mut()) {
-                tracing::error!(error = %e, "failed to refresh strata");
-            }
-            window.set_current_page(SharedString::from("strata"));
-            window.set_strata_status_text(SharedString::from(""));
-            window.set_strata_status_is_error(false);
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_create_strata(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            match try_create_strata(&window, &mut s) {
-                Ok(()) => {
-                    let i18n = s.app.i18n();
-                    window.set_strata_status_text(SharedString::from(
-                        i18n.t("status-strata-created"),
-                    ));
-                    window.set_strata_status_is_error(false);
-                    window.set_new_strata_name(SharedString::from(""));
-                    window.set_new_strata_description(SharedString::from(""));
-                    window.set_new_strata_min_height(SharedString::from(""));
-                    window.set_new_strata_max_height(SharedString::from(""));
-                    if let Err(e) = refresh_strata(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh strata after create");
-                    }
-                    // Counts on the home page include strata; refresh too.
-                    refresh_bed_usage(&window, &s.app, &s.runtime);
-                }
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), e);
-                    window.set_strata_status_text(text);
-                    window.set_strata_status_is_error(is_err);
-                }
-            }
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_delete_strata(move |id| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            s.pending_delete = Some(PendingDelete::Strata(id.to_string()));
-            window.set_confirm_message(SharedString::from(s.app.i18n().t("confirm-delete-strata")));
-            window.set_confirm_visible(true);
-        });
-    }
+    // --- Per-screen wiring (one call per screen — see wiring/mod.rs) ---
+    wiring::settings::wire_settings(&window, &state);
+    wiring::cultures::wire_cultures(&window, &state);
+    wiring::locations::wire_locations(&window, &state);
+    wiring::strata::wire_strata(&window, &state);
+    wiring::families::wire_families(&window, &state);
 
     // --- Confirmation dialog: run or drop the pending destructive action ---
     {
@@ -728,9 +438,6 @@ fn main() -> Result<()> {
             state.borrow_mut().pending_delete = None;
         });
     }
-
-    // --- Settings family: settings / backend / backup / holidays / units / language ---
-    wiring::settings::wire_settings(&window, &state);
     // --- Crop Map navigation + selection / move / split callbacks ---
     {
         let state = Rc::clone(&state);
@@ -1487,153 +1194,6 @@ fn main() -> Result<()> {
                 s.app.i18n().t("confirm-delete-task-type"),
             ));
             window.set_confirm_visible(true);
-        });
-    }
-
-    // --- Families: enter the page from the sidebar ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_navigate_families(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            if let Err(e) = open_families_page(&window, &mut s) {
-                tracing::error!(error = %e, "failed to open families page");
-            }
-        });
-    }
-    // --- Families: Save (create OR update based on is_edit_mode) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_families_save(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            match try_save_family_form(&window, &mut s) {
-                Ok(()) => {
-                    if let Err(e) = refresh_families(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh families after save");
-                        return;
-                    }
-                    reset_families_form_to_create(&window, &mut s);
-                }
-                Err(e) => {
-                    let (text, is_err) = render_family_form_error(s.app.i18n(), e);
-                    window.set_families_status_text(text);
-                    window.set_families_status_is_error(is_err);
-                }
-            }
-        });
-    }
-    // --- Families: Cancel edit (return form to create mode) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_families_cancel_edit(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            reset_families_form_to_create(&window, &mut s);
-        });
-    }
-    // --- Families: Edit a row → pre-fill the form in edit mode ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_families_edit_row(move |id| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            if let Err(e) = open_family_form_for_edit(&window, &mut s, &id) {
-                tracing::error!(error = %e, "failed to open family edit form");
-            }
-        });
-    }
-    // --- Families: Delete a row (blocked at DB layer if in use) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_families_delete_row(move |id| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            s.pending_delete = Some(PendingDelete::Family(id.to_string()));
-            window.set_confirm_message(SharedString::from(s.app.i18n().t("confirm-delete-family")));
-            window.set_confirm_visible(true);
-        });
-    }
-
-    // --- Create variety ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_create_variety(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            let was_edit = window.get_variety_is_edit_mode();
-            match try_save_variety(&window, &mut s) {
-                Ok(()) => {
-                    let key = if was_edit {
-                        "status-variety-updated"
-                    } else {
-                        "status-variety-created"
-                    };
-                    window.set_status_text(SharedString::from(s.app.i18n().t(key)));
-                    window.set_status_is_error(false);
-                    if was_edit {
-                        // Back to a clean create form (also clears edit mode).
-                        reset_variety_form_to_create(&window, &mut s);
-                    } else {
-                        // Keep the profile fields for rapid entry; only clear
-                        // the name + description of the just-created variety.
-                        window.set_new_variety_name(SharedString::from(""));
-                        window.set_new_variety_description(SharedString::from(""));
-                    }
-                    // Refreshes the catalog counts and the crop's variety list.
-                    if let Err(e) = refresh_cultures(&window, &mut s) {
-                        tracing::error!(error = %e, "failed to refresh cultures after save");
-                    }
-                }
-                Err(e) => {
-                    let (text, is_err) = render_form_error(s.app.i18n(), e);
-                    window.set_status_text(text);
-                    window.set_status_is_error(is_err);
-                }
-            }
-        });
-    }
-
-    // --- Edit / cancel-edit a variety (Cultures screen) ---
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_edit_variety(move |id| {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            let mut s = state.borrow_mut();
-            if let Err(e) = open_variety_form_for_edit(&window, &mut s, &id) {
-                tracing::error!(error = %e, "failed to open variety edit form");
-            }
-        });
-    }
-    {
-        let state = Rc::clone(&state);
-        let weak = window.as_weak();
-        window.on_cancel_variety_edit(move || {
-            let Some(window) = weak.upgrade() else {
-                return;
-            };
-            reset_variety_form_to_create(&window, &mut state.borrow_mut());
         });
     }
 
@@ -2726,17 +2286,6 @@ fn variety_to_slint(row: AppVarietyRow) -> SlintVarietyRow {
     }
 }
 
-fn lifespan_kind_from_index(idx: i32) -> Result<LifespanKind, AppError> {
-    match idx {
-        0 => Ok(LifespanKind::Annual),
-        1 => Ok(LifespanKind::PluriannualSingleCycle),
-        2 => Ok(LifespanKind::PluriannualRecurring),
-        other => Err(AppError::Inconsistent(format!(
-            "unexpected lifespan dropdown index {other}"
-        ))),
-    }
-}
-
 /// Map the establishment-method dropdown index to the service enum. Order must
 /// match the `planting-method-labels` model built in `refresh_i18n`.
 fn establishment_method_from_index(idx: i32) -> services::EstablishmentMethod {
@@ -2745,77 +2294,6 @@ fn establishment_method_from_index(idx: i32) -> services::EstablishmentMethod {
         2 => services::EstablishmentMethod::BoughtPlants,
         _ => services::EstablishmentMethod::DirectSow,
     }
-}
-
-fn pruning_from_index(idx: i32) -> Result<PruningSeason, AppError> {
-    match idx {
-        0 => Ok(PruningSeason::None),
-        1 => Ok(PruningSeason::Winter),
-        2 => Ok(PruningSeason::Summer),
-        3 => Ok(PruningSeason::Both),
-        other => Err(AppError::Inconsistent(format!(
-            "unexpected pruning dropdown index {other}"
-        ))),
-    }
-}
-
-/// Build the `CropInput` from the crop form, then create or update depending
-/// on the form's edit mode (the crop being edited is `state.editing_crop_id`).
-fn try_save_crop(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
-    let i18n = state.app.i18n();
-    let family_idx = i32_to_usize(window.get_family_index());
-    let family_id_str = state
-        .family_ids
-        .get(family_idx)
-        .ok_or_else(|| FormError::Service(AppError::Inconsistent("no family selected".into())))?
-        .clone();
-    let name = validate_required_name(&window.get_new_crop_name(), i18n)?;
-    let latin_name = optional_text(&window.get_new_crop_latin());
-    let lifespan_kind = lifespan_kind_from_index(window.get_new_crop_lifespan_index())
-        .map_err(FormError::Service)?;
-    let pruning_season =
-        pruning_from_index(window.get_new_crop_pruning_index()).map_err(FormError::Service)?;
-    // Only parse the pluriannual fields when they're actually needed — leaves
-    // pristine defaults for the Annual case and gives clearer errors for the
-    // other two.
-    let (lifespan_years, years_to_first_yield) = match lifespan_kind {
-        LifespanKind::Annual => (0, 0),
-        LifespanKind::PluriannualSingleCycle => (
-            parse_u8(&window.get_new_crop_lifespan_years(), "lifespan years")
-                .map_err(FormError::Service)?,
-            0,
-        ),
-        LifespanKind::PluriannualRecurring => (
-            parse_u8(&window.get_new_crop_lifespan_years(), "lifespan years")
-                .map_err(FormError::Service)?,
-            parse_u8(
-                &window.get_new_crop_years_to_first_yield(),
-                "years to first yield",
-            )
-            .map_err(FormError::Service)?,
-        ),
-    };
-
-    let input = CropInput {
-        family_id_str,
-        name,
-        latin_name,
-        lifespan_kind,
-        lifespan_years,
-        years_to_first_yield,
-        pruning_season,
-    };
-    let editing_id = state.editing_crop_id.clone();
-    state
-        .runtime
-        .block_on(async {
-            if editing_id.is_empty() {
-                create_crop(state.app.repo(), input).await.map(|_| ())
-            } else {
-                update_crop(state.app.repo(), &editing_id, input).await
-            }
-        })
-        .map_err(FormError::Service)
 }
 
 /// Clear the crop form and drop back to create mode.
@@ -2828,46 +2306,6 @@ fn reset_crop_form_to_create(window: &MainWindow, state: &mut UiState) {
     window.set_new_crop_pruning_index(0);
     window.set_new_crop_lifespan_years(SharedString::from("30"));
     window.set_new_crop_years_to_first_yield(SharedString::from("3"));
-}
-
-/// Load one crop into the crop form and switch it to edit mode.
-fn open_crop_form_for_edit(window: &MainWindow, state: &mut UiState, id: &str) -> Result<()> {
-    let form: CropEditForm = state
-        .runtime
-        .block_on(async { get_crop_for_edit(state.app.repo(), id).await })
-        .context("failed to load crop for edit")?;
-
-    let family_idx = state
-        .family_ids
-        .iter()
-        .position(|f| f == &form.family_id_str)
-        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
-    let lifespan_idx = match form.lifespan_kind {
-        LifespanKind::Annual => 0,
-        LifespanKind::PluriannualSingleCycle => 1,
-        LifespanKind::PluriannualRecurring => 2,
-    };
-    let pruning_idx = match form.pruning_season {
-        PruningSeason::None => 0,
-        PruningSeason::Winter => 1,
-        PruningSeason::Summer => 2,
-        PruningSeason::Both => 3,
-    };
-
-    state.editing_crop_id.clone_from(&form.id);
-    window.set_crop_is_edit_mode(true);
-    window.set_family_index(family_idx);
-    window.set_new_crop_name(SharedString::from(form.name));
-    window.set_new_crop_latin(SharedString::from(form.latin_name));
-    window.set_new_crop_lifespan_index(lifespan_idx);
-    window.set_new_crop_pruning_index(pruning_idx);
-    window.set_new_crop_lifespan_years(SharedString::from(form.lifespan_years.to_string()));
-    window.set_new_crop_years_to_first_yield(SharedString::from(
-        form.years_to_first_yield.to_string(),
-    ));
-    window.set_status_text(SharedString::from(""));
-    window.set_status_is_error(false);
-    Ok(())
 }
 
 /// Execute a confirmed crop deletion (issue #86 follow-up). On the FK guard
@@ -2966,91 +2404,6 @@ fn do_delete_location(window: &MainWindow, s: &mut UiState, id: &str) {
     }
 }
 
-/// Build the `VarietyInput` from the variety form, then create or update
-/// depending on the form's edit mode (the variety being edited is
-/// `state.editing_variety_id`).
-fn try_save_variety(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
-    let i18n = state.app.i18n();
-    let idx = window.get_selected_crop_index();
-    if idx < 0 {
-        return Err(FormError::Service(AppError::Inconsistent(
-            "no crop selected for variety create".into(),
-        )));
-    }
-    let crop_id_str = state
-        .crop_ids
-        .get(i32_to_usize(idx))
-        .ok_or_else(|| {
-            FormError::Service(AppError::Inconsistent(
-                "selected crop index out of range".into(),
-            ))
-        })?
-        .clone();
-    let name = validate_required_name(&window.get_new_variety_name(), i18n)?;
-    let description = optional_text(&window.get_new_variety_description());
-    let is_annual = window.get_selected_crop_is_annual();
-    let profile_kind = if is_annual {
-        VarietyProfileKind::Annual
-    } else {
-        VarietyProfileKind::Pluriannual
-    };
-
-    // Parse only the fields relevant to the chosen profile kind; the others
-    // stay at zero/None and are ignored by the service.
-    let mut input = VarietyInput {
-        crop_id_str,
-        name,
-        description,
-        profile_kind,
-        days_to_transplant: None,
-        days_to_maturity: 0,
-        harvest_window_days: 0,
-        bud_break_doy: None,
-        flowering_doy: None,
-        harvest_start_doy: 0,
-        harvest_end_doy: 0,
-        expected_yield_kg_per_plant: None,
-    };
-    if is_annual {
-        input.days_to_transplant =
-            parse_optional_u16(&window.get_new_variety_dtt(), "DTT").map_err(FormError::Service)?;
-        input.days_to_maturity =
-            parse_u16(&window.get_new_variety_dtm(), "DTM").map_err(FormError::Service)?;
-        input.harvest_window_days = parse_u16(&window.get_new_variety_window(), "harvest window")
-            .map_err(FormError::Service)?;
-    } else {
-        input.bud_break_doy =
-            parse_optional_u16(&window.get_new_variety_bud_break_doy(), "bud break DOY")
-                .map_err(FormError::Service)?;
-        input.flowering_doy =
-            parse_optional_u16(&window.get_new_variety_flowering_doy(), "flowering DOY")
-                .map_err(FormError::Service)?;
-        input.harvest_start_doy = parse_u16(
-            &window.get_new_variety_harvest_start_doy(),
-            "harvest start DOY",
-        )
-        .map_err(FormError::Service)?;
-        input.harvest_end_doy =
-            parse_u16(&window.get_new_variety_harvest_end_doy(), "harvest end DOY")
-                .map_err(FormError::Service)?;
-        input.expected_yield_kg_per_plant =
-            parse_optional_decimal(&window.get_new_variety_yield_kg(), "yield")
-                .map_err(FormError::Service)?;
-    }
-
-    let editing_id = state.editing_variety_id.clone();
-    state
-        .runtime
-        .block_on(async {
-            if editing_id.is_empty() {
-                create_variety(state.app.repo(), input).await.map(|_| ())
-            } else {
-                update_variety(state.app.repo(), &editing_id, input).await
-            }
-        })
-        .map_err(FormError::Service)
-}
-
 /// Clear the variety form and drop back to create mode. Numeric fields go back
 /// to the same defaults the Slint form ships with.
 fn reset_variety_form_to_create(window: &MainWindow, state: &mut UiState) {
@@ -3066,35 +2419,6 @@ fn reset_variety_form_to_create(window: &MainWindow, state: &mut UiState) {
     window.set_new_variety_harvest_start_doy(SharedString::from("220"));
     window.set_new_variety_harvest_end_doy(SharedString::from("280"));
     window.set_new_variety_yield_kg(SharedString::from(""));
-}
-
-/// Load one variety into the variety form and switch it to edit mode. The form
-/// panel shown (annual vs pluriannual) is driven by the selected crop, which
-/// already owns this variety, so only the field values need prefilling.
-fn open_variety_form_for_edit(window: &MainWindow, state: &mut UiState, id: &str) -> Result<()> {
-    let form: VarietyEditForm = state
-        .runtime
-        .block_on(async { get_variety_for_edit(state.app.repo(), id).await })
-        .context("failed to load variety for edit")?;
-
-    state.editing_variety_id.clone_from(&form.id);
-    window.set_variety_is_edit_mode(true);
-    window.set_new_variety_name(SharedString::from(form.name));
-    window.set_new_variety_description(SharedString::from(form.description));
-    if form.is_annual {
-        window.set_new_variety_dtt(SharedString::from(form.days_to_transplant));
-        window.set_new_variety_dtm(SharedString::from(form.days_to_maturity));
-        window.set_new_variety_window(SharedString::from(form.harvest_window_days));
-    } else {
-        window.set_new_variety_bud_break_doy(SharedString::from(form.bud_break_doy));
-        window.set_new_variety_flowering_doy(SharedString::from(form.flowering_doy));
-        window.set_new_variety_harvest_start_doy(SharedString::from(form.harvest_start_doy));
-        window.set_new_variety_harvest_end_doy(SharedString::from(form.harvest_end_doy));
-        window.set_new_variety_yield_kg(SharedString::from(form.expected_yield_kg_per_plant));
-    }
-    window.set_status_text(SharedString::from(""));
-    window.set_status_is_error(false);
-    Ok(())
 }
 
 fn parse_u8(s: &str, field: &'static str) -> Result<u8, AppError> {
@@ -3178,94 +2502,6 @@ fn location_to_slint(item: LocationListItem) -> SlintLocationItem {
         depth: usize_to_i32(item.depth as usize),
         in_use: item.in_use,
     }
-}
-
-/// Build the `LocationInput` from the form, then create or update depending on
-/// the edit mode (`state.editing_location_id`).
-fn try_save_location(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
-    let i18n = state.app.i18n();
-    let kind_idx = i32_to_usize(window.get_loc_kind_index());
-    let parent_idx = i32_to_usize(window.get_loc_parent_index());
-    let kind_id_str = state
-        .location_kind_ids
-        .get(kind_idx)
-        .ok_or_else(|| {
-            FormError::Service(AppError::Inconsistent("no location kind selected".into()))
-        })?
-        .clone();
-    let parent_id_str = state
-        .parent_location_ids
-        .get(parent_idx)
-        .cloned()
-        .unwrap_or_default();
-    let name = validate_required_name(&window.get_new_loc_name(), i18n)?;
-    let length_m = validate_positive_decimal(&window.get_new_loc_length(), i18n)?;
-    let width_m = validate_positive_decimal(&window.get_new_loc_width(), i18n)?;
-    let notes = optional_text(&window.get_new_loc_notes());
-
-    let input = LocationInput {
-        kind_id_str,
-        name,
-        length_m,
-        width_m,
-        parent_id_str,
-        notes,
-    };
-    let editing_id = state.editing_location_id.clone();
-    state
-        .runtime
-        .block_on(async {
-            if editing_id.is_empty() {
-                create_location(state.app.repo(), input).await.map(|_| ())
-            } else {
-                update_location(state.app.repo(), &editing_id, input).await
-            }
-        })
-        .map_err(FormError::Service)
-}
-
-/// Clear the location form and drop back to create mode.
-fn reset_location_form_to_create(window: &MainWindow, state: &mut UiState) {
-    state.editing_location_id.clear();
-    window.set_loc_is_edit_mode(false);
-    window.set_new_loc_name(SharedString::from(""));
-    window.set_new_loc_length(SharedString::from("5"));
-    window.set_new_loc_width(SharedString::from("2"));
-    window.set_new_loc_notes(SharedString::from(""));
-    window.set_loc_kind_index(0);
-    window.set_loc_parent_index(0);
-}
-
-/// Load one location into the form and switch it to edit mode.
-fn open_location_form_for_edit(window: &MainWindow, state: &mut UiState, id: &str) -> Result<()> {
-    let form: LocationEditForm = state
-        .runtime
-        .block_on(async { get_location_for_edit(state.app.repo(), id).await })
-        .context("failed to load location for edit")?;
-
-    let kind_idx = state
-        .location_kind_ids
-        .iter()
-        .position(|k| k == &form.kind_id_str)
-        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
-    // parent_id_str is "" for a root; the parent dropdown's slot 0 is "(none)".
-    let parent_idx = state
-        .parent_location_ids
-        .iter()
-        .position(|p| p == &form.parent_id_str)
-        .map_or(0, |i| i32::try_from(i).unwrap_or(0));
-
-    state.editing_location_id.clone_from(&form.id);
-    window.set_loc_is_edit_mode(true);
-    window.set_loc_kind_index(kind_idx);
-    window.set_loc_parent_index(parent_idx);
-    window.set_new_loc_name(SharedString::from(form.name));
-    window.set_new_loc_length(SharedString::from(form.length));
-    window.set_new_loc_width(SharedString::from(form.width));
-    window.set_new_loc_notes(SharedString::from(form.notes));
-    window.set_status_text(SharedString::from(""));
-    window.set_status_is_error(false);
-    Ok(())
 }
 
 fn today_iso() -> String {
@@ -3595,42 +2831,6 @@ fn refresh_strata(window: &MainWindow, state: &mut UiState) -> Result<()> {
         .collect();
     window.set_strata_items(ModelRc::new(VecModel::from(items)));
     Ok(())
-}
-
-fn try_create_strata(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
-    let i18n = state.app.i18n();
-    let name = validate_required_name(&window.get_new_strata_name(), i18n)?;
-    let description = optional_text(&window.get_new_strata_description());
-    let min_height = validate_optional_decimal(&window.get_new_strata_min_height(), i18n)?;
-    let max_height = validate_optional_decimal(&window.get_new_strata_max_height(), i18n)?;
-    let sort_order =
-        parse_i32(&window.get_new_strata_sort_order(), "sort order").map_err(FormError::Service)?;
-
-    // Surface a friendly range message client-side; the domain would also
-    // reject this but its error string is technical.
-    if let (Some(min), Some(max)) = (min_height, max_height) {
-        if min > max {
-            return Err(FormError::Validation(i18n.t("error-height-range")));
-        }
-    }
-
-    state
-        .runtime
-        .block_on(async {
-            create_strata(
-                state.app.repo(),
-                StrataInput {
-                    name,
-                    description,
-                    min_height_m: min_height,
-                    max_height_m: max_height,
-                    sort_order,
-                },
-            )
-            .await
-            .map(|_| ())
-        })
-        .map_err(FormError::Service)
 }
 
 /// Load one planting's detail, push it to the UI and switch to the detail
@@ -4687,88 +3887,6 @@ fn color_chooser_palette() -> Vec<SlintPaletteColor> {
             color: parse_hex_color(hex),
         })
         .collect()
-}
-
-/// First-time entry into the Families page: load the list, blank form.
-fn open_families_page(window: &MainWindow, state: &mut UiState) -> Result<()> {
-    window.set_families_color_palette(ModelRc::new(VecModel::from(color_chooser_palette())));
-    refresh_families(window, state)?;
-    reset_families_form_to_create(window, state);
-    window.set_current_page(SharedString::from("families"));
-    Ok(())
-}
-
-/// Load one family into the form and switch to edit mode.
-fn open_family_form_for_edit(window: &MainWindow, state: &mut UiState, id: &str) -> Result<()> {
-    refresh_families(window, state)?;
-    let form: FamilyEditForm = state
-        .runtime
-        .block_on(async { get_family_for_edit(state.app.repo(), id).await })
-        .context("failed to load family for edit")?;
-    state.editing_family_id.clone_from(&form.id);
-    window.set_families_is_edit_mode(true);
-    window.set_families_form_color_preview(parse_hex_color(&form.color));
-    window.set_families_form_name(SharedString::from(form.name));
-    window.set_families_form_latin(SharedString::from(form.latin_name));
-    window.set_families_form_description(SharedString::from(form.description));
-    window.set_families_form_color(SharedString::from(form.color));
-    window.set_families_status_text(SharedString::from(""));
-    window.set_families_status_is_error(false);
-    Ok(())
-}
-
-/// Persist the Families form (create OR update based on edit mode).
-fn try_save_family_form(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
-    let i18n = state.app.i18n();
-    let name = window.get_families_form_name().to_string();
-    if name.trim().is_empty() {
-        return Err(FormError::Validation(i18n.t("error-name-required")));
-    }
-    let latin = window.get_families_form_latin().to_string();
-    let description = window.get_families_form_description().to_string();
-    let color = window.get_families_form_color().to_string();
-    if color.trim().is_empty() {
-        return Err(FormError::Validation(i18n.t("error-family-color-required")));
-    }
-
-    if window.get_families_is_edit_mode() {
-        let id = state.editing_family_id.clone();
-        if id.is_empty() {
-            return Err(FormError::Validation(
-                i18n.t("error-family-edit-id-missing"),
-            ));
-        }
-        state
-            .runtime
-            .block_on(async {
-                update_family(
-                    state.app.repo(),
-                    &id,
-                    name.trim(),
-                    latin.trim(),
-                    description.trim(),
-                    color.trim(),
-                )
-                .await
-            })
-            .map_err(FormError::Service)?;
-    } else {
-        state
-            .runtime
-            .block_on(async {
-                create_family(
-                    state.app.repo(),
-                    name.trim(),
-                    latin.trim(),
-                    description.trim(),
-                    color.trim(),
-                )
-                .await
-                .map(|_| ())
-            })
-            .map_err(FormError::Service)?;
-    }
-    Ok(())
 }
 
 /// Render a Families form error, special-casing the `family_in_use` sentinel.
