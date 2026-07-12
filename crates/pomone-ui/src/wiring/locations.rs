@@ -20,7 +20,6 @@ use pomone_app::{
 
 /// Register every locations-screen callback on the window. Called once from
 /// `main()`; standard wiring shape — see `wiring/mod.rs`.
-#[allow(clippy::too_many_lines)]
 pub(crate) fn wire_locations(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
     // --- Locations navigation ---
     {

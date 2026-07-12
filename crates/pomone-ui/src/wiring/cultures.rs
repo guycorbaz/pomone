@@ -1,6 +1,6 @@
-//! Cultures screen (crops + varieties master-detail) wiring — extracted from `main.rs` (story 0.2). Shared helpers
-//! (`UiState`, refreshes, delete executors, error rendering) stay in the
-//! crate root and are reached through `crate::…`.
+//! Cultures screen (crops + varieties master-detail) wiring — extracted
+//! from `main.rs` (story 0.2). Shared helpers (`UiState`, refreshes, delete
+//! executors, error rendering) stay in the crate root, via `crate::…`.
 
 use std::cell::RefCell;
 use std::rc::Rc;

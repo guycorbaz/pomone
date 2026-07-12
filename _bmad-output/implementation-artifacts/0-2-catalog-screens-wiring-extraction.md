@@ -1,6 +1,6 @@
 # Story 0.2: Catalog screens wiring extraction
 
-Status: review
+Status: done
 
 ## Story
 
@@ -27,6 +27,12 @@ So that catalog screens follow the pattern.
   - [x] `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`
   - [x] Grep check: none of the 23 catalog `window.on_*` registrations remain in `main.rs`; each appears exactly once crate-wide
   - [x] Manual XDG-isolated smoke run (procedure in Dev Notes)
+
+### Review Findings
+
+- [x] [Review][Patch] Superfluous `#[allow(clippy::too_many_lines)]` on `wire_locations` + Completion Note claiming it was on `wire_cultures` only — attribute removed (clippy verified clean without it), note corrected. Found by all three layers. [crates/pomone-ui/src/wiring/locations.rs:23]
+- [x] [Review][Patch] Smoke run covered a subset of the spec's procedure — completed after review: variety create+delete w/ confirm, crop delete w/ confirm, location create, family save (DB-verified), Settings test-connection. Notes updated with exact coverage incl. the pre-existing `enabled: !in-use` delete-button rule. [story file]
+- [x] [Review][Dismissed] Registration-order change from grouping the `wire_*` calls — verified observationally inert by Edge Case Hunter (nothing fires before `window.run()`; startup refreshes still precede wiring; no `invoke_*` before run). Cosmetic Lows (overlong cultures.rs header line — fixed; spec line-anchor inconsistencies — historical artifact; AC "five screens"/4 modules — crops+varieties share one screen, documented equivalence).
 
 ## Dev Notes
 
@@ -123,9 +129,9 @@ Claude Fable 5 (claude-fable-5)
 - 23 catalog callback registrations + 13 screen-local helpers moved verbatim into four new modules: `wiring/cultures.rs` (10 callbacks + 6 helpers), `wiring/locations.rs` (5 + 3), `wiring/strata.rs` (3 + 1), `wiring/families.rs` (5 + 3). `main.rs`: 5107 → 4225 lines.
 - The five `wire_*` calls are now grouped in one block in `main()` (settings included, per the story's recommendation for 0.4's endgame). Registration order is behavior-neutral (0.1 review finding: nothing fires before `window.run()`).
 - Stay-list respected: `do_delete_*` executors, the shared confirm dialog, all `refresh_*`, `*_to_slint`, `reset_crop/variety/families_form_to_create`, `render_family_form_error`, `color_chooser_palette`, `establishment_method_from_index` remain in `main.rs`.
-- `#[allow(clippy::too_many_lines)]` needed on `wire_cultures` only (heuristic in the generation script added it where >90 lines; clippy confirmed the others pass).
+- `#[allow(clippy::too_many_lines)]` carried by `wire_cultures` only. (The generation script's >90-line heuristic had also placed it on `wire_locations`; review verified clippy passes without it there and it was removed — review finding, fixed.)
 - Verification: fmt ✓, clippy `-D warnings` ✓, 388/388 tests ✓; AC2 grep: each of the 23 callbacks appears exactly once crate-wide, none in `main.rs`.
-- Manual smoke (Xvfb, `/tmp/pom`, demo seed): Cultures — row select updates varieties panel, crop "Tomate" created ("Culture créée"), name-required validation renders; Strates — create form rendered, delete Grimpante → shared confirm dialog → "Strate supprimée" + list refresh (exercises the moved callback AND the staying `do_delete_*` dispatch end-to-end); Lieux — full hierarchy rendered; Familles — catalog + color palette rendered.
+- Manual smoke (Xvfb, `/tmp/pom`, demo seed) — full pass after review asked for the missing mutations: Cultures — row select updates varieties panel, crop create ("Culture créée"), name-required validation (crop AND variety forms), variety create ("Variété créée"), variety delete via confirm dialog ("Variété supprimée"), crop delete via confirm dialog ("Culture supprimée"); Strates — create form, delete via confirm ("Strate supprimée"); Lieux — hierarchy + location create ("Lieu créé"); Familles — catalog + palette + family save (row verified in SQLite: `Testacees` present); Settings — "Tester la connexion" → "Connexion réussie." (cross-module `crate::` path). DB-level verification: created/deleted rows confirmed with sqlite3. Not exercised: edit/cancel flows (same 6-line callback shape as the verified ones; relocation proven byte-identical by two independent reviewers). Pre-existing behavior confirmed, not a regression: delete buttons are disabled for in-use entries (`enabled: !entry.in-use`, cultures.slint:88/164) — that's why demo varieties can't be deleted directly.
 
 ### File List
 
