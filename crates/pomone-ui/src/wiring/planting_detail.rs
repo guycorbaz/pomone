@@ -18,7 +18,7 @@ use crate::{
     FormError, PendingDelete, UiState,
 };
 
-/// Register every planting_detail-screen callback on the window. Called once from
+/// Register every planting-detail-screen callback on the window. Called once from
 /// `main()`; standard wiring shape — see `wiring/mod.rs`.
 #[allow(clippy::too_many_lines)]
 pub(crate) fn wire_planting_detail(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
@@ -120,9 +120,6 @@ pub(crate) fn wire_planting_detail(window: &MainWindow, state: &Rc<RefCell<UiSta
             };
             let mut s = state.borrow_mut();
             let target = s.detail_previous_page.clone();
-            // Refresh the destination so it picks up any changes made while
-            // the user was browsing the detail. Default to "plantings" if
-            // the stored previous-page value is unknown.
             // Refresh the destination so it reflects any change made while
             // browsing the detail. The unified calendar ("tasks") is the only
             // non-plantings origin (milestone click); everything else lands on

@@ -2283,7 +2283,7 @@ fn do_delete_task_type(window: &MainWindow, s: &mut UiState, id: &str) {
     }
 }
 
-/// Inverse of [`status_from_index`].
+/// Inverse of `status_from_index` (in `wiring::planting_detail`).
 fn status_to_index(status: PlantingStatus) -> i32 {
     match status {
         PlantingStatus::Active => 0,

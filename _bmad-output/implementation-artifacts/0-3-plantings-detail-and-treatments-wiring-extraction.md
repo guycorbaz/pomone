@@ -1,6 +1,6 @@
 # Story 0.3: Plantings, detail and treatments wiring extraction
 
-Status: review
+Status: done
 
 ## Story
 
@@ -26,6 +26,12 @@ So that the planting family follows the pattern.
   - [x] `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (389 tests incl. the new size gate)
   - [x] Grep check: none of the 17 planting `window.on_*` registrations remain in `main.rs`; each exactly once crate-wide
   - [x] Manual XDG-isolated smoke run (procedure in Dev Notes)
+
+### Review Findings
+
+- [x] [Review][Patch] Dev Agent Record mischaracterized untested callbacks ("same 3-line shape" — go_back is ~25 lines with a branch) and under-disclosed the skipped smoke steps (sort, create-planting, split-cancel) — smoke completed post-review (sort, move-to, split-cancel now exercised) and the record rewritten with exact coverage. Found by Blind Hunter (Med) + Auditor. [story file]
+- [x] [Review][Patch] Dangling rustdoc link `[status_from_index]` on the stayed `status_to_index` — rewritten as plain prose with module path. Found by all three layers. [crates/pomone-ui/src/main.rs:2286]
+- [x] [Review][Patch] `crop_map.rs` header claimed "refreshes stay in the crate root" while `refresh_crop_map` lives in the module — header corrected. Wire-fn doc prose de-snake-cased ("crop-map-screen", "planting-detail-screen"). Abandoned duplicate comment draft in `on_detail_go_back` removed. Found by Blind Hunter (Lows). [wiring/crop_map.rs, wiring/planting_detail.rs]
 
 ## Dev Notes
 
@@ -123,7 +129,7 @@ Claude Fable 5 (claude-fable-5)
 - `main.rs`: 4225 → 3510 lines. Still above the 3000 cap → the `EXEMPT` entry in the size-gate test stays (removed at 0.4 as planned); the gate passes (389/389 tests).
 - Stay-list respected: `open_planting_detail` (also called by 0.4's `on_task_milestone_clicked`), `refresh_planting_detail`, `refresh_plantings`, `sort_planting_rows`/`to_slint_row`/`to_gantt_bar`, `status_to_index`, `do_delete_planting`/`do_delete_treatment_row`, confirm dialog. The marooned `on_detail_task_clicked` was cut cleanly; both neighbour registrations verified still in `main.rs`.
 - Verification: fmt ✓, clippy `-D warnings` ✓, 389/389 ✓; AC2 grep: each of the 17 callbacks exactly once crate-wide, none in `main.rs`.
-- Manual smoke (Xvfb, `/tmp/pom`, fresh seed): Plantings list + row click → detail opens (table populated this run); Crop map renders 11 plantings, bar select → "Diviser" dialog pre-filled 50/50 → split confirmed (bar appears on second lane); Detail: treatment form validations ("Le nom est requis", "Nombre invalide"), treatment recorded ("Traitement enregistré"), treatment deleted via shared confirm dialog ("Traitement supprimé"), status change ("Statut mis à jour"). Not exercised: harvest record (perennial-only path, same moved shape as treatment), move-to picker (same dispatch as split), go-back/delete-planting (same 3-line shape).
+- Manual smoke (Xvfb, `/tmp/pom`), across two sessions incl. the post-review completion: Plantings — list + Gantt, column-header sort (order flips, "Variété ▼"), row click → detail opens; Crop map — lanes render, bar select, "Déplacer vers…" picker → move applied (bar changes lane), "Diviser" pre-filled 50/50 → confirmed (bar duplicated) AND cancel path (no change); Detail — treatment form validations ("Le nom est requis", "Nombre invalide"), treatment recorded, treatment deleted via shared confirm dialog, status change ("Statut mis à jour"). NOT exercised in GUI (all byte-identical relocations per two independent reviewers): create-planting (page would not wheel-scroll to the submit button under Xvfb), `on_record_harvest` (~40-line form handler, perennial path), `on_detail_go_back` (~25 lines with a tasks-vs-plantings branch), `on_detail_delete_planting` (~10 lines, pending_delete + dialog).
 
 ### File List
 

@@ -1,6 +1,7 @@
-//! Crop-map screen (lanes, move picker, split dialog) wiring — extracted from `main.rs` (story 0.3). Shared helpers
-//! (`UiState`, refreshes, delete executors, error rendering) stay in the
-//! crate root and are reached through `crate::…`.
+//! Crop-map screen (lanes, move picker, split dialog) wiring — extracted
+//! from `main.rs` (story 0.3). This screen's refresh lives here
+//! (`refresh_crop_map` has no cross-screen callers); other shared helpers
+//! (`UiState`, error rendering) stay in the crate root, via `crate::…`.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -23,7 +24,7 @@ use crate::generated::{
 };
 use crate::{localize_app_error, parse_hex_color, render_form_error, FormError, UiState};
 
-/// Register every crop_map-screen callback on the window. Called once from
+/// Register every crop-map-screen callback on the window. Called once from
 /// `main()`; standard wiring shape — see `wiring/mod.rs`.
 #[allow(clippy::too_many_lines)]
 pub(crate) fn wire_crop_map(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
