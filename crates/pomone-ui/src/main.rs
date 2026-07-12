@@ -55,9 +55,6 @@ pub(crate) use wiring::task_types::{
     refresh_task_types, render_task_type_form_error, reset_task_types_form_to_create,
 };
 
-// Setting up four panes' worth of callbacks in one place keeps the flow easy
-// to follow; clippy's 100-line limit is too tight for a UI entry point.
-#[allow(clippy::too_many_lines)]
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())

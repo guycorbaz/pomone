@@ -1,6 +1,6 @@
 # Story 0.4: Tasks, calendar, agenda and harvests wiring extraction
 
-Status: review
+Status: done
 
 ## Story
 
@@ -37,6 +37,12 @@ So that `main.rs` shrinks to bootstrap + wiring calls.
   - [x] Manual XDG-isolated smoke run (procedure in Dev Notes)
 
 † `open_task_form_for_edit` and `render_task_form_error` are ALSO called from other wiring modules (`planting_detail`, `task_calendar`, `agenda`) via `use crate::{...}` — the re-export layer (Task 2) covers them; they live in `wiring/task_form.rs` and are re-exported from `main.rs`.
+
+### Review Findings
+
+- [x] [Review][Patch] Gratuitous `#[allow(clippy::too_many_lines)]` on `main()` + stale comment ("four panes' worth of callbacks" — `main()` no longer registers callbacks inline). Removed both; clippy verified clean without it. Found by Acceptance Auditor. [crates/pomone-ui/src/main.rs]
+- [x] [Review][Patch] Completion Notes said the shared layer moved into "four root modules" — corrected to note the five cross-wiring helpers that stay in `wiring/task_form.rs`/`task_types.rs` (re-exported); allow-list count corrected. Found by Blind Hunter (Low). [story file]
+- [x] [Review][Dismissed] Three-layer review confirmed pure relocation (no High/Med): 26 callbacks 1:1, ~85 fn bodies byte-identical (only rustfmt signature reflow differs), `Rc::clone` transform consistent, all re-exports resolve, 33 `UiState` fields preserved, 389 tests. Low style notes accepted by design: root re-exports from child wiring modules is the deliberate "re-export trick" that avoids editing the nine existing modules; uniform `pub(crate)` from the mechanical extraction is harmless (no `unreachable_pub`/unused lint fires); the "unobservable risk" on unchanged modules is disproven by the green build.
 
 ## Dev Notes
 
@@ -118,13 +124,13 @@ Claude Fable 5 (claude-fable-5), then Opus 4.8 for the final smoke + finalizatio
 - Two-phase scripted extraction. Phase 1 (six `wiring/*.rs`): boundary assertions caught the `open_manual` block (its comment sits *inside* the block) — widened the brace-rewind window from 6 to 12 lines. Phase 2 (shared layer → `state/translations/refresh/forms.rs`): 61 items relocated, `pub(crate)` applied to items + struct fields.
 - The re-export layer (`pub(crate) use forms::*` …) worked as designed — zero edits to the nine pre-existing wiring modules. Compiler then flagged 283 → 65 → 18 → 0 errors across ~5 import iterations (calendar helpers `first_of_month`/`weekday_offset_mon`/`kind_*` had to move to `refresh.rs` since `refresh_task_calendar` uses them; plot consts too; `services`, `Datelike`, `anyhow::{Context,Result}` per module).
 - Automated unused-import prune removed 494 names in one pass but left `use ;` husks where a whole `use pomone_app::{…}` emptied — cleaned with a regex pass.
-- clippy: wildcard-import lint forbids `pub(crate) use module::*` at the root — expanded all four to explicit lists. `too_many_lines` allows land on `apply_translations` (kept), `try_save_task_form`, and `wire_task_calendar`.
+- clippy: wildcard-import lint forbids `pub(crate) use module::*` at the root — expanded all four to explicit lists. `too_many_lines` allows land on `apply_translations`, `try_save_task_form`, `refresh_task_calendar` and `wire_task_calendar` — each verified demanded by clippy (removal test). No allow on `main()` (review finding — removed).
 
 ### Completion Notes List
 
 - **`main.rs`: 3510 → 206 lines** (AC1: < 500 ✓). Contains only module docs, `mod generated`, the `mod` + `pub(crate) use` re-export block, `main()`, `restore/save_window_geometry`, `_config_for_dev_fallback`. **Zero `window.on_*` in `main.rs`.**
 - 26 callbacks + their screen-local helpers → six new `wiring/` modules (home, confirm, task_calendar, agenda, task_form, task_types). The 9 `do_delete_*` executors → `wiring/confirm.rs` (sole caller is the dispatch).
-- Shared layer → four root modules: `state.rs` (124: `UiState`+`PendingDelete`, fields `pub(crate)`), `translations.rs` (682: `apply_translations` et al.), `refresh.rs` (1014: all `refresh_*`, snapshots, converters, `open_planting_detail`, calendar helpers, category helpers, plot consts), `forms.rs` (302: `FormError`, validators, parsers, localizers). Re-exported from the root so every `crate::X` keeps resolving — the nine existing wiring modules are untouched.
+- Shared layer → four root modules (plus five helpers that stay in `wiring/task_form.rs` and `wiring/task_types.rs`, re-exported from the root because their callers span several wiring modules): `state.rs` (124: `UiState`+`PendingDelete`, fields `pub(crate)`), `translations.rs` (682: `apply_translations` et al.), `refresh.rs` (1014: all `refresh_*`, snapshots, converters, `open_planting_detail`, calendar helpers, category helpers, plot consts), `forms.rs` (302: `FormError`, validators, parsers, localizers). Re-exported from the root so every `crate::X` keeps resolving — the nine existing wiring modules are untouched.
 - **AC3: size-gate `EXEMPT` list emptied** — every `.rs` now honors 2000/3000 (largest: `refresh.rs` 1014). Verified: no file > 1500 lines.
 - Verification: fmt ✓, clippy `-D warnings` ✓, **389/389 tests** (size gate now unexempted) ✓; each of the 26 callbacks registered exactly once crate-wide.
 - Manual smoke (Xvfb, `/tmp/pom`, fresh seed) — every extracted screen + the shared layer under them: Home startup counts; Calendar month nav (prev/next/today), category-chip toggle, milestone click → detail (route "tasks") → **back → calendar (the "tasks" branch missed in 0.3)**; Agenda list → task click → edit form → delete via confirm dialog (85→84 tasks); Task-types catalog create ("Paillage") + delete via confirm (back to 9); **+ Nouvelle tâche → create → save (11→12 tasks, calendar refreshed via `refresh_after_task_form`)**; regression sweep — settings language toggle (whole sidebar flips FR↔EN, proving relocated `apply_translations` works), cultures, plantings, crop-map all navigable.
