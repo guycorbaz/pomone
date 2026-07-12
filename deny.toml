@@ -39,6 +39,11 @@ ignore = [
     # Slint's rendering stack. No safe upgrade available; revisit if
     # Slint migrates to `skrifa`.
     "RUSTSEC-2026-0192",
+    # `rustybuzz` is unmaintained (informational, no CVE). Pulled
+    # transitively via usvg/resvg into Slint's rendering stack. No
+    # alternative until Slint migrates its text shaping (likely to
+    # `harfrust`); revisit on Slint upgrades.
+    "RUSTSEC-2026-0206",
 ]
 
 [licenses]
