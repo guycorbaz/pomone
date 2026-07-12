@@ -45,8 +45,8 @@ story_location: "{project-root}/_bmad-output/implementation-artifacts"
 
 development_status:
   # Epic 0: Fondations
-  epic-0: backlog
-  0-1-wiring-skeleton-and-settings-module-extraction: backlog
+  epic-0: in-progress
+  0-1-wiring-skeleton-and-settings-module-extraction: done
   0-2-catalog-screens-wiring-extraction: backlog
   0-3-plantings-detail-and-treatments-wiring-extraction: backlog
   0-4-tasks-calendar-agenda-and-harvests-wiring-extraction: backlog
