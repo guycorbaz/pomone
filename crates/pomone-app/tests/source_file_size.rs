@@ -16,11 +16,7 @@ const TARGET_LINES: usize = 2000;
 
 /// Known oversized files, each carried as documented debt with its exit
 /// plan. Keep this list shrinking — never grow it without an issue.
-const EXEMPT: &[&str] = &[
-    // 4225 lines; shrinks with each Epic 0 wiring story and drops below
-    // 500 at story 0.4, when this exemption must be removed (#110).
-    "crates/pomone-ui/src/main.rs",
-];
+const EXEMPT: &[&str] = &[];
 
 fn workspace_root() -> PathBuf {
     // CARGO_MANIFEST_DIR = <root>/crates/pomone-app
