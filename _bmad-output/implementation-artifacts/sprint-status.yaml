@@ -1,0 +1,127 @@
+# generated: 2026-07-12
+# last_updated: 2026-07-12
+# project: pomone
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: {project-root}/_bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+# - Sequencing law (owner-ordered): facts hold → plan → place → print → reconcile.
+#   Strictly sequential epics; every story leaves `main` releasable.
+
+generated: 2026-07-12
+last_updated: 2026-07-12
+project: pomone
+project_key: NOKEY
+tracking_system: file-system
+story_location: "{project-root}/_bmad-output/implementation-artifacts"
+
+development_status:
+  # Epic 0: Fondations
+  epic-0: backlog
+  0-1-wiring-skeleton-and-settings-module-extraction: backlog
+  0-2-catalog-screens-wiring-extraction: backlog
+  0-3-plantings-detail-and-treatments-wiring-extraction: backlog
+  0-4-tasks-calendar-agenda-and-harvests-wiring-extraction: backlog
+  0-5-request-structs-in-services: backlog
+  0-6-check-audit-glossary-and-ci-coherence-test: backlog
+  0-7-paper-loop-harness-skeleton: backlog
+  0-8-glossary-alignment-of-existing-strings: backlog
+  epic-0-retrospective: optional
+
+  # Epic 1: Rien ne se perd — faits, états et corrections
+  epic-1: backlog
+  1-1-the-field-event-journal-migration-0007: backlog
+  1-2-record-fact-the-single-write-path: backlog
+  1-3-dual-timestamps-and-the-skip-aware-autogen-guard: backlog
+  1-4-the-virtual-printdoc-contract-and-the-rough-weekly-print: backlog
+  1-5-skip-and-correct-from-the-task-views: backlog
+  1-6-calendar-agenda-and-detail-honor-the-new-states-fr49: backlog
+  1-7-i1-i3-property-tests-and-dogfooding-database-compatibility: backlog
+  epic-1-retrospective: optional
+
+  # Epic 2: Planifier les cultures — lignes de plan et ITK
+  epic-2: backlog
+  2-1-plan-line-persistence-migration-0008: backlog
+  2-2-itk-templates-on-crops: backlog
+  2-3-the-plan-grid-entry: backlog
+  2-4-duplication-drafts-and-session-resume: backlog
+  2-5-the-itk-editor-screen: backlog
+  2-6-generation-plan-line-to-staggered-plantings: backlog
+  2-7-the-needs-list-on-screen: backlog
+  epic-2-retrospective: optional
+
+  # Epic 3: Placer — géométrie et capacité
+  epic-3: backlog
+  3-1-the-pure-capacity-engine-with-migration-0009: backlog
+  3-2-the-placement-screen-with-the-live-curve: backlog
+  3-3-tasks-generate-at-placement: backlog
+  3-4-retro-entry-and-perennial-lifecycle: backlog
+  epic-3-retrospective: optional
+
+  # Epic 4: La feuille dans la poche — les documents
+  epic-4: backlog
+  4-1-printdoc-render-infrastructure: backlog
+  4-2-the-journal-sheet-the-hero-document: backlog
+  4-3-the-export-ritual-and-the-needs-list-on-paper: backlog
+  4-4-weekly-ritual-switchover: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: Boucler la semaine — le corridor
+  epic-5: backlog
+  5-0-gate-the-thursday-evening-paper-test: backlog
+  5-1-reconciliation-view-model-and-contextual-landing: backlog
+  5-2-the-corridor-screen-navigation-and-focus: backlog
+  5-3-the-gestures-done-skip-carry-over-correct: backlog
+  5-4-free-lines-and-the-prodigal-return: backlog
+  5-5-i4-i6-interleaving-proptests: backlog
+  5-6-chrono-week-close-and-the-printed-reward: backlog
+  5-7-the-complete-paper-loop-release-blocking: backlog
+  epic-5-retrospective: optional
+
+  # Epic 6: Les registres
+  epic-6: backlog
+  6-1-the-crop-list-document: backlog
+  6-2-the-treatment-register-and-its-csv: backlog
+  epic-6-retrospective: optional
+
+  # Epic 7: Comprendre et arbitrer
+  epic-7: backlog
+  7-1-the-peakpanel-and-the-armchair-landing: backlog
+  7-2-the-occupancy-map-document: backlog
+  epic-7-retrospective: optional
+
+  # Epic 8: Accueillir
+  epic-8: backlog
+  8-1-locked-demo-mode-and-single-instance: backlog
+  8-2-first-run-onboarding: backlog
+  8-3-the-30-minute-path-measured: backlog
+  8-4-the-getting-started-manual: backlog
+  epic-8-retrospective: optional
