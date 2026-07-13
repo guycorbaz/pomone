@@ -37,7 +37,7 @@
 #   Strictly sequential epics; every story leaves `main` releasable.
 
 generated: 2026-07-12
-last_updated: 2026-07-12
+last_updated: 2026-07-13
 project: pomone
 project_key: NOKEY
 tracking_system: file-system
@@ -54,7 +54,7 @@ development_status:
   0-6-check-audit-glossary-and-ci-coherence-test: done
   0-7-paper-loop-harness-skeleton: done
   0-8-glossary-alignment-of-existing-strings: done
-  epic-0-retrospective: optional
+  epic-0-retrospective: done
 
   # Epic 1: Rien ne se perd — faits, états et corrections
   epic-1: backlog
