@@ -249,6 +249,9 @@ pub async fn update_task(
         duration_min: existing.duration_min,
         labor_hours: existing.labor_hours,
         notes: notes_opt,
+        skipped_on: existing.skipped_on,
+        skip_reason: existing.skip_reason,
+        skip_note: existing.skip_note,
     };
     repo.task_update(&updated).await?;
     Ok(())

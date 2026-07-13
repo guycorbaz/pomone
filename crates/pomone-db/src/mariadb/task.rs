@@ -4,7 +4,8 @@
 //! handling (no TEXT codec needed — sqlx-mysql supports `rust_decimal`).
 
 use crate::codec::{
-    recurrence_unit_from_str, recurrence_unit_to_str, task_category_from_str, task_category_to_str,
+    opt_skip_reason_from_text, opt_skip_reason_to_text, recurrence_unit_from_str,
+    recurrence_unit_to_str, task_category_from_str, task_category_to_str,
 };
 use crate::error::{DbError, DbResult};
 use crate::mariadb::MariaDbRepository;
@@ -343,7 +344,7 @@ fn row_to_task_series(row: sqlx::mysql::MySqlRow) -> DbResult<TaskSeries> {
 
 const TASK_COLUMNS: &str = "id, planting_id, location_id, task_type_id, task_method_id, \
                             implement_id, series_id, planned_on, completed_on, duration_min, \
-                            labor_hours, notes";
+                            labor_hours, notes, skipped_on, skip_reason, skip_note";
 
 #[async_trait]
 impl TaskRepo for MariaDbRepository {
@@ -397,8 +398,12 @@ impl TaskRepo for MariaDbRepository {
     }
 
     async fn task_create(&self, t: &Task) -> DbResult<()> {
+        // Skip columns are part of INSERT for completeness (NULL on a fresh
+        // task); their projection is written only by `facts::record_fact`
+        // (story 1.2), never here.
         sqlx::query(&format!(
-            "INSERT INTO task ({TASK_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO task ({TASK_COLUMNS}) VALUES \
+             (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         ))
         .bind(t.id.as_uuid())
         .bind(t.planting_id.map(PlantingId::as_uuid))
@@ -412,6 +417,9 @@ impl TaskRepo for MariaDbRepository {
         .bind(t.duration_min.map(i64::from))
         .bind(t.labor_hours)
         .bind(t.notes.as_deref())
+        .bind(t.skipped_on)
+        .bind(opt_skip_reason_to_text(t.skip_reason))
+        .bind(t.skip_note.as_deref())
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -489,5 +497,8 @@ fn row_to_task(row: sqlx::mysql::MySqlRow) -> DbResult<Task> {
         duration_min,
         labor_hours: row.try_get::<Option<Decimal>, _>("labor_hours")?,
         notes: row.try_get("notes")?,
+        skipped_on: row.try_get("skipped_on")?,
+        skip_reason: opt_skip_reason_from_text(row.try_get("skip_reason")?)?,
+        skip_note: row.try_get("skip_note")?,
     })
 }

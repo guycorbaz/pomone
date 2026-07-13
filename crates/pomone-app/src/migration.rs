@@ -37,6 +37,7 @@ pub struct MigrationReport {
     pub task_series: usize,
     pub tasks: usize,
     pub treatments: usize,
+    pub field_events: usize,
     /// Snapshot of the previous SQLite file taken by
     /// [`crate::App::swap_backend`] just before the swap; `None` when the
     /// previous backend was MariaDB or had no database file yet.
@@ -141,6 +142,15 @@ pub async fn copy_all(
     for t in source.task_list().await? {
         target.task_create(&t).await?;
         report.tasks += 1;
+    }
+
+    // 5. The append-only field-event journal. Copied last: events reference
+    //    tasks/plantings by a non-FK `target_id`, so ordering is not enforced,
+    //    but copying after the targets keeps the intent clear. The create is
+    //    idempotent (conflict-no-op), so a re-run never duplicates.
+    for e in source.field_event_list_all().await? {
+        target.field_event_create(&e).await?;
+        report.field_events += 1;
     }
 
     Ok(report)
@@ -343,7 +353,8 @@ mod tests {
         // Issue #102: work history and phytosanitary records used to be
         // silently dropped by backend migration.
         use crate::services::{record_treatment, TreatmentRequest};
-        use pomone_db::{TaskRepo, TaskTypeRepo, TreatmentRepo};
+        use pomone_db::{FieldEventRepo, TaskRepo, TaskTypeRepo, TreatmentRepo};
+        use pomone_domain::{FactKind, FieldEvent};
 
         let source = seeded_repo().await;
         seed_test_data(&source).await.unwrap();
@@ -381,12 +392,30 @@ mod tests {
         let source_tasks = source.task_list().await.unwrap();
         assert!(!source_tasks.is_empty(), "autogen should have made tasks");
 
+        // A field event on the first task — the journal must survive migration.
+        let first_task = source_tasks[0].id;
+        let event = FieldEvent::new(
+            FactKind::TaskDone,
+            "task",
+            first_task.as_uuid(),
+            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 3, 2)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+            "{}",
+            None,
+        )
+        .unwrap();
+        source.field_event_create(&event).await.unwrap();
+
         let target = SqliteRepository::in_memory().await.unwrap();
         let report = copy_all(&source, &target).await.unwrap();
 
         assert!(report.task_types > 0, "seeded task types must be copied");
         assert_eq!(report.tasks, source_tasks.len());
         assert_eq!(report.treatments, 1);
+        assert_eq!(report.field_events, 1);
         assert_eq!(target.task_list().await.unwrap(), source_tasks);
         assert_eq!(
             target
@@ -395,6 +424,11 @@ mod tests {
                 .unwrap()
                 .len(),
             1
+        );
+        assert_eq!(
+            target.field_event_get(event.id).await.unwrap(),
+            Some(event),
+            "the field-event journal must migrate intact"
         );
         assert_eq!(
             source.task_type_list().await.unwrap(),

@@ -8,11 +8,12 @@
 use crate::error::DbResult;
 use async_trait::async_trait;
 use pomone_domain::{
-    Crop, CropId, Family, FamilyId, Location, LocationId, LocationKind, LocationKindId, Planting,
-    PlantingId, Strata, StrataId, Task, TaskId, TaskImplement, TaskImplementId, TaskMethod,
-    TaskMethodId, TaskSeries, TaskSeriesId, TaskType, TaskTypeId, Treatment, TreatmentId, Variety,
-    VarietyId, YearlyHarvest,
+    Crop, CropId, Family, FamilyId, FieldEvent, FieldEventId, Location, LocationId, LocationKind,
+    LocationKindId, Planting, PlantingId, Strata, StrataId, Task, TaskId, TaskImplement,
+    TaskImplementId, TaskMethod, TaskMethodId, TaskSeries, TaskSeriesId, TaskType, TaskTypeId,
+    Treatment, TreatmentId, Variety, VarietyId, YearlyHarvest,
 };
+use uuid::Uuid;
 
 #[async_trait]
 pub trait FamilyRepo: Send + Sync {
@@ -160,6 +161,24 @@ pub trait TreatmentRepo: Send + Sync {
     async fn treatment_delete(&self, id: TreatmentId) -> DbResult<()>;
 }
 
+/// The append-only field-event journal (story 1.1). There is deliberately no
+/// update or delete: corrections are new events, and the client-generated id
+/// makes `field_event_create` idempotent (a replayed insert is a no-op).
+#[async_trait]
+pub trait FieldEventRepo: Send + Sync {
+    /// Insert an event. Idempotent: a duplicate `id` is a silent no-op.
+    async fn field_event_create(&self, event: &FieldEvent) -> DbResult<()>;
+    async fn field_event_get(&self, id: FieldEventId) -> DbResult<Option<FieldEvent>>;
+    /// Every event about a given target, oldest first (by `recorded_at`).
+    async fn field_event_list_for_target(
+        &self,
+        target_kind: &str,
+        target_id: Uuid,
+    ) -> DbResult<Vec<FieldEvent>>;
+    /// The whole journal, oldest first — used by backend migration (`copy_all`).
+    async fn field_event_list_all(&self) -> DbResult<Vec<FieldEvent>>;
+}
+
 /// Aggregated trait that backends implement. Application code depends on
 /// `dyn Repository` so backends can be swapped at runtime.
 pub trait Repository:
@@ -177,6 +196,7 @@ pub trait Repository:
     + TaskSeriesRepo
     + TaskRepo
     + TreatmentRepo
+    + FieldEventRepo
     + Send
     + Sync
 {
