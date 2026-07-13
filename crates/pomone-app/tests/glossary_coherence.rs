@@ -1,14 +1,15 @@
-//! Glossary ↔ Fluent coherence gate (story 0.6).
+//! Glossary ↔ Fluent coherence gate (stories 0.6 + 0.8).
 //!
-//! Asserts that the founding glossary (`docs/glossaire.md`) and the Fluent
-//! catalogues (`locales/{fr,en}/main.ftl`) agree: every glossary term marked
-//! `checked` must resolve to at least one Fluent key under its declared prefix,
-//! **in both locales** (no orphan term, no half-translated term).
+//! Asserts that the founding glossary (`docs/glossaire.md`, "Table 1") and the
+//! Fluent catalogues (`locales/{fr,en}/main.ftl`) agree: **every** founding
+//! term must resolve to at least one Fluent key under its declared prefix, in
+//! **both locales** (no orphan term, no half-translated term).
 //!
-//! The check is **scoped to `checked` rows** so it is born green: founding
-//! terms whose Fluent alignment is still planned (renames in story 0.8, or
-//! concepts introduced by a later epic) are listed as `deferred` and skipped
-//! until their scope is flipped. Story 0.8 widens the scope to every term.
+//! Since story 0.8 the check is **unscoped**: there is no per-term opt-in — the
+//! whole founding table is covered. Concepts not yet wired (or without a stable
+//! Fluent anchor) live in the glossary's "Table 2" (planned/documented
+//! vocabulary), which this test deliberately does not parse; the epic that
+//! wires such a concept promotes it into Table 1 with its keys.
 
 use std::collections::BTreeSet;
 use std::fs;
@@ -31,8 +32,6 @@ fn ftl_keys(path: &Path) -> BTreeSet<String> {
         fs::read_to_string(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
     let mut keys = BTreeSet::new();
     for line in text.lines() {
-        // Key lines start in column 0 with an identifier; skip comments,
-        // blank lines and indented attribute/continuation lines.
         if line.is_empty() || line.starts_with('#') || line.starts_with(char::is_whitespace) {
             continue;
         }
@@ -58,10 +57,9 @@ fn matches_prefix(key: &str, prefix: &str) -> bool {
     key == prefix || key.starts_with(&format!("{prefix}-"))
 }
 
-struct GlossaryRow {
+struct FoundingTerm {
     term_id: String,
-    prefixes: Vec<String>,
-    scope: String,
+    prefix: String,
 }
 
 /// Split a Markdown table row into trimmed cells (outer pipes stripped).
@@ -80,151 +78,124 @@ fn is_separator_row(cells: &[String]) -> bool {
             .all(|c| !c.is_empty() && c.chars().all(|ch| ch == '-' || ch == ':'))
 }
 
-/// Parse the founding-terms table, mapping columns by header name so the test
-/// survives column reordering.
-fn parse_glossary(path: &Path) -> Vec<GlossaryRow> {
+/// Parse **Table 1** only: the first Markdown table whose header carries both a
+/// `term_id` and a `Fluent prefix` column. Reading stops at the end of that
+/// table, so Table 2 (planned vocabulary, different columns) is never seen.
+fn parse_founding_terms(path: &Path) -> Vec<FoundingTerm> {
     let text =
         fs::read_to_string(path).unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
 
-    let mut header: Option<(usize, usize, usize)> = None; // (term_id, prefix, scope) column indices
-    let mut rows = Vec::new();
+    let mut columns: Option<(usize, usize)> = None; // (term_id, prefix)
+    let mut terms = Vec::new();
 
     for line in text.lines() {
-        if !line.trim_start().starts_with('|') {
-            continue;
-        }
-        let cells = table_cells(line);
-        if is_separator_row(&cells) {
-            continue;
-        }
-        match header {
+        let is_row = line.trim_start().starts_with('|');
+        match columns {
             None => {
-                // First table row is the header: locate our three columns.
+                if !is_row {
+                    continue;
+                }
+                let cells = table_cells(line);
                 let find =
                     |needle: &str| cells.iter().position(|c| c.to_lowercase().contains(needle));
-                let term = find("term_id");
-                let prefix = find("fluent");
-                let scope = find("portée")
-                    .or_else(|| find("scope"))
-                    .or_else(|| find("ci"));
-                if let (Some(t), Some(p), Some(s)) = (term, prefix, scope) {
-                    header = Some((t, p, s));
+                if let (Some(t), Some(p)) = (find("term_id"), find("fluent")) {
+                    columns = Some((t, p));
                 }
             }
-            Some((t, p, s)) => {
-                let max = t.max(p).max(s);
-                if cells.len() <= max {
-                    continue; // not a data row of our table
+            Some((t, p)) => {
+                // The founding table is a contiguous block; the first
+                // non-table line ends it (and shields Table 2 from parsing).
+                if !is_row {
+                    break;
                 }
-                let prefixes = cells[p]
-                    .split([' ', ','])
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty() && *s != "—")
-                    .map(str::to_string)
-                    .collect();
-                rows.push(GlossaryRow {
-                    term_id: cells[t].clone(),
-                    prefixes,
-                    scope: cells[s].to_lowercase(),
-                });
+                let cells = table_cells(line);
+                if is_separator_row(&cells) {
+                    continue;
+                }
+                if cells.len() > t.max(p) {
+                    terms.push(FoundingTerm {
+                        term_id: cells[t].clone(),
+                        prefix: cells[p].clone(),
+                    });
+                }
             }
         }
     }
 
     assert!(
-        header.is_some(),
-        "glossary table header (term_id / Fluent prefix / CI scope) not found in {}",
+        columns.is_some(),
+        "founding-terms table (term_id + Fluent prefix columns) not found in {}",
         path.display()
     );
-    rows
+    terms
 }
 
 #[test]
-fn glossary_terms_resolve_to_fluent_keys_in_both_locales() {
+fn founding_terms_resolve_to_fluent_keys_in_both_locales() {
     let root = workspace_root();
     let glossary = root.join("docs/glossaire.md");
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
     let fr_keys = ftl_keys(&manifest.join("locales/fr/main.ftl"));
     let en_keys = ftl_keys(&manifest.join("locales/en/main.ftl"));
 
-    let rows = parse_glossary(&glossary);
+    let terms = parse_founding_terms(&glossary);
     assert!(
-        !rows.is_empty(),
-        "no glossary rows parsed from {}",
+        !terms.is_empty(),
+        "no founding terms parsed from {}",
         glossary.display()
     );
 
-    // Guard against typos in the scope column silently disabling checks.
-    for row in &rows {
-        assert!(
-            matches!(row.scope.as_str(), "checked" | "deferred"),
-            "term '{}' has unknown CI scope '{}' (expected 'checked' or 'deferred')",
-            row.term_id,
-            row.scope
-        );
-    }
-
-    let checked: Vec<&GlossaryRow> = rows.iter().filter(|r| r.scope == "checked").collect();
-    assert!(
-        !checked.is_empty(),
-        "no 'checked' glossary terms — the coherence gate would be vacuous"
-    );
-
-    let mut term_ids = BTreeSet::new();
+    let mut seen = BTreeSet::new();
     let mut problems: Vec<String> = Vec::new();
-    for row in &rows {
-        if !term_ids.insert(row.term_id.clone()) {
-            problems.push(format!("duplicate term_id '{}'", row.term_id));
-        }
-    }
 
-    for row in &checked {
-        if row.prefixes.is_empty() {
+    for term in &terms {
+        if !seen.insert(term.term_id.clone()) {
+            problems.push(format!("duplicate term_id '{}'", term.term_id));
+        }
+        if term.prefix.is_empty() || term.prefix == "—" {
             problems.push(format!(
-                "term '{}' is 'checked' but declares no Fluent prefix",
-                row.term_id
+                "founding term '{}' declares no Fluent prefix",
+                term.term_id
             ));
             continue;
         }
-        for prefix in &row.prefixes {
-            let fr: BTreeSet<&String> = fr_keys
-                .iter()
-                .filter(|k| matches_prefix(k, prefix))
-                .collect();
-            let en: BTreeSet<&String> = en_keys
-                .iter()
-                .filter(|k| matches_prefix(k, prefix))
-                .collect();
 
-            if fr.is_empty() && en.is_empty() {
-                problems.push(format!(
-                    "term '{}': Fluent prefix '{prefix}' matches no key in either locale",
-                    row.term_id
-                ));
-                continue;
-            }
-            // Translations must not omit the term: same key set both sides.
-            let only_fr: Vec<&str> = fr.difference(&en).map(|s| s.as_str()).collect();
-            let only_en: Vec<&str> = en.difference(&fr).map(|s| s.as_str()).collect();
-            if !only_fr.is_empty() {
-                problems.push(format!(
-                    "term '{}': prefix '{prefix}' keys present in fr but missing in en: {only_fr:?}",
-                    row.term_id
-                ));
-            }
-            if !only_en.is_empty() {
-                problems.push(format!(
-                    "term '{}': prefix '{prefix}' keys present in en but missing in fr: {only_en:?}",
-                    row.term_id
-                ));
-            }
+        let fr: BTreeSet<&String> = fr_keys
+            .iter()
+            .filter(|k| matches_prefix(k, &term.prefix))
+            .collect();
+        let en: BTreeSet<&String> = en_keys
+            .iter()
+            .filter(|k| matches_prefix(k, &term.prefix))
+            .collect();
+
+        if fr.is_empty() && en.is_empty() {
+            problems.push(format!(
+                "term '{}': Fluent prefix '{}' matches no key in either locale",
+                term.term_id, term.prefix
+            ));
+            continue;
+        }
+        let only_fr: Vec<&str> = fr.difference(&en).map(|s| s.as_str()).collect();
+        let only_en: Vec<&str> = en.difference(&fr).map(|s| s.as_str()).collect();
+        if !only_fr.is_empty() {
+            problems.push(format!(
+                "term '{}': prefix '{}' keys present in fr but missing in en: {only_fr:?}",
+                term.term_id, term.prefix
+            ));
+        }
+        if !only_en.is_empty() {
+            problems.push(format!(
+                "term '{}': prefix '{}' keys present in en but missing in fr: {only_en:?}",
+                term.term_id, term.prefix
+            ));
         }
     }
 
     assert!(
         problems.is_empty(),
-        "glossary ↔ Fluent coherence failures ({} term(s) checked):\n  {}",
-        checked.len(),
+        "glossary ↔ Fluent coherence failures ({} founding term(s) checked):\n  {}",
+        terms.len(),
         problems.join("\n  ")
     );
 }
