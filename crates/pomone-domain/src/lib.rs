@@ -43,7 +43,7 @@ mod validation;
 pub use crop::{Crop, Lifespan, ProductivePattern, PruningSeason};
 pub use error::{DomainError, DomainResult};
 pub use family::{Family, DEFAULT_FAMILY_COLOR};
-pub use field_event::{FactKind, FieldEvent, SkipReason};
+pub use field_event::{skip_payload, FactKind, FieldEvent, SkipReason};
 pub use harvest::YearlyHarvest;
 pub use holidays::{holiday_on, holidays_in_year, Holiday, HolidayRegion};
 pub use ids::{

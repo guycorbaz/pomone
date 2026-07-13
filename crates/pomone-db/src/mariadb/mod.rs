@@ -6,6 +6,7 @@
 //! confined to this module and the `migrations/mariadb/` SQL.
 
 mod crop;
+mod facts;
 mod family;
 mod field_event;
 mod location;

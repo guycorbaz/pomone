@@ -15,6 +15,7 @@ pub mod crop_map_view;
 pub mod cultures_view;
 pub mod demo;
 pub mod error;
+pub mod facts;
 pub mod families_view;
 pub mod harvest_view;
 pub mod i18n;

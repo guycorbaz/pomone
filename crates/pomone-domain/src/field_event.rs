@@ -32,6 +32,10 @@ pub enum FactKind {
     TaskDone,
     /// A task was deliberately not done (a [`SkipReason`] is recorded).
     TaskSkipped,
+    /// A settled task (done or skipped) was explicitly reopened — a correction
+    /// that clears its settled state. Carries `corrects` pointing at the event
+    /// it reopens (story 1.2).
+    TaskReopened,
     /// A planting's lifecycle was ended.
     PlantingTerminated,
 }
@@ -55,6 +59,48 @@ pub enum SkipReason {
     Replaced,
     /// Anything else (a note usually accompanies it).
     Other,
+}
+
+impl SkipReason {
+    /// The canonical string literal — the single source of truth shared by the
+    /// DB codec (both backends) and the event payload.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            SkipReason::Weather => "weather",
+            SkipReason::PestDisease => "pest-disease",
+            SkipReason::CropFailure => "crop-failure",
+            SkipReason::NoTime => "no-time",
+            SkipReason::NotNeeded => "not-needed",
+            SkipReason::Replaced => "replaced",
+            SkipReason::Other => "other",
+        }
+    }
+
+    /// Parse a canonical literal back into a `SkipReason`.
+    #[must_use]
+    pub fn from_literal(s: &str) -> Option<Self> {
+        Some(match s {
+            "weather" => SkipReason::Weather,
+            "pest-disease" => SkipReason::PestDisease,
+            "crop-failure" => SkipReason::CropFailure,
+            "no-time" => SkipReason::NoTime,
+            "not-needed" => SkipReason::NotNeeded,
+            "replaced" => SkipReason::Replaced,
+            "other" => SkipReason::Other,
+            _ => return None,
+        })
+    }
+}
+
+/// Build the JSON payload for a `task.skipped` fact — the durable record of the
+/// reason (+ optional note) that the projection also mirrors into task columns.
+#[must_use]
+pub fn skip_payload(reason: SkipReason, note: Option<&str>) -> String {
+    match note {
+        Some(note) => serde_json::json!({ "reason": reason.as_str(), "note": note }).to_string(),
+        None => serde_json::json!({ "reason": reason.as_str() }).to_string(),
+    }
 }
 
 /// One append-only journal entry. Built through [`FieldEvent::new`], which
@@ -258,6 +304,37 @@ mod tests {
             .unwrap()
         };
         assert_ne!(mk().id, mk().id);
+    }
+
+    #[test]
+    fn skip_reason_literals_round_trip() {
+        for r in [
+            SkipReason::Weather,
+            SkipReason::PestDisease,
+            SkipReason::CropFailure,
+            SkipReason::NoTime,
+            SkipReason::NotNeeded,
+            SkipReason::Replaced,
+            SkipReason::Other,
+        ] {
+            assert_eq!(SkipReason::from_literal(r.as_str()), Some(r));
+        }
+        assert_eq!(SkipReason::from_literal("nope"), None);
+    }
+
+    #[test]
+    fn skip_payload_carries_reason_and_optional_note() {
+        assert_eq!(
+            skip_payload(SkipReason::Weather, None),
+            r#"{"reason":"weather"}"#
+        );
+        let with_note = skip_payload(SkipReason::PestDisease, Some("puceron"));
+        // Order of keys is stable (serde_json preserves insertion order here).
+        assert!(with_note.contains(r#""reason":"pest-disease""#));
+        assert!(with_note.contains(r#""note":"puceron""#));
+        // A note with a quote is properly JSON-escaped.
+        let tricky = skip_payload(SkipReason::Other, Some("a \"b\""));
+        assert!(tricky.contains(r#""note":"a \"b\"""#));
     }
 
     #[test]

@@ -47,6 +47,7 @@ pub(crate) fn encode_fact_kind(kind: FactKind) -> &'static str {
     match kind {
         FactKind::TaskDone => "task.done",
         FactKind::TaskSkipped => "task.skipped",
+        FactKind::TaskReopened => "task.reopened",
         FactKind::PlantingTerminated => "planting.terminated",
     }
 }
@@ -55,6 +56,7 @@ pub(crate) fn decode_fact_kind(s: &str) -> DbResult<FactKind> {
     match s {
         "task.done" => Ok(FactKind::TaskDone),
         "task.skipped" => Ok(FactKind::TaskSkipped),
+        "task.reopened" => Ok(FactKind::TaskReopened),
         "planting.terminated" => Ok(FactKind::PlantingTerminated),
         other => Err(DbError::Malformed(format!("fact_kind={other}"))),
     }
@@ -64,29 +66,14 @@ pub(crate) fn decode_fact_kind(s: &str) -> DbResult<FactKind> {
 // SkipReason (task.skip_reason) — closed set, NO CHECK
 // ============================================================
 
+// The `SkipReason` literals live on the domain enum (`as_str`/`from_literal`)
+// so the codec and the event payload share one source of truth.
 pub(crate) fn encode_skip_reason(reason: SkipReason) -> &'static str {
-    match reason {
-        SkipReason::Weather => "weather",
-        SkipReason::PestDisease => "pest-disease",
-        SkipReason::CropFailure => "crop-failure",
-        SkipReason::NoTime => "no-time",
-        SkipReason::NotNeeded => "not-needed",
-        SkipReason::Replaced => "replaced",
-        SkipReason::Other => "other",
-    }
+    reason.as_str()
 }
 
 pub(crate) fn decode_skip_reason(s: &str) -> DbResult<SkipReason> {
-    match s {
-        "weather" => Ok(SkipReason::Weather),
-        "pest-disease" => Ok(SkipReason::PestDisease),
-        "crop-failure" => Ok(SkipReason::CropFailure),
-        "no-time" => Ok(SkipReason::NoTime),
-        "not-needed" => Ok(SkipReason::NotNeeded),
-        "replaced" => Ok(SkipReason::Replaced),
-        "other" => Ok(SkipReason::Other),
-        other => Err(DbError::Malformed(format!("skip_reason={other}"))),
-    }
+    SkipReason::from_literal(s).ok_or_else(|| DbError::Malformed(format!("skip_reason={s}")))
 }
 
 /// Bind helper: an optional skip reason as its literal (or `None` for NULL).
@@ -463,6 +450,7 @@ mod tests {
         for k in [
             FactKind::TaskDone,
             FactKind::TaskSkipped,
+            FactKind::TaskReopened,
             FactKind::PlantingTerminated,
         ] {
             assert_eq!(decode_fact_kind(encode_fact_kind(k)).unwrap(), k);

@@ -4,13 +4,13 @@
 //! (in-memory) and MariaDB (testcontainer). The MariaDB tests are
 //! `#[ignore]`d by default; run with `cargo test -- --ignored`.
 
-use crate::repository::Repository;
+use crate::repository::{FactOutcome, Repository, TaskProjection};
 use crate::seed::seed_defaults;
 use chrono::{NaiveDate, NaiveDateTime};
 use pomone_domain::{
-    AnnualProfile, Crop, FactKind, Family, FieldEvent, Lifespan, Location, LocationKind, Planting,
-    PlantingSchedule, PluriannualProfile, PruningSeason, SkipReason, Strata, Task, Treatment,
-    Variety, VarietyProfile, YearlyHarvest,
+    skip_payload, AnnualProfile, Crop, FactKind, Family, FieldEvent, Lifespan, Location,
+    LocationKind, Planting, PlantingSchedule, PluriannualProfile, PruningSeason, SkipReason,
+    Strata, Task, Treatment, Variety, VarietyProfile, YearlyHarvest,
 };
 use rust_decimal_macros::dec;
 use uuid::Uuid;
@@ -351,6 +351,91 @@ async fn scenario_task_skip_roundtrip(repo: &dyn Repository) {
     assert_eq!(got.skip_note.as_deref(), Some("trop humide"));
 }
 
+/// `record_fact` (story 1.2): the event insert and the task projection commit
+/// atomically, idempotently on a replayed id, identically on both backends.
+async fn scenario_record_fact(repo: &dyn Repository) {
+    seed_defaults(repo).await.unwrap();
+    let task_type = repo.task_type_list().await.unwrap()[0].id;
+    let task = Task::new(
+        None,
+        None,
+        task_type,
+        None,
+        None,
+        d(2026, 3, 1),
+        None,
+        None,
+        None,
+        None,
+    );
+    repo.task_create(&task).await.unwrap();
+
+    // Done: appends one event AND projects completion, in one transaction.
+    let done = FieldEvent::new(
+        FactKind::TaskDone,
+        "task",
+        task.id.as_uuid(),
+        d(2026, 3, 2),
+        dt(2026, 3, 2, 9, 0),
+        "{}",
+        None,
+    )
+    .unwrap();
+    let done_proj = TaskProjection::Done {
+        task_id: task.id,
+        on: d(2026, 3, 2),
+    };
+    assert_eq!(
+        repo.record_fact(&done, &done_proj).await.unwrap(),
+        FactOutcome::Recorded
+    );
+    let got = repo.task_get(task.id).await.unwrap().unwrap();
+    assert_eq!(got.completed_on, Some(d(2026, 3, 2)));
+    assert_eq!(
+        repo.field_event_list_for_target("task", task.id.as_uuid())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // Idempotent replay: same id → AlreadyRecorded, no second event, no change.
+    assert_eq!(
+        repo.record_fact(&done, &done_proj).await.unwrap(),
+        FactOutcome::AlreadyRecorded
+    );
+    assert_eq!(
+        repo.field_event_list_for_target("task", task.id.as_uuid())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // Skip projects the reason and clears completion.
+    let skip = FieldEvent::new(
+        FactKind::TaskSkipped,
+        "task",
+        task.id.as_uuid(),
+        d(2026, 3, 3),
+        dt(2026, 3, 3, 8, 0),
+        skip_payload(SkipReason::Weather, Some("humide")),
+        None,
+    )
+    .unwrap();
+    let skip_proj = TaskProjection::Skipped {
+        task_id: task.id,
+        on: d(2026, 3, 3),
+        reason: SkipReason::Weather,
+        note: Some("humide".into()),
+    };
+    repo.record_fact(&skip, &skip_proj).await.unwrap();
+    let got = repo.task_get(task.id).await.unwrap().unwrap();
+    assert_eq!(got.skip_reason, Some(SkipReason::Weather));
+    assert_eq!(got.skip_note.as_deref(), Some("humide"));
+    assert!(got.completed_on.is_none(), "skip clears completion");
+}
+
 // ============================================================
 // SQLite test entry points (always run)
 // ============================================================
@@ -396,6 +481,11 @@ mod sqlite_backend {
     #[tokio::test]
     async fn task_skip_roundtrip() {
         scenario_task_skip_roundtrip(&fresh().await).await;
+    }
+
+    #[tokio::test]
+    async fn record_fact() {
+        scenario_record_fact(&fresh().await).await;
     }
 }
 
@@ -447,5 +537,11 @@ mod mariadb_backend {
     #[ignore = "requires Docker for MariaDB testcontainer"]
     async fn task_skip_roundtrip() {
         scenario_task_skip_roundtrip(&fresh_repo().await).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker for MariaDB testcontainer"]
+    async fn record_fact() {
+        scenario_record_fact(&fresh_repo().await).await;
     }
 }

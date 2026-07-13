@@ -7,13 +7,44 @@
 
 use crate::error::DbResult;
 use async_trait::async_trait;
+use chrono::NaiveDate;
 use pomone_domain::{
     Crop, CropId, Family, FamilyId, FieldEvent, FieldEventId, Location, LocationId, LocationKind,
-    LocationKindId, Planting, PlantingId, Strata, StrataId, Task, TaskId, TaskImplement,
-    TaskImplementId, TaskMethod, TaskMethodId, TaskSeries, TaskSeriesId, TaskType, TaskTypeId,
-    Treatment, TreatmentId, Variety, VarietyId, YearlyHarvest,
+    LocationKindId, Planting, PlantingId, SkipReason, Strata, StrataId, Task, TaskId,
+    TaskImplement, TaskImplementId, TaskMethod, TaskMethodId, TaskSeries, TaskSeriesId, TaskType,
+    TaskTypeId, Treatment, TreatmentId, Variety, VarietyId, YearlyHarvest,
 };
 use uuid::Uuid;
+
+/// The state change a fact projects onto a `task` row, applied atomically with
+/// the event insert by [`FactsRepo::record_fact`]. These are the ONLY writes to
+/// the settled-state columns (`completed_on`, `skipped_on`, `skip_reason`,
+/// `skip_note`) — enforced by a lint test (story 1.2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TaskProjection {
+    /// Mark the task done on `on`; clears any skip.
+    Done { task_id: TaskId, on: NaiveDate },
+    /// Mark the task skipped on `on` with a reason (+ optional note); clears any
+    /// completion.
+    Skipped {
+        task_id: TaskId,
+        on: NaiveDate,
+        reason: SkipReason,
+        note: Option<String>,
+    },
+    /// Reopen the task — clear every settled-state column back to pending.
+    Reopen { task_id: TaskId },
+}
+
+/// Whether [`FactsRepo::record_fact`] actually applied the fact or found it
+/// already recorded (idempotent replay of the same event id).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FactOutcome {
+    /// The event was new: it was inserted and its projection applied.
+    Recorded,
+    /// An event with this id already existed: nothing was changed.
+    AlreadyRecorded,
+}
 
 #[async_trait]
 pub trait FamilyRepo: Send + Sync {
@@ -179,6 +210,22 @@ pub trait FieldEventRepo: Send + Sync {
     async fn field_event_list_all(&self) -> DbResult<Vec<FieldEvent>>;
 }
 
+/// The single write path for settled task state (story 1.2). `record_fact`
+/// inserts the event AND applies its `TaskProjection` in ONE transaction, so
+/// "marked" always means "persisted". It is the only place allowed to UPDATE
+/// the task settled-state columns — a lint test enforces that.
+#[async_trait]
+pub trait FactsRepo: Send + Sync {
+    /// Insert `event` and apply `projection` atomically. Idempotent: if an
+    /// event with the same id already exists, nothing is changed and
+    /// [`FactOutcome::AlreadyRecorded`] is returned (no re-projection).
+    async fn record_fact(
+        &self,
+        event: &FieldEvent,
+        projection: &TaskProjection,
+    ) -> DbResult<FactOutcome>;
+}
+
 /// Aggregated trait that backends implement. Application code depends on
 /// `dyn Repository` so backends can be swapped at runtime.
 pub trait Repository:
@@ -197,6 +244,7 @@ pub trait Repository:
     + TaskRepo
     + TreatmentRepo
     + FieldEventRepo
+    + FactsRepo
     + Send
     + Sync
 {

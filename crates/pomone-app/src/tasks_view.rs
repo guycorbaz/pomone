@@ -186,9 +186,9 @@ pub async fn create_task(
     let task_type_id: TaskTypeId = parse_id(task_type_id_str)?;
     let planned_on = parse_iso_date_local(planned_on_iso)?;
     let (planting_id, location_id) = resolve_planting(repo, planting_id_str).await?;
-    let completed_on = if completed { Some(today) } else { None };
     let notes_opt = empty_to_none(notes);
 
+    // Tasks are always created pending; completion is a fact (story 1.2).
     let task = Task::new(
         planting_id,
         location_id,
@@ -196,12 +196,23 @@ pub async fn create_task(
         None,
         None,
         planned_on,
-        completed_on,
+        None,
         None,
         None,
         notes_opt,
     );
     repo.task_create(&task).await?;
+    if completed {
+        crate::facts::record_fact(
+            repo,
+            crate::facts::Fact::Done {
+                task_id: task.id,
+                on: today,
+            },
+            today.and_hms_opt(0, 0, 0).unwrap_or_default(),
+        )
+        .await?;
+    }
     Ok(task.id.to_string())
 }
 
@@ -227,15 +238,10 @@ pub async fn update_task(
         kind: "task",
         id: task_id_str.to_owned(),
     })?;
-    // Preserve a non-today completion date if the user keeps the checkbox
-    // on (so re-saving a task already marked done last week doesn't shift
-    // the date). Only flip None ↔ Some(today) when the bool actually changed.
-    let completed_on = match (existing.completed_on, completed) {
-        (Some(prev), true) => Some(prev),
-        (None, true) => Some(today),
-        (_, false) => None,
-    };
 
+    // Editable fields go through task_update; the settled-state columns
+    // (completed_on/skip_*) are carried over untouched (task_update ignores
+    // them) and reconciled below through the single fact write path.
     let updated = Task {
         id: existing.id,
         planting_id: existing.planting_id,
@@ -245,7 +251,7 @@ pub async fn update_task(
         implement_id: existing.implement_id,
         series_id: existing.series_id,
         planned_on,
-        completed_on,
+        completed_on: existing.completed_on,
         duration_min: existing.duration_min,
         labor_hours: existing.labor_hours,
         notes: notes_opt,
@@ -254,6 +260,34 @@ pub async fn update_task(
         skip_note: existing.skip_note,
     };
     repo.task_update(&updated).await?;
+
+    // Reconcile the completion checkbox via facts, only on a real transition.
+    let recorded_at = today.and_hms_opt(0, 0, 0).unwrap_or_default();
+    match (existing.completed_on.is_some(), completed) {
+        (false, true) => {
+            crate::facts::record_fact(
+                repo,
+                crate::facts::Fact::Done {
+                    task_id: id,
+                    on: today,
+                },
+                recorded_at,
+            )
+            .await?;
+        }
+        (true, false) => {
+            crate::facts::record_fact(
+                repo,
+                crate::facts::Fact::Reopened {
+                    task_id: id,
+                    on: today,
+                },
+                recorded_at,
+            )
+            .await?;
+        }
+        _ => {}
+    }
     Ok(())
 }
 

@@ -426,10 +426,12 @@ impl TaskRepo for MariaDbRepository {
     }
 
     async fn task_update(&self, t: &Task) -> DbResult<()> {
+        // Settled-state columns are projected exclusively by
+        // `facts::record_fact` (story 1.2) — never written here (lint-enforced).
         let res = sqlx::query(
             "UPDATE task SET planting_id = ?, location_id = ?, task_type_id = ?, \
              task_method_id = ?, implement_id = ?, series_id = ?, planned_on = ?, \
-             completed_on = ?, duration_min = ?, labor_hours = ?, notes = ? WHERE id = ?",
+             duration_min = ?, labor_hours = ?, notes = ? WHERE id = ?",
         )
         .bind(t.planting_id.map(PlantingId::as_uuid))
         .bind(t.location_id.map(LocationId::as_uuid))
@@ -438,7 +440,6 @@ impl TaskRepo for MariaDbRepository {
         .bind(t.implement_id.map(TaskImplementId::as_uuid))
         .bind(t.series_id.map(TaskSeriesId::as_uuid))
         .bind(t.planned_on)
-        .bind(t.completed_on)
         .bind(t.duration_min.map(i64::from))
         .bind(t.labor_hours)
         .bind(t.notes.as_deref())
