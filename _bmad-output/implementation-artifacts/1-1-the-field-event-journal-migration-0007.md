@@ -1,6 +1,6 @@
 # Story 1.1: The field_event journal (migration 0007)
 
-Status: in-review
+Status: done
 
 ## Story
 
