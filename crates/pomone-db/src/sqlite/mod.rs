@@ -2,6 +2,7 @@
 //! trait.
 
 mod crop;
+mod facts;
 mod family;
 mod field_event;
 mod location;

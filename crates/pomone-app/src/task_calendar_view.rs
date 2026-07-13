@@ -101,9 +101,10 @@ pub async fn list_task_calendar_rows(
     Ok(rows)
 }
 
-/// Toggle a task's completion state: if it has no `completed_on`, set it to
-/// `on`; if it already has one, clear it. Returns the new state (`true` =
-/// now completed). Useful for the calendar's click-to-complete.
+/// Toggle a task's completion state: if it has no `completed_on`, mark it done
+/// on `on`; if it already has one, reopen it (an explicit correction). Returns
+/// the new state (`true` = now completed). The write goes through the single
+/// fact write path — never a direct task UPDATE (story 1.2).
 pub async fn toggle_task_completion(
     repo: &dyn Repository,
     task_id: TaskId,
@@ -117,15 +118,15 @@ pub async fn toggle_task_completion(
             id: task_id.to_string(),
         })?;
     let now_completed = task.completed_on.is_none();
-    let updated = if now_completed {
-        task.mark_completed(on)
+    // `recorded_at` is derived from the caller-supplied date (no clock read
+    // below the UI); story 1.3 refines this to an injected timestamp.
+    let recorded_at = on.and_hms_opt(0, 0, 0).unwrap_or_default();
+    let fact = if now_completed {
+        crate::facts::Fact::Done { task_id, on }
     } else {
-        pomone_domain::Task {
-            completed_on: None,
-            ..task
-        }
+        crate::facts::Fact::Reopened { task_id, on }
     };
-    repo.task_update(&updated).await?;
+    crate::facts::record_fact(repo, fact, recorded_at).await?;
     Ok(now_completed)
 }
 

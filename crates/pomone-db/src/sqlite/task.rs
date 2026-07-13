@@ -428,10 +428,14 @@ impl TaskRepo for SqliteRepository {
     }
 
     async fn task_update(&self, t: &Task) -> DbResult<()> {
+        // NOTE: the settled-state columns (completed_on, skipped_on,
+        // skip_reason, skip_note) are intentionally NOT written here — they are
+        // projected exclusively by `facts::record_fact` (story 1.2), enforced
+        // by the `facts_write_path` lint test.
         let res = sqlx::query(
             "UPDATE task SET planting_id = ?2, location_id = ?3, task_type_id = ?4, \
              task_method_id = ?5, implement_id = ?6, series_id = ?7, planned_on = ?8, \
-             completed_on = ?9, duration_min = ?10, labor_hours = ?11, notes = ?12 \
+             duration_min = ?9, labor_hours = ?10, notes = ?11 \
              WHERE id = ?1",
         )
         .bind(t.id.as_uuid())
@@ -442,7 +446,6 @@ impl TaskRepo for SqliteRepository {
         .bind(t.implement_id.map(TaskImplementId::as_uuid))
         .bind(t.series_id.map(TaskSeriesId::as_uuid))
         .bind(t.planned_on)
-        .bind(t.completed_on)
         .bind(t.duration_min.map(i64::from))
         .bind(opt_decimal_to_text(t.labor_hours))
         .bind(t.notes.as_deref())
@@ -602,13 +605,15 @@ mod tests {
         assert_eq!(in_may.len(), 1);
         assert_eq!(in_may[0].id, t1.id);
 
-        // mark t1 completed, then update
+        // task_update must NOT touch settled state (completed_on): that is
+        // projected only by facts::record_fact (story 1.2). Updating a task
+        // that carries a completed_on leaves the stored value unchanged.
         let done = t1.mark_completed(NaiveDate::from_ymd_opt(2026, 5, 11).unwrap());
         repo.task_update(&done).await.unwrap();
         let got = repo.task_get(done.id).await.unwrap().unwrap();
         assert_eq!(
-            got.completed_on,
-            Some(NaiveDate::from_ymd_opt(2026, 5, 11).unwrap())
+            got.completed_on, None,
+            "task_update must not project completion"
         );
 
         // delete

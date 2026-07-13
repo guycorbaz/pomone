@@ -4,13 +4,14 @@
 //! (in-memory) and MariaDB (testcontainer). The MariaDB tests are
 //! `#[ignore]`d by default; run with `cargo test -- --ignored`.
 
-use crate::repository::Repository;
+use crate::error::DbError;
+use crate::repository::{FactOutcome, Repository, TaskProjection};
 use crate::seed::seed_defaults;
 use chrono::{NaiveDate, NaiveDateTime};
 use pomone_domain::{
-    AnnualProfile, Crop, FactKind, Family, FieldEvent, Lifespan, Location, LocationKind, Planting,
-    PlantingSchedule, PluriannualProfile, PruningSeason, SkipReason, Strata, Task, Treatment,
-    Variety, VarietyProfile, YearlyHarvest,
+    skip_payload, AnnualProfile, Crop, FactKind, Family, FieldEvent, FieldEventId, Lifespan,
+    Location, LocationKind, Planting, PlantingSchedule, PluriannualProfile, PruningSeason,
+    SkipReason, Strata, Task, TaskId, Treatment, Variety, VarietyProfile, YearlyHarvest,
 };
 use rust_decimal_macros::dec;
 use uuid::Uuid;
@@ -21,6 +22,18 @@ fn d(y: i32, m: u32, day: u32) -> NaiveDate {
 
 fn dt(y: i32, m: u32, day: u32, h: u32, mi: u32) -> NaiveDateTime {
     d(y, m, day).and_hms_opt(h, mi, 0).unwrap()
+}
+
+/// Compact `FieldEvent` builder for the `task`-targeted fact scenarios.
+fn task_event(
+    kind: FactKind,
+    task_id: TaskId,
+    on: NaiveDate,
+    at: NaiveDateTime,
+    payload: &str,
+    corrects: Option<FieldEventId>,
+) -> FieldEvent {
+    FieldEvent::new(kind, "task", task_id.as_uuid(), on, at, payload, corrects).unwrap()
 }
 
 // ============================================================
@@ -351,6 +364,143 @@ async fn scenario_task_skip_roundtrip(repo: &dyn Repository) {
     assert_eq!(got.skip_note.as_deref(), Some("trop humide"));
 }
 
+/// `record_fact` (story 1.2): the event insert and the task projection commit
+/// atomically, idempotently on a replayed id, identically on both backends.
+async fn scenario_record_fact(repo: &dyn Repository) {
+    seed_defaults(repo).await.unwrap();
+    let task_type = repo.task_type_list().await.unwrap()[0].id;
+    let task = Task::new(
+        None,
+        None,
+        task_type,
+        None,
+        None,
+        d(2026, 3, 1),
+        None,
+        None,
+        None,
+        None,
+    );
+    repo.task_create(&task).await.unwrap();
+
+    // Done: appends one event AND projects completion, in one transaction.
+    let done = task_event(
+        FactKind::TaskDone,
+        task.id,
+        d(2026, 3, 2),
+        dt(2026, 3, 2, 9, 0),
+        "{}",
+        None,
+    );
+    let done_proj = TaskProjection::Done {
+        task_id: task.id,
+        on: d(2026, 3, 2),
+    };
+    assert_eq!(
+        repo.record_fact(&done, &done_proj).await.unwrap(),
+        FactOutcome::Recorded
+    );
+    let got = repo.task_get(task.id).await.unwrap().unwrap();
+    assert_eq!(got.completed_on, Some(d(2026, 3, 2)));
+    assert_eq!(
+        repo.field_event_list_for_target("task", task.id.as_uuid())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // Idempotent replay: same id → AlreadyRecorded, no second event, no change.
+    assert_eq!(
+        repo.record_fact(&done, &done_proj).await.unwrap(),
+        FactOutcome::AlreadyRecorded
+    );
+    assert_eq!(
+        repo.field_event_list_for_target("task", task.id.as_uuid())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // Skip projects the reason and clears completion.
+    let skip = task_event(
+        FactKind::TaskSkipped,
+        task.id,
+        d(2026, 3, 3),
+        dt(2026, 3, 3, 8, 0),
+        &skip_payload(SkipReason::Weather, Some("humide")),
+        None,
+    );
+    let skip_proj = TaskProjection::Skipped {
+        task_id: task.id,
+        on: d(2026, 3, 3),
+        reason: SkipReason::Weather,
+        note: Some("humide".into()),
+    };
+    repo.record_fact(&skip, &skip_proj).await.unwrap();
+    let got = repo.task_get(task.id).await.unwrap().unwrap();
+    assert_eq!(got.skip_reason, Some(SkipReason::Weather));
+    assert_eq!(got.skip_note.as_deref(), Some("humide"));
+    assert!(got.completed_on.is_none(), "skip clears completion");
+
+    // Reopen: a correction that clears state and points `corrects` at the event
+    // it amends. Exercises TaskReopened + a non-null corrects write on BOTH
+    // backends (was SQLite-only before).
+    let reopen = task_event(
+        FactKind::TaskReopened,
+        task.id,
+        d(2026, 3, 4),
+        dt(2026, 3, 4, 7, 0),
+        "{}",
+        Some(skip.id),
+    );
+    repo.record_fact(&reopen, &TaskProjection::Reopen { task_id: task.id })
+        .await
+        .unwrap();
+    let got = repo.task_get(task.id).await.unwrap().unwrap();
+    assert!(
+        got.completed_on.is_none() && got.skip_reason.is_none(),
+        "reopen clears all settled state"
+    );
+    let stored = repo.field_event_get(reopen.id).await.unwrap().unwrap();
+    assert_eq!(stored.kind, FactKind::TaskReopened);
+    assert_eq!(
+        stored.corrects,
+        Some(skip.id),
+        "correction links to its target"
+    );
+}
+
+/// A fact whose projection matches no task is rejected (0-row projection) and
+/// commits NO orphan event — the whole transaction rolls back, on both backends.
+async fn scenario_record_fact_rejects_missing_task(repo: &dyn Repository) {
+    let ghost = TaskId::new();
+    let event = task_event(
+        FactKind::TaskDone,
+        ghost,
+        d(2026, 3, 5),
+        dt(2026, 3, 5, 9, 0),
+        "{}",
+        None,
+    );
+    let err = repo
+        .record_fact(
+            &event,
+            &TaskProjection::Done {
+                task_id: ghost,
+                on: d(2026, 3, 5),
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, DbError::NotFound { kind: "task", .. }));
+    assert!(
+        repo.field_event_get(event.id).await.unwrap().is_none(),
+        "a rejected fact leaves no event"
+    );
+}
+
 // ============================================================
 // SQLite test entry points (always run)
 // ============================================================
@@ -396,6 +546,16 @@ mod sqlite_backend {
     #[tokio::test]
     async fn task_skip_roundtrip() {
         scenario_task_skip_roundtrip(&fresh().await).await;
+    }
+
+    #[tokio::test]
+    async fn record_fact() {
+        scenario_record_fact(&fresh().await).await;
+    }
+
+    #[tokio::test]
+    async fn record_fact_rejects_missing_task() {
+        scenario_record_fact_rejects_missing_task(&fresh().await).await;
     }
 }
 
@@ -447,5 +607,17 @@ mod mariadb_backend {
     #[ignore = "requires Docker for MariaDB testcontainer"]
     async fn task_skip_roundtrip() {
         scenario_task_skip_roundtrip(&fresh_repo().await).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker for MariaDB testcontainer"]
+    async fn record_fact() {
+        scenario_record_fact(&fresh_repo().await).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker for MariaDB testcontainer"]
+    async fn record_fact_rejects_missing_task() {
+        scenario_record_fact_rejects_missing_task(&fresh_repo().await).await;
     }
 }

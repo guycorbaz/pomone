@@ -957,9 +957,17 @@ mod tests {
         .await
         .unwrap();
         let task = repo.task_list_for_planting(p.id).await.unwrap().remove(0);
-        repo.task_update(&task.mark_completed(d(2026, 3, 2)))
-            .await
-            .unwrap();
+        // Completion goes through the single fact write path (story 1.2).
+        crate::facts::record_fact(
+            &repo,
+            crate::facts::Fact::Done {
+                task_id: task.id,
+                on: d(2026, 3, 2),
+            },
+            d(2026, 3, 2).and_hms_opt(0, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
         assert!(planting_has_activity(&repo, p.id).await.unwrap());
         let err = delete_planting(&repo, p.id).await.unwrap_err();
         assert!(matches!(err, AppError::PlantingHasActivity));
