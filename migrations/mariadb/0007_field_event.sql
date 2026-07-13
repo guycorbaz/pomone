@@ -6,7 +6,7 @@
 CREATE TABLE field_event (
     id           BINARY(16)   NOT NULL PRIMARY KEY,
     kind         VARCHAR(64)  NOT NULL,
-    target_kind  VARCHAR(32)  NOT NULL,
+    target_kind  VARCHAR(64)  NOT NULL,
     target_id    BINARY(16)   NOT NULL,
     occurred_at  DATE         NOT NULL,
     recorded_at  DATETIME(6)  NOT NULL,

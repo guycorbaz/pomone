@@ -12,12 +12,16 @@
 //! The string form of [`FactKind`] and [`SkipReason`] lives in the `pomone-db`
 //! codec (identical literals on both backends); the domain keeps the enums pure.
 
-use crate::error::DomainResult;
+use crate::error::{DomainError, DomainResult};
 use crate::ids::FieldEventId;
 use crate::validation::require_name;
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime, Timelike};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+
+/// Max length of `target_kind`, matching the `VARCHAR(64)` MariaDB column so
+/// both backends accept/reject the same values (SQLite `TEXT` is unbounded).
+pub const MAX_TARGET_KIND_LEN: usize = 64;
 
 /// What a field event asserts. Dot-namespaced by target (`task.done`,
 /// `task.skipped`, `planting.terminated`). The set grows as later epics record
@@ -92,6 +96,20 @@ impl FieldEvent {
         payload: impl Into<String>,
         corrects: Option<FieldEventId>,
     ) -> DomainResult<Self> {
+        let target_kind = require_name(target_kind)?;
+        if target_kind.len() > MAX_TARGET_KIND_LEN {
+            return Err(DomainError::TooLong {
+                field: "target_kind",
+                max: MAX_TARGET_KIND_LEN,
+                len: target_kind.len(),
+            });
+        }
+        // Truncate to microseconds so the value round-trips identically on both
+        // backends (SQLite stores ISO TEXT with nanoseconds; MariaDB
+        // `DATETIME(6)` truncates to µs — otherwise the two would disagree).
+        let recorded_at = recorded_at
+            .with_nanosecond(recorded_at.nanosecond() / 1_000 * 1_000)
+            .unwrap_or(recorded_at);
         let payload: String = payload.into();
         let payload = payload.trim();
         let payload = if payload.is_empty() {
@@ -102,7 +120,7 @@ impl FieldEvent {
         Ok(Self {
             id: FieldEventId::new(),
             kind,
-            target_kind: require_name(target_kind)?,
+            target_kind,
             target_id,
             occurred_at,
             recorded_at,
@@ -157,6 +175,58 @@ mod tests {
         )
         .unwrap();
         assert_eq!(e.payload, "{}");
+    }
+
+    #[test]
+    fn overlong_target_kind_is_rejected() {
+        let long = "x".repeat(MAX_TARGET_KIND_LEN + 1);
+        let res = FieldEvent::new(
+            FactKind::TaskDone,
+            long,
+            Uuid::new_v4(),
+            NaiveDate::from_ymd_opt(2026, 3, 2).unwrap(),
+            dt(),
+            "{}",
+            None,
+        );
+        assert!(matches!(
+            res,
+            Err(DomainError::TooLong {
+                field: "target_kind",
+                ..
+            })
+        ));
+        // The boundary length itself is accepted.
+        assert!(FieldEvent::new(
+            FactKind::TaskDone,
+            "y".repeat(MAX_TARGET_KIND_LEN),
+            Uuid::new_v4(),
+            NaiveDate::from_ymd_opt(2026, 3, 2).unwrap(),
+            dt(),
+            "{}",
+            None,
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn recorded_at_is_truncated_to_microseconds() {
+        let with_nanos = NaiveDate::from_ymd_opt(2026, 3, 2)
+            .unwrap()
+            .and_hms_nano_opt(9, 30, 0, 123_456_789)
+            .unwrap();
+        let e = FieldEvent::new(
+            FactKind::TaskDone,
+            "task",
+            Uuid::new_v4(),
+            NaiveDate::from_ymd_opt(2026, 3, 2).unwrap(),
+            with_nanos,
+            "{}",
+            None,
+        )
+        .unwrap();
+        // 123_456_789 ns → 123_456_000 ns (microsecond precision).
+        assert_eq!(e.recorded_at.nanosecond(), 123_456_000);
     }
 
     #[test]

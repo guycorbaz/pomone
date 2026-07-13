@@ -46,6 +46,21 @@ So that every field gesture has a durable, idempotent record.
 - **MariaDB** impl (`mariadb/field_event.rs`) is untested locally by design (testcontainer `#[ignore]`d; counted at 0% coverage per `CLAUDE.md`) — it mirrors the SQLite impl 1:1 except `?` placeholders and `INSERT IGNORE`. Its parity is asserted by the shared `scenario_field_events` when run with `--ignored` under Docker.
 - **`recorded_at` = `NaiveDateTime`**: sqlx stores it as ISO TEXT (SQLite) / `DATETIME(6)` (MariaDB); round-trip verified by `scenario_field_events` (SQLite leg).
 
+### Review Findings
+
+3-layer adversarial review (Blind Hunter / Edge Case Hunter / Acceptance Auditor) — per Epic 0 retro AI-2. 6 patch, 1 defer, 3 dismissed.
+
+- [x] [Review][Patch] Deterministic journal order: added `, id` tiebreaker to every `ORDER BY recorded_at` (both backends). [crates/pomone-db/src/{sqlite,mariadb}/field_event.rs]
+- [x] [Review][Patch] MariaDB conflict-no-op scope: replaced `INSERT IGNORE` with `INSERT … ON DUPLICATE KEY UPDATE id = id` — only a PK conflict no-ops now, matching SQLite's `ON CONFLICT(id) DO NOTHING`. [crates/pomone-db/src/mariadb/field_event.rs]
+- [x] [Review][Patch] Bounded `target_kind` to `MAX_TARGET_KIND_LEN = 64` in `FieldEvent::new` (new `DomainError::TooLong`) and widened the MariaDB column to `VARCHAR(64)` (= `kind`); both backends now accept/reject the same values. Boundary + rejection tested. [crates/pomone-domain/src/{field_event.rs,error.rs}, migrations/mariadb/0007_field_event.sql]
+- [x] [Review][Patch] Truncate `recorded_at` to microseconds in `FieldEvent::new` (nanos → µs) so SQLite (TEXT) and MariaDB `DATETIME(6)` round-trip identically. Tested. [crates/pomone-domain/src/field_event.rs]
+- [x] [Review][Patch] `target_has_data` now probes `field_event_list_all` too — a journal-only target no longer slips the emptiness guard. [crates/pomone-app/src/migration.rs]
+- [x] [Review][Patch] Added `scenario_task_skip_roundtrip` (both backend entry points): builds a task with `skip_reason`/`skipped_on`/`skip_note` set and asserts the DB round-trip — closes AC1's literal "SkipReason round-trip on both backends". [crates/pomone-db/src/cross_backend_tests.rs]
+- [x] [Review][Defer] Story 1.3's `occurred_at ≤ recorded_at` guard must tolerate/flag rows written before 1.3 — 1.1 is append-only, so any inverted pair recorded pre-1.3 is permanent history the forward-only invariant can't retroactively reject. [crates/pomone-domain/src/field_event.rs] — deferred to story 1.3.
+- [x] [Review][Dismissed] Three Lows dismissed by design: (a) `payload` not JSON-validated — an append-only "nothing is lost" journal must not *reject* a fact over payload shape; 1.2 owns payload construction. (b) `payload → "{}"` normalisation only in the constructor — matches the codebase's pub-fields-plus-constructor-invariant pattern (`Treatment`, `Task`). (c) idempotent replay silently drops divergent content for a reused id — by design; the client id IS the idempotency key.
+
 ## Completion Notes
 
-_(review pending — 3-layer adversarial review scheduled per the Epic 0 retro action item AI-2, since this is the first schema/domain/dual-backend story.)_
+- 3-layer adversarial review (retro AI-2) run on PR #125: **6 patch, 1 defer, 3 dismissed, 0 blocking**. All 6 patches applied — they hardened dual-backend parity (ordering tiebreaker, `ON DUPLICATE KEY UPDATE` scope, `target_kind` length + column alignment, µs truncation) and closed an emptiness-guard gap and the literal AC1 `SkipReason` DB round-trip.
+- Post-fix: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` → **405 passed, 0 failed**; coverage **81.46% lines** (≥80).
+- One deferral recorded for **story 1.3**: its `occurred_at ≤ recorded_at` guard must tolerate/flag rows written before 1.3 (append-only ⇒ pre-1.3 inverted pairs are permanent).

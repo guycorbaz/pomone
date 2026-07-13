@@ -9,8 +9,8 @@ use crate::seed::seed_defaults;
 use chrono::{NaiveDate, NaiveDateTime};
 use pomone_domain::{
     AnnualProfile, Crop, FactKind, Family, FieldEvent, Lifespan, Location, LocationKind, Planting,
-    PlantingSchedule, PluriannualProfile, PruningSeason, Strata, Treatment, Variety,
-    VarietyProfile, YearlyHarvest,
+    PlantingSchedule, PluriannualProfile, PruningSeason, SkipReason, Strata, Task, Treatment,
+    Variety, VarietyProfile, YearlyHarvest,
 };
 use rust_decimal_macros::dec;
 use uuid::Uuid;
@@ -320,6 +320,37 @@ async fn scenario_field_events(repo: &dyn Repository) {
     assert_eq!(repo.field_event_list_all().await.unwrap().len(), 2);
 }
 
+/// `SkipReason` must round-trip through the DB identically on both backends
+/// (AC1). The skip columns' *projection* is story 1.2's, but persistence has to
+/// work now — so build a task with the columns set directly and read it back.
+async fn scenario_task_skip_roundtrip(repo: &dyn Repository) {
+    seed_defaults(repo).await.unwrap();
+    let task_type = repo.task_type_list().await.unwrap()[0].id;
+
+    let mut task = Task::new(
+        None,
+        None,
+        task_type,
+        None,
+        None,
+        d(2026, 3, 2),
+        None,
+        None,
+        None,
+        None,
+    );
+    task.skipped_on = Some(d(2026, 3, 2));
+    task.skip_reason = Some(SkipReason::Weather);
+    task.skip_note = Some("trop humide".into());
+    repo.task_create(&task).await.unwrap();
+
+    let got = repo.task_get(task.id).await.unwrap().unwrap();
+    assert_eq!(got, task, "skip columns must round-trip");
+    assert_eq!(got.skip_reason, Some(SkipReason::Weather));
+    assert_eq!(got.skipped_on, Some(d(2026, 3, 2)));
+    assert_eq!(got.skip_note.as_deref(), Some("trop humide"));
+}
+
 // ============================================================
 // SQLite test entry points (always run)
 // ============================================================
@@ -360,6 +391,11 @@ mod sqlite_backend {
     #[tokio::test]
     async fn field_events() {
         scenario_field_events(&fresh().await).await;
+    }
+
+    #[tokio::test]
+    async fn task_skip_roundtrip() {
+        scenario_task_skip_roundtrip(&fresh().await).await;
     }
 }
 
@@ -405,5 +441,11 @@ mod mariadb_backend {
     #[ignore = "requires Docker for MariaDB testcontainer"]
     async fn field_events() {
         scenario_field_events(&fresh_repo().await).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker for MariaDB testcontainer"]
+    async fn task_skip_roundtrip() {
+        scenario_task_skip_roundtrip(&fresh_repo().await).await;
     }
 }

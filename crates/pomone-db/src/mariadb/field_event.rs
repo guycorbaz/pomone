@@ -15,12 +15,14 @@ const FIELD_EVENT_COLUMNS: &str =
 #[async_trait]
 impl FieldEventRepo for MariaDbRepository {
     async fn field_event_create(&self, e: &FieldEvent) -> DbResult<()> {
-        // `INSERT IGNORE` = conflict-no-op on the primary key, mirroring
-        // SQLite's `ON CONFLICT(id) DO NOTHING`: a replayed insert is silently
-        // skipped (story 1.1 idempotency).
+        // `ON DUPLICATE KEY UPDATE id = id` scopes the no-op to a primary-key
+        // conflict only, mirroring SQLite's `ON CONFLICT(id) DO NOTHING`. (An
+        // `INSERT IGNORE` would also silence truncation/other errors, diverging
+        // from SQLite; this keeps the two backends behaviourally identical.)
         sqlx::query(&format!(
-            "INSERT IGNORE INTO field_event ({FIELD_EVENT_COLUMNS}) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
+            "INSERT INTO field_event ({FIELD_EVENT_COLUMNS}) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?) \
+             ON DUPLICATE KEY UPDATE id = id"
         ))
         .bind(e.id.as_uuid())
         .bind(encode_fact_kind(e.kind))
@@ -52,7 +54,7 @@ impl FieldEventRepo for MariaDbRepository {
     ) -> DbResult<Vec<FieldEvent>> {
         let rows = sqlx::query(&format!(
             "SELECT {FIELD_EVENT_COLUMNS} FROM field_event \
-             WHERE target_kind = ? AND target_id = ? ORDER BY recorded_at"
+             WHERE target_kind = ? AND target_id = ? ORDER BY recorded_at, id"
         ))
         .bind(target_kind)
         .bind(target_id)
@@ -63,7 +65,7 @@ impl FieldEventRepo for MariaDbRepository {
 
     async fn field_event_list_all(&self) -> DbResult<Vec<FieldEvent>> {
         let rows = sqlx::query(&format!(
-            "SELECT {FIELD_EVENT_COLUMNS} FROM field_event ORDER BY recorded_at"
+            "SELECT {FIELD_EVENT_COLUMNS} FROM field_event ORDER BY recorded_at, id"
         ))
         .fetch_all(&self.pool)
         .await?;

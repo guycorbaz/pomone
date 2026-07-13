@@ -52,7 +52,7 @@ impl FieldEventRepo for SqliteRepository {
     ) -> DbResult<Vec<FieldEvent>> {
         let rows = sqlx::query(&format!(
             "SELECT {FIELD_EVENT_COLUMNS} FROM field_event \
-             WHERE target_kind = ?1 AND target_id = ?2 ORDER BY recorded_at"
+             WHERE target_kind = ?1 AND target_id = ?2 ORDER BY recorded_at, id"
         ))
         .bind(target_kind)
         .bind(target_id)
@@ -63,7 +63,7 @@ impl FieldEventRepo for SqliteRepository {
 
     async fn field_event_list_all(&self) -> DbResult<Vec<FieldEvent>> {
         let rows = sqlx::query(&format!(
-            "SELECT {FIELD_EVENT_COLUMNS} FROM field_event ORDER BY recorded_at"
+            "SELECT {FIELD_EVENT_COLUMNS} FROM field_event ORDER BY recorded_at, id"
         ))
         .fetch_all(&self.pool)
         .await?;

@@ -168,7 +168,8 @@ async fn target_has_data(target: &dyn Repository) -> AppResult<bool> {
         || !target.crop_list().await?.is_empty()
         || !target.variety_list().await?.is_empty()
         || !target.planting_list().await?.is_empty()
-        || !target.task_list().await?.is_empty())
+        || !target.task_list().await?.is_empty()
+        || !target.field_event_list_all().await?.is_empty())
 }
 
 fn push_with_ancestors(
