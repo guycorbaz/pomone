@@ -6,7 +6,7 @@
 //! `crates/pomone-db/tests/facts_write_path.rs` (story 1.2).
 
 use crate::codec::{encode_fact_kind, encode_skip_reason};
-use crate::error::DbResult;
+use crate::error::{DbError, DbResult};
 use crate::repository::{FactOutcome, FactsRepo, TaskProjection};
 use crate::sqlite::SqliteRepository;
 use async_trait::async_trait;
@@ -21,22 +21,14 @@ impl FactsRepo for SqliteRepository {
     ) -> DbResult<FactOutcome> {
         let mut tx = self.pool.begin().await?;
 
-        // Idempotent replay: if this event id is already recorded, change
-        // nothing (do not re-project). Dropping the tx rolls back the read-only
-        // work.
-        let existing: Option<i64> = sqlx::query_scalar("SELECT 1 FROM field_event WHERE id = ?1")
-            .bind(event.id.as_uuid())
-            .fetch_optional(&mut *tx)
-            .await?;
-        if existing.is_some() {
-            return Ok(FactOutcome::AlreadyRecorded);
-        }
-
-        // 1. Append the event (identical shape to `field_event_create`).
-        sqlx::query(
+        // 1. Append the event. The conflict-no-op is the idempotency point AND
+        //    is race-safe (unlike a separate SELECT-then-INSERT): a replayed id
+        //    inserts 0 rows, so we change nothing and roll back on tx drop.
+        let inserted = sqlx::query(
             "INSERT INTO field_event \
              (id, kind, target_kind, target_id, occurred_at, recorded_at, payload, corrects) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) \
+             ON CONFLICT(id) DO NOTHING",
         )
         .bind(event.id.as_uuid())
         .bind(encode_fact_kind(event.kind))
@@ -48,20 +40,33 @@ impl FactsRepo for SqliteRepository {
         .bind(event.corrects.map(FieldEventId::as_uuid))
         .execute(&mut *tx)
         .await?;
+        if inserted.rows_affected() == 0 {
+            return Ok(FactOutcome::AlreadyRecorded);
+        }
 
-        // 2. Project the settled state onto the task (the guarded writes).
-        apply_projection(&mut tx, projection).await?;
+        // 2. Project the settled state onto the task (the guarded writes). A
+        //    0-row projection means the target task is gone — reject the whole
+        //    fact (tx drop rolls back the just-inserted event) so a fact never
+        //    outlives the task it asserts.
+        if apply_projection(&mut tx, projection).await? == 0 {
+            return Err(DbError::NotFound {
+                kind: "task",
+                id: projection.task_id().to_string(),
+            });
+        }
 
         tx.commit().await?;
         Ok(FactOutcome::Recorded)
     }
 }
 
+/// Apply the projection; returns the number of task rows affected (0 = the
+/// target task does not exist).
 async fn apply_projection(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     projection: &TaskProjection,
-) -> DbResult<()> {
-    match projection {
+) -> DbResult<u64> {
+    let result = match projection {
         TaskProjection::Done { task_id, on } => {
             sqlx::query(
                 "UPDATE task SET completed_on = ?1, skipped_on = NULL, \
@@ -70,7 +75,7 @@ async fn apply_projection(
             .bind(on)
             .bind(task_id.as_uuid())
             .execute(&mut **tx)
-            .await?;
+            .await?
         }
         TaskProjection::Skipped {
             task_id,
@@ -87,7 +92,7 @@ async fn apply_projection(
             .bind(note.as_deref())
             .bind(task_id.as_uuid())
             .execute(&mut **tx)
-            .await?;
+            .await?
         }
         TaskProjection::Reopen { task_id } => {
             sqlx::query(
@@ -96,8 +101,8 @@ async fn apply_projection(
             )
             .bind(task_id.as_uuid())
             .execute(&mut **tx)
-            .await?;
+            .await?
         }
-    }
-    Ok(())
+    };
+    Ok(result.rows_affected())
 }

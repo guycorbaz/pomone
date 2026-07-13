@@ -36,6 +36,18 @@ pub enum TaskProjection {
     Reopen { task_id: TaskId },
 }
 
+impl TaskProjection {
+    /// The task this projection targets.
+    #[must_use]
+    pub fn task_id(&self) -> TaskId {
+        match self {
+            TaskProjection::Done { task_id, .. }
+            | TaskProjection::Skipped { task_id, .. }
+            | TaskProjection::Reopen { task_id } => *task_id,
+        }
+    }
+}
+
 /// Whether [`FactsRepo::record_fact`] actually applied the fact or found it
 /// already recorded (idempotent replay of the same event id).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

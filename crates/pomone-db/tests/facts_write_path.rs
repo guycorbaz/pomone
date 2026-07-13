@@ -35,17 +35,32 @@ fn collect_rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Every `UPDATE task SET …` statement window in `src` (from the marker up to
-/// the terminating `WHERE`, or 400 chars — enough for our multi-line SQL).
-fn update_task_windows(src: &str) -> Vec<&str> {
+/// Normalise source for robust matching: collapse every whitespace run to a
+/// single space, drop spaces around `=`, and lowercase. So `UPDATE  task  SET`,
+/// `completed_on=?` and `completed_on = ?` all reduce to the same shape and
+/// can't dodge the gate on formatting alone.
+fn normalize(src: &str) -> String {
+    src.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .replace(" = ", "=")
+        .replace(" =", "=")
+        .replace("= ", "=")
+        .to_lowercase()
+}
+
+/// Every `update task set …` statement window in the normalised source (from
+/// the marker up to the terminating `where`, or 400 chars — enough for our SQL).
+fn update_task_windows(normalized: &str) -> Vec<&str> {
+    let marker = "update task set";
     let mut windows = Vec::new();
     let mut from = 0;
-    while let Some(rel) = src[from..].find("UPDATE task SET") {
+    while let Some(rel) = normalized[from..].find(marker) {
         let start = from + rel;
-        let rest = &src[start..];
-        let end = rest.find("WHERE").unwrap_or(rest.len().min(400));
+        let rest = &normalized[start..];
+        let end = rest.find("where").unwrap_or(rest.len().min(400));
         windows.push(&rest[..end]);
-        from = start + "UPDATE task SET".len();
+        from = start + marker.len();
     }
     windows
 }
@@ -65,10 +80,10 @@ fn settled_columns_are_written_only_in_facts_files() {
         if path.file_name().is_some_and(|n| n == "facts_write_path.rs") {
             continue;
         }
-        let src = fs::read_to_string(path).expect("readable source");
-        for window in update_task_windows(&src) {
+        let normalized = normalize(&fs::read_to_string(path).expect("readable source"));
+        for window in update_task_windows(&normalized) {
             for col in SETTLED_COLUMNS {
-                if window.contains(&format!("{col} =")) && !is_facts {
+                if window.contains(&format!("{col}=")) && !is_facts {
                     let rel = path.strip_prefix(&root).unwrap_or(path);
                     offenders.push(format!("{} — UPDATE task SET … {col} =", rel.display()));
                 }

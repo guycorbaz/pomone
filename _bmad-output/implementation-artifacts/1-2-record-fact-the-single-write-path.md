@@ -44,6 +44,18 @@ So that marked means persisted and re-applying is harmless.
 - **No new migration** — 1.2 rides on 1.1's schema; it is a code-only write-path refactor.
 - `recorded_at` is currently derived from the caller-supplied date at midnight (no clock read below the UI). Story 1.3 refines this to a properly injected timestamp and adds the `occurred_at ≤ recorded_at` invariant.
 
+### Review Findings
+
+3-layer adversarial review (retro AI-2), strong cross-layer convergence. 3 patch, 1 defer, 3 dismissed, 0 blocking.
+
+- [x] [Review][Patch] `record_fact` is now race-safe + projection-checked: the insert uses `ON CONFLICT(id) DO NOTHING` / `ON DUPLICATE KEY UPDATE id = id` with a `rows_affected` check (0 ⇒ `AlreadyRecorded`), and a 0-row projection returns `DbError::NotFound` (tx rolls back — no orphan event). New `TaskProjection::task_id()`. [crates/pomone-db/src/{sqlite,mariadb}/facts.rs, repository.rs]
+- [x] [Review][Patch] Lint parser hardened: source is whitespace-collapsed, `=`-despaced and lowercased before matching, so `completed_on=?` / `UPDATE  task  SET` / case variants can't evade it. Negative-tested with the no-space form. [crates/pomone-db/tests/facts_write_path.rs]
+- [x] [Review][Patch] Added the reopen leg to `scenario_record_fact` (TaskReopened + Reopen projection + non-null `corrects`, both backends) **plus** `scenario_record_fact_rejects_missing_task` (0-row projection → NotFound, no orphan event, both backends). [crates/pomone-db/src/cross_backend_tests.rs]
+- [x] [Review][Defer] Reopen `corrects` can link to the wrong settling event when two settling events on a task share the midnight `recorded_at` (same-day multi-toggle), and a reopen-after-reopen re-points at the same original. Task *state* stays correct; only the audit link is imprecise, and it is unreachable from the current UI (reopen is gated on `completed_on.is_some()`). Resolved by story 1.3 (real injected timestamps remove same-day ties). — deferred to 1.3.
+- [x] [Review][Dismissed] Three by-design notes: (a) `create_task`/`update_task` do `task_create`/`task_update` then `record_fact` in two transactions — the "one transaction" claim scopes the event+projection; a crash leaves a valid *pending* task (Auditor concurs "not a violation"). (b) `task_create` still INSERTs `completed_on`/skip — required so `copy_all` migrates already-settled tasks; the single-write-path invariant is about *UPDATE* mutation of settled state, which the lint enforces. (c) `task_update` caller audit (Blind #2) — verified clean: the three remaining callers (`reschedule_task`, a labor-hours test, the inverted task-CRUD test) don't rely on `task_update` persisting completion.
+
 ## Completion Notes
 
-_(review pending — 3-layer adversarial review per retro AI-2.)_
+- 3-layer adversarial review (retro AI-2), strong cross-layer convergence: **3 patch, 1 defer, 3 dismissed, 0 blocking**. All 3 patches applied — they hardened the write path: race-safe idempotency, a rejected-fact-leaves-no-orphan-event guard, a whitespace-proof lint, and dual-backend parity for the reopen/correction path + the missing-task rejection.
+- Post-fix: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` → **414 passed, 0 failed**; coverage **81.6% lines**. Lint negative-tested (a stray `completed_on=?` fails it).
+- Deferral to **story 1.3**: reopen `corrects` linkage is imprecise on same-day midnight-`recorded_at` ties; real injected timestamps in 1.3 remove the ties.
