@@ -27,7 +27,10 @@
 //! to `today` so the result always looks current.
 
 use crate::error::AppResult;
-use crate::services::{create_annual_planting_from_sowing, create_perennial_planting};
+use crate::services::{
+    create_annual_planting, create_perennial_planting, AnnualPlantingRequest,
+    PerennialPlantingRequest,
+};
 use crate::tasks_view::create_recurring_task;
 use chrono::{Datelike, NaiveDate};
 use pomone_db::Repository;
@@ -338,76 +341,82 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     let late_spring = NaiveDate::from_ymd_opt(year, 6, 1).unwrap_or(today);
 
     // Annual plantings — every call also triggers task auto-gen.
-    create_annual_planting_from_sowing(
+    create_annual_planting(
         repo,
-        marmande.id,
-        serre.id,
-        herbacee.id,
-        early_spring,
-        Decimal::from(8),
-        24,
-        Some("démo: Marmande sous serre".to_owned()),
-        None,
+        AnnualPlantingRequest::from_sowing(
+            marmande.id,
+            serre.id,
+            herbacee.id,
+            early_spring,
+            Decimal::from(8),
+            24,
+        )
+        .with_name("démo: Marmande sous serre"),
     )
     .await?;
-    create_annual_planting_from_sowing(
+    create_annual_planting(
         repo,
-        roma.id,
-        planche_a.id,
-        herbacee.id,
-        early_spring,
-        Decimal::from(20),
-        60,
-        Some("démo: Roma plein champ".to_owned()),
-        None,
+        AnnualPlantingRequest::from_sowing(
+            roma.id,
+            planche_a.id,
+            herbacee.id,
+            early_spring,
+            Decimal::from(20),
+            60,
+        )
+        .with_name("démo: Roma plein champ"),
     )
     .await?;
-    create_annual_planting_from_sowing(
+    create_annual_planting(
         repo,
-        nantaise.id,
-        planche_b.id,
-        racinaire.id,
-        mid_spring,
-        Decimal::from(20),
-        400,
-        Some("démo: carotte semis direct".to_owned()),
-        None,
+        AnnualPlantingRequest::from_sowing(
+            nantaise.id,
+            planche_b.id,
+            racinaire.id,
+            mid_spring,
+            Decimal::from(20),
+            400,
+        )
+        .with_name("démo: carotte semis direct"),
     )
     .await?;
-    create_annual_planting_from_sowing(
+    create_annual_planting(
         repo,
-        batavia.id,
-        planche_c.id,
-        herbacee.id,
-        early_spring,
-        Decimal::from(10),
-        80,
-        Some("démo: laitue 1re succession".to_owned()),
-        None,
+        AnnualPlantingRequest::from_sowing(
+            batavia.id,
+            planche_c.id,
+            herbacee.id,
+            early_spring,
+            Decimal::from(10),
+            80,
+        )
+        .with_name("démo: laitue 1re succession"),
     )
     .await?;
-    create_annual_planting_from_sowing(
+    create_annual_planting(
         repo,
-        romaine.id,
-        planche_c.id,
-        herbacee.id,
-        mid_spring,
-        Decimal::from(10),
-        80,
-        Some("démo: laitue 2e succession".to_owned()),
-        None,
+        AnnualPlantingRequest::from_sowing(
+            romaine.id,
+            planche_c.id,
+            herbacee.id,
+            mid_spring,
+            Decimal::from(10),
+            80,
+        )
+        .with_name("démo: laitue 2e succession"),
     )
     .await?;
-    create_annual_planting_from_sowing(
+    create_annual_planting(
         repo,
-        verte_milan.id,
-        planche_d.id,
-        herbacee.id,
-        mid_spring,
-        Decimal::from(20),
-        12,
-        Some("démo: courgette".to_owned()),
-        None,
+        AnnualPlantingRequest::from_sowing(
+            verte_milan.id,
+            planche_d.id,
+            herbacee.id,
+            mid_spring,
+            Decimal::from(20),
+            12,
+        )
+        .with_name("démo: courgette"),
     )
     .await?;
     s.plantings_created += 6;
@@ -419,52 +428,56 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     let early_april = NaiveDate::from_ymd_opt(year, 4, 5).unwrap_or(today);
     let late_april = NaiveDate::from_ymd_opt(year, 4, 25).unwrap_or(today);
     let late_march = NaiveDate::from_ymd_opt(year, 3, 20).unwrap_or(today);
-    create_annual_planting_from_sowing(
+    create_annual_planting(
         repo,
-        arina.id,
-        piece_moulin.id,
-        herbacee.id,
-        previous_autumn,
-        Decimal::from(80_000), // 8 ha
-        28_000_000,            // ~3.5 M plants/ha
-        Some("démo: blé d'hiver".to_owned()),
-        None,
+        AnnualPlantingRequest::from_sowing(
+            arina.id,
+            piece_moulin.id,
+            herbacee.id,
+            previous_autumn,
+            Decimal::from(80_000), // 8 ha
+            28_000_000,            // ~3.5 M plants/ha
+        )
+        .with_name("démo: blé d'hiver"),
     )
     .await?;
-    create_annual_planting_from_sowing(
+    create_annual_planting(
         repo,
-        lg_mais.id,
-        piece_lac.id,
-        herbacee.id,
-        late_april,
-        Decimal::from(50_000), // 5 ha
-        450_000,               // ~90 000 plants/ha
-        Some("démo: maïs grain".to_owned()),
-        None,
+        AnnualPlantingRequest::from_sowing(
+            lg_mais.id,
+            piece_lac.id,
+            herbacee.id,
+            late_april,
+            Decimal::from(50_000), // 5 ha
+            450_000,               // ~90 000 plants/ha
+        )
+        .with_name("démo: maïs grain"),
     )
     .await?;
-    create_annual_planting_from_sowing(
+    create_annual_planting(
         repo,
-        charlotte.id,
-        piece_longue.id,
-        racinaire.id,
-        early_april,
-        Decimal::from(30_000), // 3 ha
-        120_000,               // ~40 000 plants/ha
-        Some("démo: pomme de terre Charlotte".to_owned()),
-        None,
+        AnnualPlantingRequest::from_sowing(
+            charlotte.id,
+            piece_longue.id,
+            racinaire.id,
+            early_april,
+            Decimal::from(30_000), // 3 ha
+            120_000,               // ~40 000 plants/ha
+        )
+        .with_name("démo: pomme de terre Charlotte"),
     )
     .await?;
-    create_annual_planting_from_sowing(
+    create_annual_planting(
         repo,
-        belamia.id,
-        piece_vernes.id,
-        racinaire.id,
-        late_march,
-        Decimal::from(30_000), // 3 ha
-        300_000,               // ~100 000 plants/ha
-        Some("démo: betterave sucrière".to_owned()),
-        None,
+        AnnualPlantingRequest::from_sowing(
+            belamia.id,
+            piece_vernes.id,
+            racinaire.id,
+            late_march,
+            Decimal::from(30_000), // 3 ha
+            300_000,               // ~100 000 plants/ha
+        )
+        .with_name("démo: betterave sucrière"),
     )
     .await?;
     s.plantings_created += 4;
@@ -472,15 +485,15 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
     // Perennial: 1 apple tree on the orchard.
     create_perennial_planting(
         repo,
-        reine_reinettes.id,
-        verger.id,
-        sous_etage.id,
-        early_spring,
-        None,
-        Decimal::from(20),
-        1,
-        Some("démo: pommier Reine des Reinettes".to_owned()),
-        None,
+        PerennialPlantingRequest::new(
+            reine_reinettes.id,
+            verger.id,
+            sous_etage.id,
+            early_spring,
+            Decimal::from(20),
+            1,
+        )
+        .with_name("démo: pommier Reine des Reinettes"),
     )
     .await?;
     s.plantings_created += 1;
@@ -624,16 +637,16 @@ mod tests {
             .into_iter()
             .find(|s| s.name == "Herbacée")
             .unwrap();
-        create_annual_planting_from_sowing(
+        create_annual_planting(
             &repo,
-            arina.id,
-            big_field.id,
-            herbacee.id,
-            NaiveDate::from_ymd_opt(2025, 10, 15).unwrap(),
-            Decimal::from(800_000), // 80 ha
-            280_000_000,            // ~3.5 M plants/ha over 80 ha
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                arina.id,
+                big_field.id,
+                herbacee.id,
+                NaiveDate::from_ymd_opt(2025, 10, 15).unwrap(),
+                Decimal::from(800_000), // 80 ha
+                280_000_000,            // ~3.5 M plants/ha over 80 ha
+            ),
         )
         .await
         .unwrap();

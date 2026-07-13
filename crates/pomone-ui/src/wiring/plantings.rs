@@ -142,15 +142,15 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
         state.runtime.block_on(async {
             services::create_annual_planting(
                 state.app.repo(),
-                variety_id,
-                location_id,
-                strata_id,
-                method,
-                date,
-                area_m2,
-                plants_count,
-                None,
-                None,
+                services::AnnualPlantingRequest::from_sowing(
+                    variety_id,
+                    location_id,
+                    strata_id,
+                    date,
+                    area_m2,
+                    plants_count,
+                )
+                .with_method(method),
             )
             .await
             .map(|_| ())
@@ -164,20 +164,20 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
             Some(validate_iso_date(&removal_text, i18n)?)
         };
         state.runtime.block_on(async {
-            services::create_perennial_planting(
-                state.app.repo(),
+            let mut request = services::PerennialPlantingRequest::new(
                 variety_id,
                 location_id,
                 strata_id,
                 established_on,
-                expected_removal_on,
                 area_m2,
                 plants_count,
-                None,
-                None,
-            )
-            .await
-            .map(|_| ())
+            );
+            if let Some(removal) = expected_removal_on {
+                request = request.with_expected_removal(removal);
+            }
+            services::create_perennial_planting(state.app.repo(), request)
+                .await
+                .map(|_| ())
         })?;
     }
     Ok(())

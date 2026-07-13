@@ -183,7 +183,8 @@ fn push_with_ancestors(
 mod tests {
     use super::*;
     use crate::services::{
-        create_annual_planting_from_sowing, create_perennial_planting, record_yearly_harvest,
+        create_annual_planting, create_perennial_planting, record_yearly_harvest,
+        AnnualPlantingRequest, PerennialPlantingRequest, YearlyHarvestRequest,
     };
     use crate::test_helpers::seed_test_data;
     use chrono::NaiveDate;
@@ -236,16 +237,16 @@ mod tests {
         let locations = source.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
         let strata = source.strata_list().await.unwrap()[0].id;
-        create_annual_planting_from_sowing(
+        create_annual_planting(
             &source,
-            varieties[0].id,
-            bed.id,
-            strata,
-            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata,
+                NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                dec!(20),
+                100,
+            ),
         )
         .await
         .unwrap();
@@ -311,25 +312,22 @@ mod tests {
         source.location_create(&location).await.unwrap();
         let planting = create_perennial_planting(
             &source,
-            variety.id,
-            location.id,
-            s.id,
-            NaiveDate::from_ymd_opt(2026, 3, 15).unwrap(),
-            None,
-            dec!(100),
-            10,
-            None,
-            None,
+            PerennialPlantingRequest::new(
+                variety.id,
+                location.id,
+                s.id,
+                NaiveDate::from_ymd_opt(2026, 3, 15).unwrap(),
+                dec!(100),
+                10,
+            ),
         )
         .await
         .unwrap();
         record_yearly_harvest(
             &source,
-            planting.id,
-            2030,
-            Some(dec!(50)),
-            Some(dec!(48)),
-            None,
+            YearlyHarvestRequest::new(planting.id, 2030)
+                .with_expected_yield(dec!(50))
+                .with_actual_yield(dec!(48)),
         )
         .await
         .unwrap();
@@ -344,7 +342,7 @@ mod tests {
     async fn copy_all_carries_tasks_and_treatments_over() {
         // Issue #102: work history and phytosanitary records used to be
         // silently dropped by backend migration.
-        use crate::services::record_treatment;
+        use crate::services::{record_treatment, TreatmentRequest};
         use pomone_db::{TaskRepo, TaskTypeRepo, TreatmentRepo};
 
         let source = seeded_repo().await;
@@ -354,28 +352,29 @@ mod tests {
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
         let strata = source.strata_list().await.unwrap()[0].id;
         // Creating a planting auto-generates its sow/harvest tasks.
-        let planting = create_annual_planting_from_sowing(
+        let planting = create_annual_planting(
             &source,
-            varieties[0].id,
-            bed.id,
-            strata,
-            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata,
+                NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                dec!(20),
+                100,
+            ),
         )
         .await
         .unwrap();
         record_treatment(
             &source,
-            planting.id,
-            NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
-            "cuivre".into(),
-            "Bouillie bordelaise".into(),
-            dec!(1.25),
-            "kg/ha".into(),
-            None,
+            TreatmentRequest::new(
+                planting.id,
+                NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+                "cuivre",
+                "Bouillie bordelaise",
+                dec!(1.25),
+                "kg/ha",
+            ),
         )
         .await
         .unwrap();

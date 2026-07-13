@@ -946,7 +946,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_variety_refused_when_planted() {
-        use crate::services::create_annual_planting_from_sowing;
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
         use chrono::NaiveDate;
         use pomone_db::{LocationRepo, StrataRepo, VarietyRepo};
         let repo = fresh_repo().await;
@@ -960,16 +960,16 @@ mod tests {
             .unwrap()
             .id;
         let strata = repo.strata_list().await.unwrap()[0].id;
-        create_annual_planting_from_sowing(
+        create_annual_planting(
             &repo,
-            variety,
-            bed,
-            strata,
-            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
-            Decimal::from(10),
-            10,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                variety,
+                bed,
+                strata,
+                NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                Decimal::from(10),
+                10,
+            ),
         )
         .await
         .unwrap();
@@ -981,7 +981,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_crop_refused_when_a_variety_is_planted() {
-        use crate::services::create_annual_planting_from_sowing;
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
         use chrono::NaiveDate;
         use pomone_db::{LocationRepo, StrataRepo, VarietyRepo};
         let repo = fresh_repo().await;
@@ -996,16 +996,16 @@ mod tests {
             .unwrap()
             .id;
         let strata = repo.strata_list().await.unwrap()[0].id;
-        create_annual_planting_from_sowing(
+        create_annual_planting(
             &repo,
-            variety,
-            bed,
-            strata,
-            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
-            rust_decimal_macros::dec!(10),
-            10,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                variety,
+                bed,
+                strata,
+                NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                rust_decimal_macros::dec!(10),
+                10,
+            ),
         )
         .await
         .unwrap();

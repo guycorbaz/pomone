@@ -25,23 +25,88 @@ pub enum EstablishmentMethod {
     BoughtPlants,
 }
 
+/// Request for [`create_annual_planting`]. Build it from the required fields via
+/// [`AnnualPlantingRequest::from_sowing`] (the raise-then-transplant default),
+/// then layer optionals with the `with_*` setters. Grouping the parameters here
+/// means E1/E2 can add an optional field without breaking any call site.
+#[derive(Debug, Clone)]
+pub struct AnnualPlantingRequest {
+    pub variety_id: VarietyId,
+    pub location_id: LocationId,
+    pub strata_id: StrataId,
+    /// `date` is the sowing date for `DirectSow`/`RaisedTransplant`, or the
+    /// planting date for `BoughtPlants`.
+    pub method: EstablishmentMethod,
+    pub date: NaiveDate,
+    pub area_m2: Decimal,
+    pub plants_count: u32,
+    pub name: Option<String>,
+    pub notes: Option<String>,
+}
+
+impl AnnualPlantingRequest {
+    /// Raise-then-transplant from a sowing date — the common default (formerly
+    /// `create_annual_planting_from_sowing`). Use [`Self::with_method`] to pick
+    /// direct-sow or bought-plants instead.
+    #[must_use]
+    pub fn from_sowing(
+        variety_id: VarietyId,
+        location_id: LocationId,
+        strata_id: StrataId,
+        sown_on: NaiveDate,
+        area_m2: Decimal,
+        plants_count: u32,
+    ) -> Self {
+        Self {
+            variety_id,
+            location_id,
+            strata_id,
+            method: EstablishmentMethod::RaisedTransplant,
+            date: sown_on,
+            area_m2,
+            plants_count,
+            name: None,
+            notes: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_method(mut self, method: EstablishmentMethod) -> Self {
+        self.method = method;
+        self
+    }
+
+    #[must_use]
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_notes(mut self, notes: impl Into<String>) -> Self {
+        self.notes = Some(notes.into());
+        self
+    }
+}
+
 /// Create an annual `Cycle` planting with the chosen establishment method.
-/// `date` is the sowing date for `DirectSow`/`RaisedTransplant`, or the
-/// planting date for `BoughtPlants`. Harvest dates are inferred from the
-/// variety's `AnnualProfile`. `Inconsistent` if the variety is pluriannual.
-#[allow(clippy::too_many_arguments)]
+/// Harvest dates are inferred from the variety's `AnnualProfile`.
+/// `Inconsistent` if the variety is pluriannual.
 pub async fn create_annual_planting(
     repo: &dyn Repository,
-    variety_id: VarietyId,
-    location_id: LocationId,
-    strata_id: StrataId,
-    method: EstablishmentMethod,
-    date: NaiveDate,
-    area_m2: Decimal,
-    plants_count: u32,
-    name: Option<String>,
-    notes: Option<String>,
+    request: AnnualPlantingRequest,
 ) -> AppResult<Planting> {
+    let AnnualPlantingRequest {
+        variety_id,
+        location_id,
+        strata_id,
+        method,
+        date,
+        area_m2,
+        plants_count,
+        name,
+        notes,
+    } = request;
     let variety = repo
         .variety_get(variety_id)
         .await?
@@ -106,51 +171,82 @@ pub async fn create_annual_planting(
     Ok(planting)
 }
 
-/// Back-compat thin wrapper: create from a sowing date using the
-/// raise-then-transplant method (the original behaviour).
-#[allow(clippy::too_many_arguments)]
-pub async fn create_annual_planting_from_sowing(
-    repo: &dyn Repository,
-    variety_id: VarietyId,
-    location_id: LocationId,
-    strata_id: StrataId,
-    sown_on: NaiveDate,
-    area_m2: Decimal,
-    plants_count: u32,
-    name: Option<String>,
-    notes: Option<String>,
-) -> AppResult<Planting> {
-    create_annual_planting(
-        repo,
-        variety_id,
-        location_id,
-        strata_id,
-        EstablishmentMethod::RaisedTransplant,
-        sown_on,
-        area_m2,
-        plants_count,
-        name,
-        notes,
-    )
-    .await
+/// Request for [`create_perennial_planting`]. Build the required fields with
+/// [`PerennialPlantingRequest::new`], then add optionals via the `with_*`
+/// setters.
+#[derive(Debug, Clone)]
+pub struct PerennialPlantingRequest {
+    pub variety_id: VarietyId,
+    pub location_id: LocationId,
+    pub strata_id: StrataId,
+    pub established_on: NaiveDate,
+    pub expected_removal_on: Option<NaiveDate>,
+    pub area_m2: Decimal,
+    pub plants_count: u32,
+    pub name: Option<String>,
+    pub notes: Option<String>,
+}
+
+impl PerennialPlantingRequest {
+    #[must_use]
+    pub fn new(
+        variety_id: VarietyId,
+        location_id: LocationId,
+        strata_id: StrataId,
+        established_on: NaiveDate,
+        area_m2: Decimal,
+        plants_count: u32,
+    ) -> Self {
+        Self {
+            variety_id,
+            location_id,
+            strata_id,
+            established_on,
+            expected_removal_on: None,
+            area_m2,
+            plants_count,
+            name: None,
+            notes: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_expected_removal(mut self, expected_removal_on: NaiveDate) -> Self {
+        self.expected_removal_on = Some(expected_removal_on);
+        self
+    }
+
+    #[must_use]
+    pub fn with_name(mut self, name: impl Into<String>) -> Self {
+        self.name = Some(name.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_notes(mut self, notes: impl Into<String>) -> Self {
+        self.notes = Some(notes.into());
+        self
+    }
 }
 
 /// Create a perennial planting (a long-lived productive plant tracked by
 /// yearly harvests). Rejects annual varieties — the caller must use
-/// [`create_annual_planting_from_sowing`] for those.
-#[allow(clippy::too_many_arguments)]
+/// [`create_annual_planting`] for those.
 pub async fn create_perennial_planting(
     repo: &dyn Repository,
-    variety_id: VarietyId,
-    location_id: LocationId,
-    strata_id: StrataId,
-    established_on: NaiveDate,
-    expected_removal_on: Option<NaiveDate>,
-    area_m2: Decimal,
-    plants_count: u32,
-    name: Option<String>,
-    notes: Option<String>,
+    request: PerennialPlantingRequest,
 ) -> AppResult<Planting> {
+    let PerennialPlantingRequest {
+        variety_id,
+        location_id,
+        strata_id,
+        established_on,
+        expected_removal_on,
+        area_m2,
+        plants_count,
+        name,
+        notes,
+    } = request;
     let variety = repo
         .variety_get(variety_id)
         .await?
@@ -284,17 +380,63 @@ pub async fn set_planting_status(
     Ok(())
 }
 
+/// Request for [`record_yearly_harvest`]. Build with
+/// [`YearlyHarvestRequest::new`] (planting + year), then attach the optional
+/// yields and notes via the `with_*` setters.
+#[derive(Debug, Clone)]
+pub struct YearlyHarvestRequest {
+    pub planting_id: PlantingId,
+    pub year: i32,
+    pub expected_yield_kg: Option<Decimal>,
+    pub actual_yield_kg: Option<Decimal>,
+    pub notes: Option<String>,
+}
+
+impl YearlyHarvestRequest {
+    #[must_use]
+    pub fn new(planting_id: PlantingId, year: i32) -> Self {
+        Self {
+            planting_id,
+            year,
+            expected_yield_kg: None,
+            actual_yield_kg: None,
+            notes: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_expected_yield(mut self, expected_yield_kg: Decimal) -> Self {
+        self.expected_yield_kg = Some(expected_yield_kg);
+        self
+    }
+
+    #[must_use]
+    pub fn with_actual_yield(mut self, actual_yield_kg: Decimal) -> Self {
+        self.actual_yield_kg = Some(actual_yield_kg);
+        self
+    }
+
+    #[must_use]
+    pub fn with_notes(mut self, notes: impl Into<String>) -> Self {
+        self.notes = Some(notes.into());
+        self
+    }
+}
+
 /// Upsert a yearly harvest record, but only when the planting is a perennial
 /// (recurring) cultivation. Annual cycles record their harvest entirely
 /// within `PlantingSchedule::Cycle` and don't use `YearlyHarvest`.
 pub async fn record_yearly_harvest(
     repo: &dyn Repository,
-    planting_id: PlantingId,
-    year: i32,
-    expected_yield_kg: Option<Decimal>,
-    actual_yield_kg: Option<Decimal>,
-    notes: Option<String>,
+    request: YearlyHarvestRequest,
 ) -> AppResult<YearlyHarvest> {
+    let YearlyHarvestRequest {
+        planting_id,
+        year,
+        expected_yield_kg,
+        actual_yield_kg,
+        notes,
+    } = request;
     let planting = repo
         .planting_get(planting_id)
         .await?
@@ -312,20 +454,63 @@ pub async fn record_yearly_harvest(
     Ok(harvest)
 }
 
+/// Request for [`record_treatment`]. Build with [`TreatmentRequest::new`] (all
+/// fields except notes are required), then optionally add notes.
+#[derive(Debug, Clone)]
+pub struct TreatmentRequest {
+    pub planting_id: PlantingId,
+    pub applied_on: NaiveDate,
+    pub active_substance: String,
+    pub product_name: String,
+    pub dose: Decimal,
+    pub dose_unit: String,
+    pub notes: Option<String>,
+}
+
+impl TreatmentRequest {
+    #[must_use]
+    pub fn new(
+        planting_id: PlantingId,
+        applied_on: NaiveDate,
+        active_substance: impl Into<String>,
+        product_name: impl Into<String>,
+        dose: Decimal,
+        dose_unit: impl Into<String>,
+    ) -> Self {
+        Self {
+            planting_id,
+            applied_on,
+            active_substance: active_substance.into(),
+            product_name: product_name.into(),
+            dose,
+            dose_unit: dose_unit.into(),
+            notes: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_notes(mut self, notes: impl Into<String>) -> Self {
+        self.notes = Some(notes.into());
+        self
+    }
+}
+
 /// Record a phytosanitary treatment applied to a planting (issue #82).
 /// Unlike yearly harvests, treatments make sense for every planting kind
 /// (annual or perennial), so the only guard is that the planting exists.
-#[allow(clippy::too_many_arguments)]
 pub async fn record_treatment(
     repo: &dyn Repository,
-    planting_id: PlantingId,
-    applied_on: NaiveDate,
-    active_substance: String,
-    product_name: String,
-    dose: Decimal,
-    dose_unit: String,
-    notes: Option<String>,
+    request: TreatmentRequest,
 ) -> AppResult<Treatment> {
+    let TreatmentRequest {
+        planting_id,
+        applied_on,
+        active_substance,
+        product_name,
+        dose,
+        dose_unit,
+        notes,
+    } = request;
     if repo.planting_get(planting_id).await?.is_none() {
         return Err(AppError::NotFound {
             kind: "planting",
@@ -419,16 +604,10 @@ mod tests {
     #[tokio::test]
     async fn annual_planting_inferred_dates() {
         let (repo, vid, lid, sid) = setup_annual().await;
-        let p = create_annual_planting_from_sowing(
+        let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            Some("Tomates Marmande".into()),
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100)
+                .with_name("Tomates Marmande"),
         )
         .await
         .unwrap();
@@ -456,16 +635,9 @@ mod tests {
     #[tokio::test]
     async fn annual_planting_creation_rejects_pluriannual_variety() {
         let (repo, vid, lid, sid) = setup_perennial().await;
-        let err = create_annual_planting_from_sowing(
+        let err = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 1),
-            dec!(20),
-            10,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 10),
         )
         .await
         .unwrap_err();
@@ -480,16 +652,16 @@ mod tests {
         let loc = Location::new(kind.id, "L", dec!(5), dec!(2), None, None).unwrap();
         repo.location_create(&loc).await.unwrap();
 
-        let err = create_annual_planting_from_sowing(
+        let err = create_annual_planting(
             &repo,
-            VarietyId::new(),
-            loc.id,
-            StrataId::new(),
-            d(2026, 3, 1),
-            dec!(10),
-            5,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                VarietyId::new(),
+                loc.id,
+                StrataId::new(),
+                d(2026, 3, 1),
+                dec!(10),
+                5,
+            ),
         )
         .await
         .unwrap_err();
@@ -505,16 +677,9 @@ mod tests {
     #[tokio::test]
     async fn validate_consistency_passes_for_well_formed_planting() {
         let (repo, vid, lid, sid) = setup_annual().await;
-        let p = create_annual_planting_from_sowing(
+        let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
         )
         .await
         .unwrap();
@@ -541,15 +706,9 @@ mod tests {
         let (repo, vid, lid, sid) = setup_perennial().await;
         let p = create_perennial_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 15),
-            Some(d(2056, 12, 31)),
-            dec!(2000),
-            50,
-            Some("Verger Sud".into()),
-            None,
+            PerennialPlantingRequest::new(vid, lid, sid, d(2026, 3, 15), dec!(2000), 50)
+                .with_expected_removal(d(2056, 12, 31))
+                .with_name("Verger Sud"),
         )
         .await
         .unwrap();
@@ -571,15 +730,7 @@ mod tests {
         let (repo, vid, lid, sid) = setup_annual().await;
         let err = create_perennial_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 15),
-            None,
-            dec!(10),
-            5,
-            None,
-            None,
+            PerennialPlantingRequest::new(vid, lid, sid, d(2026, 3, 15), dec!(10), 5),
         )
         .await
         .unwrap_err();
@@ -606,11 +757,10 @@ mod tests {
 
         let h = record_yearly_harvest(
             &repo,
-            p.id,
-            2030,
-            Some(dec!(50)),
-            Some(dec!(45)),
-            Some("first real crop".into()),
+            YearlyHarvestRequest::new(p.id, 2030)
+                .with_expected_yield(dec!(50))
+                .with_actual_yield(dec!(45))
+                .with_notes("first real crop"),
         )
         .await
         .unwrap();
@@ -622,22 +772,18 @@ mod tests {
     #[tokio::test]
     async fn record_yearly_harvest_rejects_annual_planting() {
         let (repo, vid, lid, sid) = setup_annual().await;
-        let p = create_annual_planting_from_sowing(
+        let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
         )
         .await
         .unwrap();
-        let err = record_yearly_harvest(&repo, p.id, 2026, Some(dec!(10)), None, None)
-            .await
-            .unwrap_err();
+        let err = record_yearly_harvest(
+            &repo,
+            YearlyHarvestRequest::new(p.id, 2026).with_expected_yield(dec!(10)),
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, AppError::Inconsistent(_)));
     }
 
@@ -648,16 +794,9 @@ mod tests {
         let (repo, vid, lid, sid) = setup_annual().await;
         // Seed the default TaskTypes so the auto-generator finds matches.
         seed_defaults(&repo).await.unwrap();
-        let p = create_annual_planting_from_sowing(
+        let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
         )
         .await
         .unwrap();
@@ -687,15 +826,7 @@ mod tests {
         seed_defaults(&repo).await.unwrap();
         let p = create_perennial_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 15),
-            None,
-            dec!(2000),
-            50,
-            None,
-            None,
+            PerennialPlantingRequest::new(vid, lid, sid, d(2026, 3, 15), dec!(2000), 50),
         )
         .await
         .unwrap();
@@ -716,15 +847,8 @@ mod tests {
         seed_defaults(&repo).await.unwrap();
         let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            EstablishmentMethod::BoughtPlants,
-            d(2026, 4, 1),
-            dec!(20),
-            50,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 4, 1), dec!(20), 50)
+                .with_method(EstablishmentMethod::BoughtPlants),
         )
         .await
         .unwrap();
@@ -765,15 +889,8 @@ mod tests {
         seed_defaults(&repo).await.unwrap();
         let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            EstablishmentMethod::DirectSow,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100)
+                .with_method(EstablishmentMethod::DirectSow),
         )
         .await
         .unwrap();
@@ -796,16 +913,9 @@ mod tests {
     async fn planting_without_seeded_types_still_saves_logs_only() {
         // No seed_defaults call here → task_type list is empty.
         let (repo, vid, lid, sid) = setup_annual().await;
-        let p = create_annual_planting_from_sowing(
+        let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
         )
         .await
         .unwrap();
@@ -821,16 +931,9 @@ mod tests {
     async fn delete_planting_succeeds_without_activity() {
         let (repo, vid, lid, sid) = setup_annual().await;
         seed_defaults(&repo).await.unwrap();
-        let p = create_annual_planting_from_sowing(
+        let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
         )
         .await
         .unwrap();
@@ -847,16 +950,9 @@ mod tests {
     async fn delete_planting_refused_when_a_task_is_completed() {
         let (repo, vid, lid, sid) = setup_annual().await;
         seed_defaults(&repo).await.unwrap();
-        let p = create_annual_planting_from_sowing(
+        let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
         )
         .await
         .unwrap();
@@ -875,16 +971,9 @@ mod tests {
     async fn delete_planting_refused_when_labor_hours_logged() {
         let (repo, vid, lid, sid) = setup_annual().await;
         seed_defaults(&repo).await.unwrap();
-        let p = create_annual_planting_from_sowing(
+        let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
         )
         .await
         .unwrap();
@@ -915,16 +1004,9 @@ mod tests {
     async fn set_planting_status_persists() {
         let (repo, vid, lid, sid) = setup_annual().await;
         seed_defaults(&repo).await.unwrap();
-        let p = create_annual_planting_from_sowing(
+        let p = create_annual_planting(
             &repo,
-            vid,
-            lid,
-            sid,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
         )
         .await
         .unwrap();

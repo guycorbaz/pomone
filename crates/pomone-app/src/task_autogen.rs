@@ -257,7 +257,7 @@ mod tests {
 
     #[tokio::test]
     async fn generating_twice_creates_no_duplicates() {
-        use crate::services::create_annual_planting_from_sowing;
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
         use crate::test_helpers::seed_test_data;
         use pomone_db::{
             seed_defaults, LocationRepo, PlantingRepo, SqliteRepository, StrataRepo, TaskRepo,
@@ -272,16 +272,16 @@ mod tests {
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
         let strata = repo.strata_list().await.unwrap()[0].id;
         // Creation runs the generator once.
-        let planting = create_annual_planting_from_sowing(
+        let planting = create_annual_planting(
             &repo,
-            varieties[0].id,
-            bed.id,
-            strata,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata,
+                d(2026, 3, 1),
+                dec!(20),
+                100,
+            ),
         )
         .await
         .unwrap();

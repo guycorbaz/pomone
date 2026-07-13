@@ -56,7 +56,9 @@ pub async fn delete_treatment(repo: &dyn Repository, treatment_id_str: &str) -> 
 mod tests {
     use super::*;
     use crate::error::AppError;
-    use crate::services::{create_annual_planting_from_sowing, record_treatment};
+    use crate::services::{
+        create_annual_planting, record_treatment, AnnualPlantingRequest, TreatmentRequest,
+    };
     use crate::test_helpers::seed_test_data;
     use chrono::NaiveDate;
     use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, StrataRepo, VarietyRepo};
@@ -74,16 +76,16 @@ mod tests {
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
         let strata = repo.strata_list().await.unwrap()[0].id;
-        let planting = create_annual_planting_from_sowing(
+        let planting = create_annual_planting(
             &repo,
-            varieties[0].id,
-            bed.id,
-            strata,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata,
+                d(2026, 3, 1),
+                dec!(20),
+                100,
+            ),
         )
         .await
         .unwrap();
@@ -104,25 +106,21 @@ mod tests {
         let (repo, pid) = setup_with_planting().await;
         record_treatment(
             &repo,
-            pid,
-            d(2026, 5, 10),
-            "cuivre".into(),
-            "Bouillie bordelaise".into(),
-            dec!(1.250),
-            "kg/ha".into(),
-            Some("avant pluie".into()),
+            TreatmentRequest::new(
+                pid,
+                d(2026, 5, 10),
+                "cuivre",
+                "Bouillie bordelaise",
+                dec!(1.250),
+                "kg/ha",
+            )
+            .with_notes("avant pluie"),
         )
         .await
         .unwrap();
         record_treatment(
             &repo,
-            pid,
-            d(2026, 6, 20),
-            "soufre".into(),
-            "Thiovit".into(),
-            dec!(3),
-            "g/m²".into(),
-            None,
+            TreatmentRequest::new(pid, d(2026, 6, 20), "soufre", "Thiovit", dec!(3), "g/m²"),
         )
         .await
         .unwrap();
@@ -146,13 +144,14 @@ mod tests {
         let (repo, pid) = setup_with_planting().await;
         record_treatment(
             &repo,
-            pid,
-            d(2026, 5, 10),
-            "spinosad".into(),
-            "Success 4".into(),
-            dec!(0.02),
-            "L/ha".into(),
-            None,
+            TreatmentRequest::new(
+                pid,
+                d(2026, 5, 10),
+                "spinosad",
+                "Success 4",
+                dec!(0.02),
+                "L/ha",
+            ),
         )
         .await
         .unwrap();
