@@ -222,7 +222,7 @@ pub async fn get_planting_detail(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::create_annual_planting_from_sowing;
+    use crate::services::{create_annual_planting, AnnualPlantingRequest};
     use crate::test_helpers::seed_test_data;
     use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, StrataRepo, VarietyRepo};
     use rust_decimal_macros::dec;
@@ -246,16 +246,18 @@ mod tests {
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
         let strata_entry = repo.strata_list().await.unwrap().remove(0);
-        let planting = create_annual_planting_from_sowing(
+        let planting = create_annual_planting(
             &repo,
-            varieties[0].id,
-            bed.id,
-            strata_entry.id,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            Some("démo".to_owned()),
-            Some("notes".to_owned()),
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata_entry.id,
+                d(2026, 3, 1),
+                dec!(20),
+                100,
+            )
+            .with_name("démo")
+            .with_notes("notes"),
         )
         .await
         .unwrap();
@@ -288,16 +290,16 @@ mod tests {
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
         let strata = repo.strata_list().await.unwrap()[0].id;
-        let planting = create_annual_planting_from_sowing(
+        let planting = create_annual_planting(
             &repo,
-            varieties[0].id,
-            bed.id,
-            strata,
-            d(2026, 3, 1),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata,
+                d(2026, 3, 1),
+                dec!(20),
+                100,
+            ),
         )
         .await
         .unwrap();

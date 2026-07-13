@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 /// A variety entry suitable for a dropdown: stable stringified UUID + human
 /// label, plus the `is_annual` hint so callers can pre-validate before invoking
-/// `create_annual_planting_from_sowing`.
+/// `create_annual_planting` with an `AnnualPlantingRequest::from_sowing`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarietyOption {
     pub id: String,
@@ -288,7 +288,7 @@ pub fn parse_iso_date(s: &str) -> AppResult<NaiveDate> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::create_annual_planting_from_sowing;
+    use crate::services::{create_annual_planting, AnnualPlantingRequest};
     use crate::test_helpers::seed_test_data;
     use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, StrataRepo, VarietyRepo};
     use pomone_domain::{LocationId, VarietyId};
@@ -336,16 +336,17 @@ mod tests {
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
         let strata_entry = repo.strata_list().await.unwrap().remove(0);
         let date = NaiveDate::from_ymd_opt(2026, 3, 1).unwrap();
-        let _ = create_annual_planting_from_sowing(
+        let _ = create_annual_planting(
             &repo,
-            varieties[0].id,
-            bed.id,
-            strata_entry.id,
-            date,
-            dec!(20),
-            100,
-            Some("démo".to_owned()),
-            None,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata_entry.id,
+                date,
+                dec!(20),
+                100,
+            )
+            .with_name("démo"),
         )
         .await
         .unwrap();

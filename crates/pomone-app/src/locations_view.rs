@@ -640,7 +640,7 @@ mod tests {
 
     #[tokio::test]
     async fn delete_location_refused_when_it_holds_a_planting() {
-        use crate::services::create_annual_planting_from_sowing;
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
         use chrono::NaiveDate;
         use pomone_db::{StrataRepo, VarietyRepo};
         let repo = fresh_repo().await;
@@ -653,16 +653,16 @@ mod tests {
             .find(|l| l.name == "Planche A")
             .unwrap();
         let loc_id: LocationId = crate::plantings_view::parse_id(&planche.id).unwrap();
-        create_annual_planting_from_sowing(
+        create_annual_planting(
             &repo,
-            variety,
-            loc_id,
-            strata,
-            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
-            dec!(10),
-            10,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                variety,
+                loc_id,
+                strata,
+                NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                dec!(10),
+                10,
+            ),
         )
         .await
         .unwrap();

@@ -50,7 +50,7 @@ development_status:
   0-2-catalog-screens-wiring-extraction: done
   0-3-plantings-detail-and-treatments-wiring-extraction: done
   0-4-tasks-calendar-agenda-and-harvests-wiring-extraction: done
-  0-5-request-structs-in-services: backlog
+  0-5-request-structs-in-services: done
   0-6-check-audit-glossary-and-ci-coherence-test: done
   0-7-paper-loop-harness-skeleton: backlog
   0-8-glossary-alignment-of-existing-strings: backlog

@@ -69,7 +69,10 @@ pub async fn list_yearly_harvests_for_planting(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::{create_perennial_planting, record_yearly_harvest};
+    use crate::services::{
+        create_perennial_planting, record_yearly_harvest, PerennialPlantingRequest,
+        YearlyHarvestRequest,
+    };
     use chrono::NaiveDate;
     use pomone_db::{
         CropRepo, FamilyRepo, LocationKindRepo, LocationRepo, SqliteRepository, StrataRepo,
@@ -114,15 +117,14 @@ mod tests {
         repo.location_create(&location).await.unwrap();
         let planting = create_perennial_planting(
             &repo,
-            variety.id,
-            location.id,
-            s.id,
-            NaiveDate::from_ymd_opt(2026, 3, 15).unwrap(),
-            None,
-            dec!(100),
-            10,
-            None,
-            None,
+            PerennialPlantingRequest::new(
+                variety.id,
+                location.id,
+                s.id,
+                NaiveDate::from_ymd_opt(2026, 3, 15).unwrap(),
+                dec!(100),
+                10,
+            ),
         )
         .await
         .unwrap();
@@ -143,22 +145,30 @@ mod tests {
         let (repo, pid) = setup_perennial().await;
         let uuid_id = pomone_domain::PlantingId::from(Uuid::from_str(&pid).unwrap());
 
-        record_yearly_harvest(&repo, uuid_id, 2031, Some(dec!(50)), Some(dec!(60)), None)
-            .await
-            .unwrap();
         record_yearly_harvest(
             &repo,
-            uuid_id,
-            2029,
-            Some(dec!(40)),
-            None,
-            Some("ramp-up".into()),
+            YearlyHarvestRequest::new(uuid_id, 2031)
+                .with_expected_yield(dec!(50))
+                .with_actual_yield(dec!(60)),
         )
         .await
         .unwrap();
-        record_yearly_harvest(&repo, uuid_id, 2030, Some(dec!(45)), Some(dec!(30)), None)
-            .await
-            .unwrap();
+        record_yearly_harvest(
+            &repo,
+            YearlyHarvestRequest::new(uuid_id, 2029)
+                .with_expected_yield(dec!(40))
+                .with_notes("ramp-up"),
+        )
+        .await
+        .unwrap();
+        record_yearly_harvest(
+            &repo,
+            YearlyHarvestRequest::new(uuid_id, 2030)
+                .with_expected_yield(dec!(45))
+                .with_actual_yield(dec!(30)),
+        )
+        .await
+        .unwrap();
 
         let rows = list_yearly_harvests_for_planting(&repo, &pid, MassUnit::Kilograms)
             .await
