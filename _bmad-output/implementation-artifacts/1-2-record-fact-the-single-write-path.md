@@ -1,6 +1,6 @@
 # Story 1.2: record_fact — the single write path
 
-Status: in-review
+Status: done
 
 ## Story
 

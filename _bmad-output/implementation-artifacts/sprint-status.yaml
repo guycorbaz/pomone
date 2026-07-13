@@ -59,7 +59,7 @@ development_status:
   # Epic 1: Rien ne se perd — faits, états et corrections
   epic-1: in-progress
   1-1-the-field-event-journal-migration-0007: done
-  1-2-record-fact-the-single-write-path: review
+  1-2-record-fact-the-single-write-path: done
   1-3-dual-timestamps-and-the-skip-aware-autogen-guard: backlog
   1-4-the-virtual-printdoc-contract-and-the-rough-weekly-print: backlog
   1-5-skip-and-correct-from-the-task-views: backlog
