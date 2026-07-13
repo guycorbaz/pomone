@@ -108,7 +108,7 @@ pub async fn delete_strata(repo: &dyn Repository, id_str: &str) -> AppResult<()>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::create_annual_planting_from_sowing;
+    use crate::services::{create_annual_planting, AnnualPlantingRequest};
     use crate::test_helpers::seed_test_data;
     use chrono::NaiveDate;
     use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, StrataRepo, VarietyRepo};
@@ -180,16 +180,16 @@ mod tests {
             .find(|l| l.parent_id.is_some())
             .unwrap()
             .id;
-        create_annual_planting_from_sowing(
+        create_annual_planting(
             &repo,
-            variety,
-            bed,
-            target,
-            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
-            dec!(10),
-            10,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                variety,
+                bed,
+                target,
+                NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                dec!(10),
+                10,
+            ),
         )
         .await
         .unwrap();

@@ -311,7 +311,7 @@ fn doy_span(p: &Planting) -> (i32, i32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::create_annual_planting_from_sowing;
+    use crate::services::{create_annual_planting, AnnualPlantingRequest};
     use crate::test_helpers::seed_test_data;
     use pomone_db::{seed_defaults, LocationRepo, SqliteRepository, StrataRepo, VarietyRepo};
     use rust_decimal_macros::dec;
@@ -336,16 +336,16 @@ mod tests {
         .unwrap();
         repo.location_create(&bed_b).await.unwrap();
 
-        let planting = create_annual_planting_from_sowing(
+        let planting = create_annual_planting(
             &repo,
-            varieties[0].id,
-            bed_a.id,
-            repo.strata_list().await.unwrap()[0].id,
-            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed_a.id,
+                repo.strata_list().await.unwrap()[0].id,
+                NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                dec!(20),
+                100,
+            ),
         )
         .await
         .unwrap();

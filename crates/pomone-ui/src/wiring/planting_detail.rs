@@ -234,16 +234,19 @@ fn try_record_harvest(window: &MainWindow, state: &mut UiState) -> Result<(), Fo
     state
         .runtime
         .block_on(async {
-            services::record_yearly_harvest(
-                state.app.repo(),
-                planting_id,
-                year,
-                expected,
-                actual,
-                notes,
-            )
-            .await
-            .map(|_| ())
+            let mut request = services::YearlyHarvestRequest::new(planting_id, year);
+            if let Some(expected) = expected {
+                request = request.with_expected_yield(expected);
+            }
+            if let Some(actual) = actual {
+                request = request.with_actual_yield(actual);
+            }
+            if let Some(notes) = notes {
+                request = request.with_notes(notes);
+            }
+            services::record_yearly_harvest(state.app.repo(), request)
+                .await
+                .map(|_| ())
         })
         .map_err(FormError::Service)
 }
@@ -269,18 +272,20 @@ fn try_record_treatment(window: &MainWindow, state: &mut UiState) -> Result<(), 
     state
         .runtime
         .block_on(async {
-            services::record_treatment(
-                state.app.repo(),
+            let mut request = services::TreatmentRequest::new(
                 planting_id,
                 applied_on,
                 substance,
                 product,
                 dose,
                 unit,
-                notes,
-            )
-            .await
-            .map(|_| ())
+            );
+            if let Some(notes) = notes {
+                request = request.with_notes(notes);
+            }
+            services::record_treatment(state.app.repo(), request)
+                .await
+                .map(|_| ())
         })
         .map_err(FormError::Service)
 }

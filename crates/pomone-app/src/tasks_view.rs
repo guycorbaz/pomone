@@ -440,7 +440,7 @@ fn parse_iso_date_local(s: &str) -> AppResult<NaiveDate> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::create_annual_planting_from_sowing;
+    use crate::services::{create_annual_planting, AnnualPlantingRequest};
     use crate::test_helpers::seed_test_data;
     use pomone_db::{
         seed_defaults, LocationRepo, SqliteRepository, StrataRepo, TaskRepo, VarietyRepo,
@@ -455,16 +455,16 @@ mod tests {
         let locations = repo.location_list().await.unwrap();
         let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
         let strata = repo.strata_list().await.unwrap()[0].id;
-        let planting = create_annual_planting_from_sowing(
+        let planting = create_annual_planting(
             &repo,
-            varieties[0].id,
-            bed.id,
-            strata,
-            NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
-            dec!(20),
-            100,
-            None,
-            None,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata,
+                NaiveDate::from_ymd_opt(2026, 3, 1).unwrap(),
+                dec!(20),
+                100,
+            ),
         )
         .await
         .unwrap();
