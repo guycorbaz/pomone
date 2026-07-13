@@ -78,6 +78,13 @@ pub enum DomainError {
 
     #[error("invalid hex color '{0}' — expected #RGB or #RRGGBB")]
     InvalidHexColor(String),
+
+    #[error("value for {field} is too long: {len} > {max} characters")]
+    TooLong {
+        field: &'static str,
+        max: usize,
+        len: usize,
+    },
 }
 
 /// Convenience type for domain results.

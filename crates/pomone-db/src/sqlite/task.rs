@@ -7,8 +7,8 @@
 //! Split them into separate files if/when they grow noticeably.
 
 use crate::codec::{
-    opt_decimal_from_text, opt_decimal_to_text, recurrence_unit_from_str, recurrence_unit_to_str,
-    task_category_from_str, task_category_to_str,
+    opt_decimal_from_text, opt_decimal_to_text, opt_skip_reason_from_text, opt_skip_reason_to_text,
+    recurrence_unit_from_str, recurrence_unit_to_str, task_category_from_str, task_category_to_str,
 };
 use crate::error::{DbError, DbResult};
 use crate::repository::{
@@ -346,7 +346,7 @@ fn row_to_task_series(row: sqlx::sqlite::SqliteRow) -> DbResult<TaskSeries> {
 
 const TASK_COLUMNS: &str = "id, planting_id, location_id, task_type_id, task_method_id, \
                             implement_id, series_id, planned_on, completed_on, duration_min, \
-                            labor_hours, notes";
+                            labor_hours, notes, skipped_on, skip_reason, skip_note";
 
 #[async_trait]
 impl TaskRepo for SqliteRepository {
@@ -400,9 +400,12 @@ impl TaskRepo for SqliteRepository {
     }
 
     async fn task_create(&self, t: &Task) -> DbResult<()> {
+        // The skip columns are part of INSERT for completeness (they default to
+        // NULL on a fresh task); their *projection* (setting them) is written
+        // only by `facts::record_fact` via UPDATE (story 1.2), never here.
         sqlx::query(&format!(
             "INSERT INTO task ({TASK_COLUMNS}) VALUES \
-             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"
+             (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)"
         ))
         .bind(t.id.as_uuid())
         .bind(t.planting_id.map(PlantingId::as_uuid))
@@ -416,6 +419,9 @@ impl TaskRepo for SqliteRepository {
         .bind(t.duration_min.map(i64::from))
         .bind(opt_decimal_to_text(t.labor_hours))
         .bind(t.notes.as_deref())
+        .bind(t.skipped_on)
+        .bind(opt_skip_reason_to_text(t.skip_reason))
+        .bind(t.skip_note.as_deref())
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -495,6 +501,9 @@ fn row_to_task(row: sqlx::sqlite::SqliteRow) -> DbResult<Task> {
         duration_min,
         labor_hours: opt_decimal_from_text(labor_hours_text)?,
         notes: row.try_get("notes")?,
+        skipped_on: row.try_get("skipped_on")?,
+        skip_reason: opt_skip_reason_from_text(row.try_get("skip_reason")?)?,
+        skip_note: row.try_get("skip_note")?,
     })
 }
 

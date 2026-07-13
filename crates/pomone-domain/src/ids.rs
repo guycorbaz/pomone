@@ -117,6 +117,10 @@ define_id!(
     "Identifier for a recurring task series (template that materializes \
      into one Task per occurrence)."
 );
+define_id!(
+    FieldEventId,
+    "Identifier for an append-only field-journal event."
+);
 
 #[cfg(test)]
 mod tests {

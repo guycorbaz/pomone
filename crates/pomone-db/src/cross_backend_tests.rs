@@ -6,15 +6,21 @@
 
 use crate::repository::Repository;
 use crate::seed::seed_defaults;
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime};
 use pomone_domain::{
-    AnnualProfile, Crop, Family, Lifespan, Location, LocationKind, Planting, PlantingSchedule,
-    PluriannualProfile, PruningSeason, Strata, Treatment, Variety, VarietyProfile, YearlyHarvest,
+    AnnualProfile, Crop, FactKind, Family, FieldEvent, Lifespan, Location, LocationKind, Planting,
+    PlantingSchedule, PluriannualProfile, PruningSeason, SkipReason, Strata, Task, Treatment,
+    Variety, VarietyProfile, YearlyHarvest,
 };
 use rust_decimal_macros::dec;
+use uuid::Uuid;
 
 fn d(y: i32, m: u32, day: u32) -> NaiveDate {
     NaiveDate::from_ymd_opt(y, m, day).unwrap()
+}
+
+fn dt(y: i32, m: u32, day: u32, h: u32, mi: u32) -> NaiveDateTime {
+    d(y, m, day).and_hms_opt(h, mi, 0).unwrap()
 }
 
 // ============================================================
@@ -249,6 +255,102 @@ async fn scenario_fk_restrict_on_family_delete(repo: &dyn Repository) {
     assert!(err.is_err(), "expected FK restrict to block family delete");
 }
 
+/// The append-only field-event journal (story 1.1): round-trip, idempotent
+/// duplicate-id insert (conflict-no-op), ordering, and a correction pointing
+/// back at the corrected event. `FactKind` literals round-trip identically on
+/// both backends because both go through the shared codec.
+async fn scenario_field_events(repo: &dyn Repository) {
+    let target = Uuid::new_v4();
+
+    let done = FieldEvent::new(
+        FactKind::TaskDone,
+        "task",
+        target,
+        d(2026, 3, 2),
+        dt(2026, 3, 2, 9, 30),
+        "{\"labor_h\":1.5}",
+        None,
+    )
+    .unwrap();
+    repo.field_event_create(&done).await.unwrap();
+
+    // Round-trip: what comes back is byte-for-byte what went in.
+    let got = repo.field_event_get(done.id).await.unwrap().unwrap();
+    assert_eq!(got, done);
+
+    // Idempotent: re-inserting the same id is a silent no-op, not an error,
+    // and does not duplicate the row.
+    repo.field_event_create(&done).await.unwrap();
+    assert_eq!(
+        repo.field_event_list_for_target("task", target)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // A correction is a new event pointing at the one it amends; the original
+    // is untouched and both are listed, oldest first.
+    let correction = FieldEvent::new(
+        FactKind::TaskSkipped,
+        "task",
+        target,
+        d(2026, 3, 2),
+        dt(2026, 3, 3, 8, 0),
+        "{\"reason\":\"weather\"}",
+        Some(done.id),
+    )
+    .unwrap();
+    repo.field_event_create(&correction).await.unwrap();
+
+    let events = repo
+        .field_event_list_for_target("task", target)
+        .await
+        .unwrap();
+    assert_eq!(events.len(), 2);
+    assert_eq!(events[0].id, done.id, "oldest first by recorded_at");
+    assert_eq!(events[1].corrects, Some(done.id));
+
+    // A different target is isolated; the whole-journal view sees everything.
+    assert!(repo
+        .field_event_list_for_target("task", Uuid::new_v4())
+        .await
+        .unwrap()
+        .is_empty());
+    assert_eq!(repo.field_event_list_all().await.unwrap().len(), 2);
+}
+
+/// `SkipReason` must round-trip through the DB identically on both backends
+/// (AC1). The skip columns' *projection* is story 1.2's, but persistence has to
+/// work now — so build a task with the columns set directly and read it back.
+async fn scenario_task_skip_roundtrip(repo: &dyn Repository) {
+    seed_defaults(repo).await.unwrap();
+    let task_type = repo.task_type_list().await.unwrap()[0].id;
+
+    let mut task = Task::new(
+        None,
+        None,
+        task_type,
+        None,
+        None,
+        d(2026, 3, 2),
+        None,
+        None,
+        None,
+        None,
+    );
+    task.skipped_on = Some(d(2026, 3, 2));
+    task.skip_reason = Some(SkipReason::Weather);
+    task.skip_note = Some("trop humide".into());
+    repo.task_create(&task).await.unwrap();
+
+    let got = repo.task_get(task.id).await.unwrap().unwrap();
+    assert_eq!(got, task, "skip columns must round-trip");
+    assert_eq!(got.skip_reason, Some(SkipReason::Weather));
+    assert_eq!(got.skipped_on, Some(d(2026, 3, 2)));
+    assert_eq!(got.skip_note.as_deref(), Some("trop humide"));
+}
+
 // ============================================================
 // SQLite test entry points (always run)
 // ============================================================
@@ -284,6 +386,16 @@ mod sqlite_backend {
     #[tokio::test]
     async fn fk_restrict_on_family_delete() {
         scenario_fk_restrict_on_family_delete(&fresh().await).await;
+    }
+
+    #[tokio::test]
+    async fn field_events() {
+        scenario_field_events(&fresh().await).await;
+    }
+
+    #[tokio::test]
+    async fn task_skip_roundtrip() {
+        scenario_task_skip_roundtrip(&fresh().await).await;
     }
 }
 
@@ -323,5 +435,17 @@ mod mariadb_backend {
     #[ignore = "requires Docker for MariaDB testcontainer"]
     async fn fk_restrict_on_family_delete() {
         scenario_fk_restrict_on_family_delete(&fresh_repo().await).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker for MariaDB testcontainer"]
+    async fn field_events() {
+        scenario_field_events(&fresh_repo().await).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker for MariaDB testcontainer"]
+    async fn task_skip_roundtrip() {
+        scenario_task_skip_roundtrip(&fresh_repo().await).await;
     }
 }

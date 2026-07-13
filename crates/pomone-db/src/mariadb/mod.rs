@@ -7,6 +7,7 @@
 
 mod crop;
 mod family;
+mod field_event;
 mod location;
 mod location_kind;
 mod planting;

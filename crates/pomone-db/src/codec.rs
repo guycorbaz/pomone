@@ -1,15 +1,18 @@
 //! Encoding/decoding of domain sum types (`Lifespan`, `VarietyProfile`,
-//! `PlantingSchedule`, `PruningSeason`) to/from SQL columns.
+//! `PlantingSchedule`, `PruningSeason`, `FactKind`, `SkipReason`) to/from SQL
+//! columns.
 //!
 //! Each `decode_*` function returns `DbResult` because data may be malformed
 //! if the database was tampered with externally; the schema's CHECK
 //! constraints make that nearly impossible in practice but we still handle it.
+//! `FactKind`/`SkipReason` carry NO CHECK (story 0.6 audit), so their decoders
+//! are the only guard against an unknown literal.
 
 use crate::error::{DbError, DbResult};
 use chrono::NaiveDate;
 use pomone_domain::{
-    AnnualProfile, Lifespan, PlantingSchedule, PlantingStatus, PluriannualProfile,
-    ProductivePattern, PruningSeason, VarietyProfile,
+    AnnualProfile, FactKind, Lifespan, PlantingSchedule, PlantingStatus, PluriannualProfile,
+    ProductivePattern, PruningSeason, SkipReason, VarietyProfile,
 };
 use rust_decimal::Decimal;
 
@@ -34,6 +37,66 @@ pub(crate) fn decode_pruning(s: &str) -> DbResult<PruningSeason> {
         "none" => Ok(PruningSeason::None),
         other => Err(DbError::Malformed(format!("pruning_season={other}"))),
     }
+}
+
+// ============================================================
+// FactKind (field_event.kind) — dot-namespaced, NO CHECK
+// ============================================================
+
+pub(crate) fn encode_fact_kind(kind: FactKind) -> &'static str {
+    match kind {
+        FactKind::TaskDone => "task.done",
+        FactKind::TaskSkipped => "task.skipped",
+        FactKind::PlantingTerminated => "planting.terminated",
+    }
+}
+
+pub(crate) fn decode_fact_kind(s: &str) -> DbResult<FactKind> {
+    match s {
+        "task.done" => Ok(FactKind::TaskDone),
+        "task.skipped" => Ok(FactKind::TaskSkipped),
+        "planting.terminated" => Ok(FactKind::PlantingTerminated),
+        other => Err(DbError::Malformed(format!("fact_kind={other}"))),
+    }
+}
+
+// ============================================================
+// SkipReason (task.skip_reason) — closed set, NO CHECK
+// ============================================================
+
+pub(crate) fn encode_skip_reason(reason: SkipReason) -> &'static str {
+    match reason {
+        SkipReason::Weather => "weather",
+        SkipReason::PestDisease => "pest-disease",
+        SkipReason::CropFailure => "crop-failure",
+        SkipReason::NoTime => "no-time",
+        SkipReason::NotNeeded => "not-needed",
+        SkipReason::Replaced => "replaced",
+        SkipReason::Other => "other",
+    }
+}
+
+pub(crate) fn decode_skip_reason(s: &str) -> DbResult<SkipReason> {
+    match s {
+        "weather" => Ok(SkipReason::Weather),
+        "pest-disease" => Ok(SkipReason::PestDisease),
+        "crop-failure" => Ok(SkipReason::CropFailure),
+        "no-time" => Ok(SkipReason::NoTime),
+        "not-needed" => Ok(SkipReason::NotNeeded),
+        "replaced" => Ok(SkipReason::Replaced),
+        "other" => Ok(SkipReason::Other),
+        other => Err(DbError::Malformed(format!("skip_reason={other}"))),
+    }
+}
+
+/// Bind helper: an optional skip reason as its literal (or `None` for NULL).
+pub(crate) fn opt_skip_reason_to_text(reason: Option<SkipReason>) -> Option<&'static str> {
+    reason.map(encode_skip_reason)
+}
+
+/// Read helper: an optional skip-reason column back into the enum.
+pub(crate) fn opt_skip_reason_from_text(s: Option<String>) -> DbResult<Option<SkipReason>> {
+    s.map(|s| decode_skip_reason(&s)).transpose()
 }
 
 // ============================================================
@@ -393,6 +456,59 @@ mod tests {
             decode_pruning("autumn"),
             Err(DbError::Malformed(_))
         ));
+    }
+
+    #[test]
+    fn fact_kind_roundtrip() {
+        for k in [
+            FactKind::TaskDone,
+            FactKind::TaskSkipped,
+            FactKind::PlantingTerminated,
+        ] {
+            assert_eq!(decode_fact_kind(encode_fact_kind(k)).unwrap(), k);
+        }
+    }
+
+    #[test]
+    fn fact_kind_decode_invalid() {
+        assert!(matches!(
+            decode_fact_kind("task.exploded"),
+            Err(DbError::Malformed(_))
+        ));
+    }
+
+    #[test]
+    fn skip_reason_roundtrip() {
+        for r in [
+            SkipReason::Weather,
+            SkipReason::PestDisease,
+            SkipReason::CropFailure,
+            SkipReason::NoTime,
+            SkipReason::NotNeeded,
+            SkipReason::Replaced,
+            SkipReason::Other,
+        ] {
+            assert_eq!(decode_skip_reason(encode_skip_reason(r)).unwrap(), r);
+        }
+    }
+
+    #[test]
+    fn skip_reason_decode_invalid() {
+        assert!(matches!(
+            decode_skip_reason("because"),
+            Err(DbError::Malformed(_))
+        ));
+    }
+
+    #[test]
+    fn opt_skip_reason_roundtrips_including_none() {
+        assert_eq!(opt_skip_reason_to_text(None), None);
+        assert_eq!(opt_skip_reason_from_text(None).unwrap(), None);
+        let text = opt_skip_reason_to_text(Some(SkipReason::Weather)).map(str::to_owned);
+        assert_eq!(
+            opt_skip_reason_from_text(text).unwrap(),
+            Some(SkipReason::Weather)
+        );
     }
 
     #[test]

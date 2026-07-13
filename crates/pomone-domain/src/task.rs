@@ -17,6 +17,7 @@ use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
+use crate::field_event::SkipReason;
 use crate::ids::{
     LocationId, PlantingId, TaskId, TaskImplementId, TaskMethodId, TaskSeriesId, TaskTypeId,
 };
@@ -52,6 +53,13 @@ pub struct Task {
     pub series_id: Option<TaskSeriesId>,
     /// Free-form notes (max 4 KiB, enforced by [`Task::new`]).
     pub notes: Option<String>,
+    /// Date the task was skipped, if it was. A skip projection written only by
+    /// `facts::record_fact` (story 1.2); `None` for pending/done tasks.
+    pub skipped_on: Option<NaiveDate>,
+    /// Why the task was skipped (closed set). Set together with `skipped_on`.
+    pub skip_reason: Option<SkipReason>,
+    /// Optional free-text note attached to a skip.
+    pub skip_note: Option<String>,
 }
 
 impl Task {
@@ -89,6 +97,9 @@ impl Task {
             duration_min,
             labor_hours,
             notes,
+            skipped_on: None,
+            skip_reason: None,
+            skip_note: None,
         }
     }
 
@@ -121,6 +132,9 @@ impl Task {
             duration_min: None,
             labor_hours: None,
             notes,
+            skipped_on: None,
+            skip_reason: None,
+            skip_note: None,
         }
     }
 

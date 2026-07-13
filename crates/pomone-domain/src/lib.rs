@@ -23,6 +23,7 @@ pub mod crop;
 pub mod date_calc;
 pub mod error;
 pub mod family;
+pub mod field_event;
 pub mod harvest;
 pub mod holidays;
 pub mod ids;
@@ -42,11 +43,12 @@ mod validation;
 pub use crop::{Crop, Lifespan, ProductivePattern, PruningSeason};
 pub use error::{DomainError, DomainResult};
 pub use family::{Family, DEFAULT_FAMILY_COLOR};
+pub use field_event::{FactKind, FieldEvent, SkipReason};
 pub use harvest::YearlyHarvest;
 pub use holidays::{holiday_on, holidays_in_year, Holiday, HolidayRegion};
 pub use ids::{
-    CropId, FamilyId, LocationId, LocationKindId, PlantingId, StrataId, TaskId, TaskImplementId,
-    TaskMethodId, TaskSeriesId, TaskTypeId, TreatmentId, VarietyId,
+    CropId, FamilyId, FieldEventId, LocationId, LocationKindId, PlantingId, StrataId, TaskId,
+    TaskImplementId, TaskMethodId, TaskSeriesId, TaskTypeId, TreatmentId, VarietyId,
 };
 pub use location::Location;
 pub use location_kind::LocationKind;
