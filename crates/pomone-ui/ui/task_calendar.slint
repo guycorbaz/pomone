@@ -220,6 +220,9 @@ component TaskPill inherits Rectangle {
                     vertical-alignment: center;
                     overflow: elide;
                     width: 100%;
+                    // Fill the wrapper so vertical-alignment centers the glyph
+                    // line (and the strike overlay) instead of top-aligning.
+                    height: 100%;
                 }
                 if task.skipped: Rectangle {
                     height: 1px;

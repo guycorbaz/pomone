@@ -78,6 +78,11 @@ pub async fn list_task_calendar_rows(
                 continue;
             }
         }
+        // A future-dated skipped task must vanish from forward-looking cells
+        // (FR18/FR49, story 1.6) — a past skip stays, struck.
+        if task.hidden_from_upcoming(today) {
+            continue;
+        }
         let context = task
             .planting_id
             .and_then(|pid| plant_by_id.get(&pid))
@@ -398,6 +403,65 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert!(rows[0].skipped, "skipped pill must be flagged skipped");
         assert!(!rows[0].completed, "skipped is never conflated with done");
+    }
+
+    #[tokio::test]
+    async fn future_dated_skip_vanishes_from_calendar() {
+        use pomone_db::{TaskRepo, TaskTypeRepo};
+        use pomone_domain::field_event::SkipReason;
+        use pomone_domain::Task;
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let tt = repo
+            .task_type_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        // Planned in the future, skipped today.
+        let task = Task::new(
+            None,
+            None,
+            tt.id,
+            None,
+            None,
+            NaiveDate::from_ymd_opt(2026, 6, 10).unwrap(),
+            None,
+            None,
+            None,
+            None,
+        );
+        repo.task_create(&task).await.unwrap();
+        crate::facts::record_fact(
+            &repo,
+            crate::facts::Fact::Skipped {
+                task_id: task.id,
+                on: NaiveDate::from_ymd_opt(2026, 5, 20).unwrap(),
+                reason: SkipReason::Weather,
+                note: None,
+            },
+            NaiveDate::from_ymd_opt(2026, 5, 20)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let rows = list_task_calendar_rows(
+            &repo,
+            NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 6, 30).unwrap(),
+            None,
+            NaiveDate::from_ymd_opt(2026, 5, 20).unwrap(),
+        )
+        .await
+        .unwrap();
+        assert!(
+            rows.is_empty(),
+            "future-dated skip must vanish from the grid"
+        );
     }
 
     #[tokio::test]

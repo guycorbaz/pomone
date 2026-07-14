@@ -472,6 +472,9 @@ export component PlantingDetailPage inherits Rectangle {
                                 vertical-alignment: center;
                                 overflow: elide;
                                 width: 100%;
+                                // Fill the wrapper so vertical-alignment centers
+                                // the text (and the strike overlay) in the row.
+                                height: 100%;
                             }
                             if task.skipped: Rectangle {
                                 height: 1px;

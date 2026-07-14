@@ -81,6 +81,11 @@ pub async fn list_agenda(
         let Some(tt) = types_by_id.get(&task.task_type_id) else {
             continue;
         };
+        // A future-dated skipped task vanishes from the upcoming region
+        // (FR18/FR49, story 1.6); past skips stay as struck history.
+        if task.hidden_from_upcoming(today) {
+            continue;
+        }
         let context = task
             .planting_id
             .and_then(|pid| plant_by_id.get(&pid))
@@ -382,6 +387,49 @@ mod tests {
         // Localized (fr) skip-reason label — resolved, not the raw key.
         assert!(!row.skip_reason.is_empty());
         assert_ne!(row.skip_reason, "skip-reason-weather");
+    }
+
+    /// FR18/FR49 (story 1.6): a skipped task planned in the future vanishes
+    /// from the agenda's upcoming region; a past skip stays as struck history.
+    #[tokio::test]
+    async fn future_dated_skip_vanishes_but_past_skip_stays() {
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let today = d(2026, 5, 20);
+
+        let future = add_task(&repo, TaskCategory::Weeding, d(2026, 6, 10), None).await;
+        skip_task(
+            &repo,
+            future,
+            today,
+            SkipReason::Weather,
+            None,
+            at(2026, 5, 20),
+        )
+        .await
+        .unwrap();
+        let past = add_task(&repo, TaskCategory::Harvest, d(2026, 5, 5), None).await;
+        skip_task(
+            &repo,
+            past,
+            today,
+            SkipReason::NoTime,
+            None,
+            at(2026, 5, 20),
+        )
+        .await
+        .unwrap();
+
+        let rows = list_agenda(&repo, &i18n(), today).await.unwrap();
+        assert!(
+            !rows.iter().any(|r| r.task_id == future.to_string()),
+            "future-dated skip must vanish from upcoming"
+        );
+        assert!(
+            rows.iter()
+                .any(|r| r.task_id == past.to_string() && r.skipped),
+            "past skip stays as struck history"
+        );
     }
 
     /// Regression (review 1.5): skipping a long-overdue task must keep it

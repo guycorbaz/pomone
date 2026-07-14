@@ -179,6 +179,17 @@ impl Task {
         self.display_state(today).is_overdue()
     }
 
+    /// True when the task must be **hidden from forward-looking views** — the
+    /// agenda's upcoming region and future calendar cells (FR18/FR49, story
+    /// 1.6). A skipped task planned in the future is a decision already made:
+    /// it renders struck in past/present views but must "vanish from future
+    /// ones" so it never clutters what's still to do. Everything else (pending
+    /// work, and skipped tasks already in the past) stays visible.
+    #[must_use]
+    pub fn hidden_from_upcoming(&self, today: NaiveDate) -> bool {
+        self.display_state(today).is_skipped() && self.planned_on > today
+    }
+
     /// Classify the task into the one display state every view renders from
     /// (story 1.6). This is the **single shared predicate**: the calendar,
     /// agenda and planting detail all derive their per-row flags from this
@@ -361,6 +372,28 @@ mod tests {
             upcoming.is_overdue(d(2026, 6, 1)),
             upcoming.display_state(d(2026, 6, 1)).is_overdue()
         );
+    }
+
+    #[test]
+    fn hidden_from_upcoming_only_for_future_dated_skipped() {
+        // fresh_task planned 2026-05-01.
+        let pending = fresh_task();
+        // Pending future work stays visible.
+        assert!(!pending.hidden_from_upcoming(d(2026, 4, 1)));
+
+        // Skipped in the future → hidden from upcoming (vanish from future).
+        let mut future_skip = fresh_task();
+        future_skip.skipped_on = Some(d(2026, 4, 1));
+        assert!(future_skip.hidden_from_upcoming(d(2026, 4, 1)));
+
+        // Skipped in the past → stays visible (struck history).
+        let mut past_skip = fresh_task();
+        past_skip.skipped_on = Some(d(2026, 5, 1));
+        assert!(!past_skip.hidden_from_upcoming(d(2026, 6, 1)));
+
+        // A future *done* task is never hidden (only skipped vanishes).
+        let done_future = fresh_task().mark_completed(d(2026, 4, 20));
+        assert!(!done_future.hidden_from_upcoming(d(2026, 4, 1)));
     }
 
     #[test]
