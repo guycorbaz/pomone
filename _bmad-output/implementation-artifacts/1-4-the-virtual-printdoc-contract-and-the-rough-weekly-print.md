@@ -45,6 +45,19 @@ So that dogfooding starts now (clause 1) and E4 only adds rendering (clause 2).
 - **Versioning**: any breaking shape change bumps `PRINTDOC_VERSION`; E4's PDF renderer branches on it and the harness asserts it.
 - E4 owns the PDF; 1.4 deliberately ships only the plain-text renderer (no `printpdf`).
 
+### Review Findings
+
+3-layer adversarial review (retro AI-2). No blocking violations; all ACs met, i18n parity clean, Slint 3-layer complete. 6 patch, 0 defer, 4 dismissed.
+
+- [x] [Review][Patch] MariaDB/parent-less export dir: shared `printdoc::export_dir(config)` (SQLite → next to the DB; MariaDB/parent-less → OS `config::data_dir()`). The CLI no longer bails with the *backup/restore* error message, and the UI no longer writes silently to the CWD. [crates/pomone-app/src/{printdoc.rs,config.rs}, crates/pomone-cli/src/main.rs, crates/pomone-ui/src/wiring/home.rs]
+- [x] [Review][Patch] Distinct UI status when the file was saved but the viewer wouldn't launch — `status-week-print-saved-not-opened` (non-error), instead of "generation failed". [crates/pomone-ui/src/wiring/home.rs, locales]
+- [x] [Review][Patch] Tests: Sunday-boundary inclusion (`a_sunday_task_is_included_end_inclusive`), a multi-word skip reason rendered (`culture ratée`, asserting no raw `skip-reason-` key leaks), the ☒ Done glyph, and bed-less-sorts-last. [crates/pomone-app/src/printdoc.rs]
+- [x] [Review][Patch] Golden serde shape test (`contract_serializes_to_the_frozen_v1_shape`) — pins `version`/field/variant names so a rename breaks the test, enforcing the "frozen v1" contract at the byte level. [crates/pomone-app/src/printdoc.rs, Cargo.toml dev-dep serde_json]
+- [x] [Review][Patch] Title now shows the full week **range** (`Semaine du … au …` / `Week of … to …`), not just the start. [crates/pomone-app/src/printdoc.rs, locales]
+- [x] [Review][Patch] Bed-less (general) tasks now sort **after** the named beds in each day's tour-de-plaine, with a test pinning it. [crates/pomone-app/src/printdoc.rs]
+- [x] [Review][Dismissed] Four notes: (a) `completed_on` masking a skip — 1.2 projections clear the sibling column, so both can't coexist; not reachable. (b) deleted bed/variety renders as bed-less/`?` — FK-guarded, no panic. (c) empty week writes/opens a near-empty file — intended (the sheet says "no tasks"). (d) whole-catalog `HashMap` loads per print — negligible at market-garden scale.
+
 ## Completion Notes
 
-_(review pending — 3-layer adversarial review per retro AI-2.)_
+- 3-layer adversarial review: **6 patch, 0 defer, 4 dismissed, 0 blocking**. Substantive fixes: backend-independent export dir (no more misleading MariaDB error / silent CWD write), a golden serde test that actually enforces "frozen v1", and boundary/coverage tests (Sunday inclusion, multi-word skip reason, Done glyph, bed-less ordering).
+- Post-fix: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` → **425 passed, 0 failed**; coverage **82.1% lines**; glossary coherence green.

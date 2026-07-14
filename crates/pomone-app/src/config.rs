@@ -149,6 +149,13 @@ pub fn default_config_path() -> AppResult<PathBuf> {
     Ok(project_dirs()?.config_dir().join("config.toml"))
 }
 
+/// OS-specific data directory Pomone writes into (the same base as the default
+/// SQLite database). Falls back to the current directory if unresolved.
+#[must_use]
+pub fn data_dir() -> PathBuf {
+    project_dirs().map_or_else(|_| PathBuf::from("."), |d| d.data_dir().to_path_buf())
+}
+
 /// OS-specific default path of the SQLite database (used by
 /// `AppConfig::default_for_user`).
 fn default_sqlite_path() -> PathBuf {

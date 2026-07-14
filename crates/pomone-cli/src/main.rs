@@ -7,7 +7,7 @@ use pomone_app::{
     backup_path_for, backup_sqlite, backup_stamp_now, restore_sqlite, seed_demo_data, App,
     AppConfig, BackendConfig,
 };
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
 #[command(name = "pomone-cli", version, about = "Pomone admin/debug tools")]
@@ -81,10 +81,8 @@ fn print_week(week: Option<String>) -> Result<()> {
         .build()
         .context("failed to build tokio runtime")?;
     let config = AppConfig::load_or_default().context("failed to load Pomone config")?;
-    let db_path = sqlite_db_path(&config)?;
-    let dir = db_path
-        .parent()
-        .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+    // Backend-independent: next to the SQLite DB, or the OS data dir on MariaDB.
+    let dir = pomone_app::printdoc::export_dir(&config);
 
     let app = runtime
         .block_on(App::new(config))

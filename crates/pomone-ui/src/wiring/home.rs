@@ -39,7 +39,7 @@ pub(crate) fn wire_home(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
             };
             let s = state.borrow();
             let today = chrono::Local::now().date_naive();
-            let dir = week_print_dir(s.app.config());
+            let dir = pomone_app::printdoc::export_dir(s.app.config());
             let result = s.runtime.block_on(async {
                 pomone_app::printdoc::export_week_sheet(s.app.repo(), s.app.i18n(), today, &dir)
                     .await
@@ -47,8 +47,10 @@ pub(crate) fn wire_home(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
             let (key, is_err) = match result {
                 Ok(path) => {
                     if let Err(e) = open::that_detached(&path) {
-                        tracing::warn!(error = %e, path = %path.display(), "failed to open weekly print");
-                        ("status-week-print-failed", true)
+                        // The file is on disk; only launching the viewer failed —
+                        // say so (with the path) rather than "generation failed".
+                        tracing::warn!(error = %e, path = %path.display(), "wrote weekly print but could not open it");
+                        ("status-week-print-saved-not-opened", false)
                     } else {
                         tracing::info!(path = %path.display(), "wrote + opened weekly print");
                         ("status-week-print-written", false)
@@ -90,18 +92,6 @@ pub(crate) fn wire_home(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
             window.set_status_text(SharedString::from(i18n.t(key)));
             window.set_status_is_error(is_err);
         });
-    }
-}
-
-/// The directory the weekly print is written into — next to the SQLite
-/// database (the data dir). Falls back to the current directory when the
-/// backend is MariaDB or has no parent.
-fn week_print_dir(config: &pomone_app::AppConfig) -> PathBuf {
-    match &config.backend {
-        pomone_app::BackendConfig::Sqlite { path } => path
-            .parent()
-            .map_or_else(|| PathBuf::from("."), std::path::Path::to_path_buf),
-        pomone_app::BackendConfig::Mariadb { .. } => PathBuf::from("."),
     }
 }
 

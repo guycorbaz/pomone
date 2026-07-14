@@ -157,10 +157,14 @@ pub async fn build_week_sheet(repo: &dyn Repository, reference: NaiveDate) -> Ap
         .map(|offset| {
             let date = week_start + Duration::days(offset);
             let mut entries = by_day.remove(&date).unwrap_or_default();
-            // Tour-de-plaine: bed first, then the operation.
+            // Tour-de-plaine: named beds first (alphabetical), then the
+            // operation; bed-less general tasks come last (`is_none()` sorts
+            // false before true). `task_id` is the stable final tiebreak.
             entries.sort_by(|a, b| {
                 a.bed
-                    .cmp(&b.bed)
+                    .is_none()
+                    .cmp(&b.bed.is_none())
+                    .then_with(|| a.bed.cmp(&b.bed))
                     .then_with(|| a.task.cmp(&b.task))
                     .then_with(|| a.task_id.cmp(&b.task_id))
             });
@@ -183,7 +187,8 @@ pub fn render_text(sheet: &WeekSheet, i18n: &I18n) -> String {
     let mut out = String::new();
     let title = {
         let mut args = FluentArgs::new();
-        args.set("date", fmt_date(sheet.week_start, i18n));
+        args.set("start", fmt_date(sheet.week_start, i18n));
+        args.set("end", fmt_date(sheet.week_end, i18n));
         i18n.t_args("print-week-title", &args)
     };
     out.push_str(&title);
@@ -243,6 +248,20 @@ fn render_entry(entry: &Entry, i18n: &I18n) -> String {
 #[must_use]
 pub fn week_sheet_filename(week_start: NaiveDate) -> String {
     format!("pomone-semaine-{week_start}.txt")
+}
+
+/// Where the weekly print is written: next to the SQLite database, or — for the
+/// MariaDB backend (no local DB file) or a parent-less path — the OS data dir.
+/// Backend-independent, so both the CLI and the UI resolve the same place.
+#[must_use]
+pub fn export_dir(config: &crate::AppConfig) -> std::path::PathBuf {
+    match &config.backend {
+        crate::BackendConfig::Sqlite { path } => path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .map_or_else(crate::config::data_dir, Path::to_path_buf),
+        crate::BackendConfig::Mariadb { .. } => crate::config::data_dir(),
+    }
 }
 
 /// The export ritual: build the week sheet from the real database, render it to
@@ -336,6 +355,16 @@ mod tests {
         assert!(sheet.days.iter().all(|day| day.entries.is_empty()));
     }
 
+    #[tokio::test]
+    async fn a_sunday_task_is_included_end_inclusive() {
+        // 2026-03-08 is the Sunday (week_end) — the range must include it.
+        let (repo, task_id) = repo_with_task(d(2026, 3, 8)).await;
+        let sheet = build_week_sheet(&repo, d(2026, 3, 2)).await.unwrap();
+        assert_eq!(sheet.week_end, d(2026, 3, 8));
+        assert_eq!(sheet.days[6].date, d(2026, 3, 8));
+        assert_eq!(sheet.days[6].entries[0].task_id, task_id);
+    }
+
     #[test]
     fn render_shows_the_three_states() {
         let i18n = I18n::new(crate::i18n::Lang::Fr).unwrap();
@@ -356,23 +385,123 @@ mod tests {
                     },
                     Entry {
                         task_id: TaskId::new(),
+                        state: EntryState::Done,
+                        bed: Some("Planche B".into()),
+                        crop: Some("Carotte · Nantaise".into()),
+                        task: "Récolte".into(),
+                        skip_reason: None,
+                    },
+                    Entry {
+                        task_id: TaskId::new(),
                         state: EntryState::Skipped,
                         bed: Some("Planche C".into()),
                         crop: None,
+                        // A multi-word (kebab) reason must resolve to its key.
                         task: "Désherbage".into(),
-                        skip_reason: Some(SkipReason::Weather),
+                        skip_reason: Some(SkipReason::CropFailure),
                     },
                 ],
             }],
         };
         let text = render_text(&sheet, &i18n);
         assert!(text.contains('☐'), "pending box");
+        assert!(text.contains('☒'), "done box");
         assert!(text.contains('⊘'), "skipped glyph");
         assert!(text.contains("Planche A · Tomate · Marmande — Semis"));
-        // Skip reason localized + rendered (fr: "météo").
-        assert!(text.contains("météo"), "localized skip reason:\n{text}");
-        // Header carries the localized week title.
+        // Multi-word skip reason localized (fr: "culture ratée"), not the raw key.
+        assert!(
+            text.contains("culture ratée"),
+            "localized skip reason:\n{text}"
+        );
+        assert!(
+            !text.contains("skip-reason-"),
+            "no raw Fluent key leaked:\n{text}"
+        );
+        // Header carries the localized week range.
         assert!(text.starts_with("Semaine du"), "title:\n{text}");
+        assert!(text.contains(" au "), "week range in title:\n{text}");
+    }
+
+    #[test]
+    fn bed_less_tasks_sort_after_named_beds() {
+        // Build via the repo so the sort runs; two tasks, one bed-less.
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let repo = SqliteRepository::in_memory().await.unwrap();
+            seed_defaults(&repo).await.unwrap();
+            let tt = repo.task_type_list().await.unwrap()[0].id;
+            let k = pomone_domain::LocationKind::new("Planche", None).unwrap();
+            pomone_db::LocationKindRepo::location_kind_create(&repo, &k)
+                .await
+                .unwrap();
+            let loc = pomone_domain::Location::new(
+                k.id,
+                "Planche Z",
+                rust_decimal_macros::dec!(10),
+                rust_decimal_macros::dec!(1),
+                None,
+                None,
+            )
+            .unwrap();
+            pomone_db::LocationRepo::location_create(&repo, &loc)
+                .await
+                .unwrap();
+            let day = d(2026, 3, 3);
+            let bedless = Task::new(None, None, tt, None, None, day, None, None, None, None);
+            let bedded = Task::new(
+                None,
+                Some(loc.id),
+                tt,
+                None,
+                None,
+                day,
+                None,
+                None,
+                None,
+                None,
+            );
+            repo.task_create(&bedless).await.unwrap();
+            repo.task_create(&bedded).await.unwrap();
+            let sheet = build_week_sheet(&repo, d(2026, 3, 2)).await.unwrap();
+            let entries = &sheet.days[1].entries; // Tuesday 2026-03-03
+            assert_eq!(entries.len(), 2);
+            assert!(entries[0].bed.is_some(), "named bed first");
+            assert!(entries[1].bed.is_none(), "bed-less last");
+        });
+    }
+
+    #[test]
+    fn contract_serializes_to_the_frozen_v1_shape() {
+        // Golden shape: renaming a field or an enum variant must break this,
+        // forcing a `PRINTDOC_VERSION` bump (the "frozen v1" guarantee).
+        let sheet = WeekSheet {
+            version: PRINTDOC_VERSION,
+            week_start: NaiveDate::from_ymd_opt(2026, 3, 2).unwrap(),
+            week_end: NaiveDate::from_ymd_opt(2026, 3, 8).unwrap(),
+            days: vec![DaySheet {
+                date: NaiveDate::from_ymd_opt(2026, 3, 2).unwrap(),
+                entries: vec![Entry {
+                    task_id: TaskId::from_uuid(uuid::Uuid::nil()),
+                    state: EntryState::Skipped,
+                    bed: Some("Planche A".into()),
+                    crop: None,
+                    task: "Semis".into(),
+                    skip_reason: Some(SkipReason::Weather),
+                }],
+            }],
+        };
+        let json = serde_json::to_value(&sheet).unwrap();
+        assert_eq!(json["version"], 1);
+        assert_eq!(json["week_start"], "2026-03-02");
+        assert_eq!(json["week_end"], "2026-03-08");
+        let entry = &json["days"][0]["entries"][0];
+        assert_eq!(entry["state"], "Skipped");
+        assert_eq!(entry["task"], "Semis");
+        assert_eq!(entry["skip_reason"], "Weather");
+        assert_eq!(entry["crop"], serde_json::Value::Null);
+        // Round-trips back to the same value.
+        let back: WeekSheet = serde_json::from_value(json).unwrap();
+        assert_eq!(back, sheet);
     }
 
     #[tokio::test]
