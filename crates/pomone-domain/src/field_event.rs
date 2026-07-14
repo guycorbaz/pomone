@@ -131,8 +131,9 @@ impl FieldEvent {
     /// Build a new event with a fresh id. `target_kind` must be non-empty; an
     /// empty/blank `payload` is normalised to `"{}"`.
     ///
-    /// Note: the `occurred_at ≤ recorded_at` temporal invariant is introduced
-    /// in story 1.3; this constructor does not yet enforce it.
+    /// A backdated `occurred_at` is allowed, but it can never be *after* the
+    /// instant it was recorded: `occurred_at ≤ recorded_at.date()` is enforced
+    /// here (story 1.3).
     pub fn new(
         kind: FactKind,
         target_kind: impl Into<String>,
@@ -148,6 +149,13 @@ impl FieldEvent {
                 field: "target_kind",
                 max: MAX_TARGET_KIND_LEN,
                 len: target_kind.len(),
+            });
+        }
+        if occurred_at > recorded_at.date() {
+            return Err(DomainError::DateAfter {
+                field: "occurred_at",
+                date: occurred_at,
+                max: recorded_at.date(),
             });
         }
         // Truncate to microseconds so the value round-trips identically on both
@@ -273,6 +281,48 @@ mod tests {
         .unwrap();
         // 123_456_789 ns → 123_456_000 ns (microsecond precision).
         assert_eq!(e.recorded_at.nanosecond(), 123_456_000);
+    }
+
+    #[test]
+    fn occurred_at_after_recorded_at_is_rejected() {
+        // recorded 2026-03-02 09:30; occurring the next day is impossible.
+        let res = FieldEvent::new(
+            FactKind::TaskDone,
+            "task",
+            Uuid::new_v4(),
+            NaiveDate::from_ymd_opt(2026, 3, 3).unwrap(),
+            dt(),
+            "{}",
+            None,
+        );
+        assert!(matches!(
+            res,
+            Err(DomainError::DateAfter {
+                field: "occurred_at",
+                ..
+            })
+        ));
+        // Same-day and backdated are both fine.
+        assert!(FieldEvent::new(
+            FactKind::TaskDone,
+            "task",
+            Uuid::new_v4(),
+            NaiveDate::from_ymd_opt(2026, 3, 2).unwrap(),
+            dt(),
+            "{}",
+            None,
+        )
+        .is_ok());
+        assert!(FieldEvent::new(
+            FactKind::TaskDone,
+            "task",
+            Uuid::new_v4(),
+            NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
+            dt(),
+            "{}",
+            None,
+        )
+        .is_ok());
     }
 
     #[test]

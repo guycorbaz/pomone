@@ -215,7 +215,7 @@ mod tests {
                 task_id,
                 on: d(2026, 3, 3),
             },
-            dt(),
+            d(2026, 3, 3).and_hms_opt(10, 0, 0).unwrap(),
         )
         .await
         .unwrap();

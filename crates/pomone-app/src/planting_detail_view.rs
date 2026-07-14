@@ -322,6 +322,7 @@ mod tests {
             "binage",
             false,
             d(2026, 5, 1),
+            d(2026, 5, 1).and_hms_opt(12, 0, 0).unwrap(),
         )
         .await
         .unwrap();
