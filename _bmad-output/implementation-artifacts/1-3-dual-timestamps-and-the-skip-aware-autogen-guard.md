@@ -32,6 +32,16 @@ So that backdated entry is safe and regeneration never undoes decisions.
 - **Only the UI/CLI reads the clock.** After this story the sole clock reads below the UI are `backup.rs` (a backup *filename* stamp — not a fact) — no fact clock exists below the UI layer.
 - **Skip-aware guard keys on `(planting, task_type)`.** Each phase (sow/transplant/harvest) resolves to a distinct task type, so the task type identifies the slot; a settled task of that type blocks regeneration regardless of the recomputed date. Non-settled (pending) tasks keep the exact `(type, date)` idempotency, unchanged.
 
+### Review Findings
+
+3-layer adversarial review (retro AI-2). Strong convergence on the settled-guard key. 3 patch, 0 defer, 2 dismissed.
+
+- [x] [Review][Patch] Skip-aware guard now keys on **`TaskCategory`**, not `task_type_id` — closes the Repiquage↔Plantation method-flip hole (establishment resolves to two types but one category, so a replan dropping the sow date could resurrect a settled establishment as a "Plantation"). Documented the single-window assumption + the future recurring-per-planting caveat (Blind/Auditor's campaign-window point). [crates/pomone-app/src/task_autogen.rs]
+- [x] [Review][Patch] Added `settled_establishment_survives_method_flip_on_replan` — marks the Repiquage **done**, replans as bought-plants, asserts no Plantation is regenerated (covers the method-flip AND the done branch of the guard, which the first test didn't). [crates/pomone-app/src/task_autogen.rs]
+- [x] [Review][Patch] Marked the 1.1 + 1.2 deferrals **resolved** in `deferred-work.md`: pre-1.3 inverted rows load unvalidated (decode builds the struct literally, never re-runs `new()`); the 1.2 same-day-tie deferral is gone now that `recorded_at` is a real injected timestamp. [_bmad-output/implementation-artifacts/deferred-work.md]
+- [x] [Review][Dismissed] Two Lows dismissed: (a) `create_task` at 8 args — it already carries `#[allow(clippy::too_many_arguments)]`; clippy clean. (b) non-atomic `task_create`+`record_fact` / future-dated completion — unreachable: both record `Fact::Done { on: today }` (not `planned_on`) and the UI sources `today` + `recorded_at` from the same `Local::now()`, so `occurred_at == recorded_at.date()` always; the invariant can't fire there. Pre-existing two-step-write seam, noted in the 1.2 review.
+
 ## Completion Notes
 
-_(review pending — 3-layer adversarial review per retro AI-2.)_
+- 3-layer adversarial review: **3 patch, 0 defer, 2 dismissed, 0 blocking**. The substantive fix was re-keying the skip-aware guard on `TaskCategory` to survive the establishment method-flip on a future replan. Both prior deferrals (1.1, 1.2) are now genuinely resolved.
+- Post-fix: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` → **417 passed, 0 failed**; coverage **81.9% lines**.
