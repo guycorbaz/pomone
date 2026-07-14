@@ -43,6 +43,7 @@ Deux tables :
 | task-category | Catégorie de tâche | Task category | Enum stable qui classe un type de tâche (semis, repiquage, récolte, désherbage…). | category |
 | task-series | Série (récurrente) | Series (recurring) | Un modèle de tâche qui se répète à intervalle régulier (arrosage, tonte) ; chaque occurrence est une tâche datée. | task-form-series |
 | printdoc | Feuille de semaine (PrintDoc) | Week sheet (PrintDoc) | Contrat de données figé et versionné (v1) projetant les tâches d'une semaine (par jour puis planche, tour-de-plaine, états ☐/☒/⊘) pour l'impression — rendu texte en story 1.4, PDF en épic 4. | print |
+| skipped | Ignorée | Skipped | Tâche délibérément non faite, consignée avec un motif (set fermé) et une note éventuelle — jamais perdue en silence ; abandonnée puis corrigible depuis l'écran Tâches (story 1.5). | skip |
 
 ## Le contrat PrintDoc (`WeekSheet`, v1)
 
@@ -69,8 +70,7 @@ et en vérifie la forme (`version`). **Toute évolution cassante = bump de
 | bed | Planche | Bed | Bande de culture élémentaire à l'intérieur d'un jardin ou d'une pièce. | Documenté — FR↔EN déjà alignés dans les chaînes ; pas de clé-libellé dédiée à ancrer (les types de lieux sont des données utilisateur), donc hors gate. |
 | succession | Succession | Succession | Une culture replantée en lots échelonnés dans la saison (la «succession» de QRop). | Planifié E2 (plantations échelonnées). **Distinct de `task-series`** : une succession concerne des *plantations*, une série des *tâches*. |
 | growing-schedule | Itinéraire technique (ITK) | Growing schedule | Gabarit ordonné des opérations d'une culture (semis→…→récolte). | Planifié E2. |
-| skipped | Ignorée | Skipped | Tâche délibérément non faite, consignée avec un motif — jamais perdue en silence. | Planifié E1. |
-| field-event | Fait de terrain | Field event | Enregistrement en ajout-seul de ce qui s'est passé au champ (fait, ignoré, corrigé). | Planifié E1. |
+| field-event | Fait de terrain | Field event | Enregistrement en ajout-seul de ce qui s'est passé au champ (fait, ignoré, corrigé). | Câblé E1 (stories 1.1–1.5) mais **concept interne** : aucune chaîne-libellé dédiée à ancrer, donc hors gate. |
 | correction | Correction | Correction | Amendement explicite d'un fait antérieur, l'historique étant préservé. | Planifié E1. |
 
 ## Décisions de terminologie (story 0.8)
@@ -85,9 +85,14 @@ L'audit des chaînes existantes a montré que **rien de visible n'était à reno
 - **`planche`↔`bed` sont déjà alignés** dans les chaînes (EN « bed » partout, FR
   « planche »). Aucune clé-libellé dédiée n'existe (les lieux sont des données
   utilisateur), donc `bed` reste documenté mais hors gate.
-- Les autres termes planifiés (`skipped`, `field-event`, `correction`,
-  `growing-schedule`) n'ont **aucune chaîne aujourd'hui** : ils sont câblés (et
-  promus en table 1) par l'épic qui les introduit.
+- **`skipped` est promu en table 1 (story 1.5)** : l'écran Tâches câble
+  «Abandonner» (motif du set fermé + note) et «Corriger», donc le terme porte
+  désormais des chaînes visibles (préfixe `skip` : `skip-reason-*`,
+  `skip-dialog-*`, à parité fr↔en).
+- `field-event` et `correction` sont **câblés mais internes** (aucun libellé
+  utilisateur dédié à ancrer) : ils restent documentés hors gate.
+- `growing-schedule` n'a **aucune chaîne aujourd'hui** : il sera câblé (et promu
+  en table 1) par l'épic E2 qui l'introduit.
 
 ## Règle de tenue
 

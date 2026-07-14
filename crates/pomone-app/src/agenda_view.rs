@@ -72,7 +72,10 @@ pub async fn list_agenda(
     let var_by_id: HashMap<_, _> = varieties.iter().map(|v| (v.id, v)).collect();
     let crop_by_id: HashMap<_, _> = crops.iter().map(|c| (c.id, c)).collect();
 
-    let mut rows: Vec<AgendaRow> = Vec::with_capacity(tasks.len());
+    // Each entry pairs the render row with the date it was *settled* on (done
+    // or skipped), or `None` while pending — used to cap the history by
+    // recency-of-settling, not planned date (see the cap below).
+    let mut rows: Vec<(AgendaRow, Option<NaiveDate>)> = Vec::with_capacity(tasks.len());
     for task in &tasks {
         // Orphan task whose type was deleted — skip rather than crash.
         let Some(tt) = types_by_id.get(&task.task_type_id) else {
@@ -102,35 +105,53 @@ pub async fn list_agenda(
         } else {
             String::new()
         };
-        rows.push(AgendaRow {
-            task_id: task.id.to_string(),
-            planned_on: task.planned_on.format("%Y-%m-%d").to_string(),
-            label,
-            color: tt.color.clone(),
-            completed,
-            skipped,
-            skip_reason,
-            overdue: !settled && task.planned_on < today,
-            today: !settled && task.planned_on == today,
-        });
+        // The settling date is what a skip/done actually stamps; `None` while
+        // pending. `completed_on` wins if somehow both are set (defensive).
+        let settled_on = task.completed_on.or(task.skipped_on);
+        rows.push((
+            AgendaRow {
+                task_id: task.id.to_string(),
+                planned_on: task.planned_on.format("%Y-%m-%d").to_string(),
+                label,
+                color: tt.color.clone(),
+                completed,
+                skipped,
+                skip_reason,
+                overdue: !settled && task.planned_on < today,
+                today: !settled && task.planned_on == today,
+            },
+            settled_on,
+        ));
     }
 
+    // Cap the settled (done + skipped) history by *recency of settling*, not by
+    // planned date: skipping a long-overdue task (an old planned date, settled
+    // today) must keep it visible and correctable, never drop it under the cap
+    // (issue #69 / story 1.5). Pending rows are always kept.
+    let mut settled: Vec<(usize, NaiveDate)> = rows
+        .iter()
+        .enumerate()
+        .filter_map(|(i, (_, on))| on.map(|d| (i, d)))
+        .collect();
+    // Newest settled first; index tiebreak keeps the drop deterministic.
+    settled.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    let dropped: std::collections::HashSet<usize> = settled
+        .into_iter()
+        .skip(SETTLED_HISTORY_CAP)
+        .map(|(i, _)| i)
+        .collect();
+
+    let mut out: Vec<AgendaRow> = rows
+        .into_iter()
+        .enumerate()
+        .filter(|(i, _)| !dropped.contains(i))
+        .map(|(_, (row, _))| row)
+        .collect();
+
     // Newest planned date first; stable tiebreak on label.
-    rows.sort_by(|a, b| b.planned_on.cmp(&a.planned_on).then(a.label.cmp(&b.label)));
+    out.sort_by(|a, b| b.planned_on.cmp(&a.planned_on).then(a.label.cmp(&b.label)));
 
-    // Cap the settled (done + skipped) history (rows are newest-first, so
-    // retaining the first N settled keeps the most recent ones). Pending rows
-    // all stay.
-    let mut settled_kept = 0usize;
-    rows.retain(|r| {
-        if !(r.completed || r.skipped) {
-            return true;
-        }
-        settled_kept += 1;
-        settled_kept <= SETTLED_HISTORY_CAP
-    });
-
-    Ok(rows)
+    Ok(out)
 }
 
 /// Mark a task done, on `on`, from the tasks screen — records a `Done` fact
@@ -361,6 +382,35 @@ mod tests {
         // Localized (fr) skip-reason label — resolved, not the raw key.
         assert!(!row.skip_reason.is_empty());
         assert_ne!(row.skip_reason, "skip-reason-weather");
+    }
+
+    /// Regression (review 1.5): skipping a long-overdue task must keep it
+    /// visible for correction even when the settled history is already full —
+    /// the cap is by recency of settling, not by planned date.
+    #[tokio::test]
+    async fn freshly_skipped_old_task_survives_the_settled_cap() {
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let today = d(2026, 5, 20);
+
+        // Fill the cap with recent completed tasks (all settled in 2024).
+        let base = d(2024, 1, 1);
+        for i in 0..SETTLED_HISTORY_CAP {
+            let day = base + chrono::Duration::days(i64::try_from(i).unwrap());
+            add_task(&repo, TaskCategory::Irrigation, day, Some(day)).await;
+        }
+        // A long-overdue task (old planned date), skipped *today*.
+        let id = add_task(&repo, TaskCategory::Weeding, d(2020, 1, 1), None).await;
+        skip_task(&repo, id, today, SkipReason::NoTime, None, at(2026, 5, 20))
+            .await
+            .unwrap();
+
+        let rows = list_agenda(&repo, &i18n(), today).await.unwrap();
+        let row = rows.iter().find(|r| r.task_id == id.to_string());
+        assert!(
+            row.is_some_and(|r| r.skipped),
+            "a freshly-skipped task must stay visible and correctable"
+        );
     }
 
     /// «Corriger» reopens any settled state — done *or* skipped — clearing it so
