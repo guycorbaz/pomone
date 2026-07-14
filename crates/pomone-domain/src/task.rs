@@ -170,9 +170,11 @@ impl Task {
         self.completed_on.is_some() || self.skipped_on.is_some()
     }
 
-    /// True if the task is still pending and planned for a date in the past.
+    /// True if the task is still **pending** (neither done nor skipped) and
+    /// planned for a date in the past. A skipped task is a deliberate decision,
+    /// not a debt — it never counts as overdue (story 1.5).
     pub fn is_overdue(&self, today: NaiveDate) -> bool {
-        !self.is_completed() && self.planned_on < today
+        !self.is_settled() && self.planned_on < today
     }
 }
 
@@ -237,6 +239,13 @@ mod tests {
 
         let done = t.mark_completed(d(2026, 5, 1));
         assert!(!done.is_overdue(d(2026, 6, 1)));
+
+        // A skipped past task is a decision, not overdue (story 1.5).
+        let mut skipped = fresh_task();
+        skipped.skipped_on = Some(d(2026, 5, 1));
+        skipped.skip_reason = Some(crate::field_event::SkipReason::Weather);
+        assert!(skipped.is_settled());
+        assert!(!skipped.is_overdue(d(2026, 6, 1)));
     }
 
     #[test]

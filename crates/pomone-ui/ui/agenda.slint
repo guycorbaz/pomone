@@ -1,9 +1,12 @@
 // Pomone — Tasks page.
 //
 // A single flat list of every task, newest planned date first
-// (reverse-chronological), built by Rust (`list_agenda`). Each row is
-// clickable and opens the shared task edit form. The date is tinted red for
-// overdue rows (pending and past); completed rows are greyed out.
+// (reverse-chronological), built by Rust (`list_agenda`). Clicking a row's
+// label opens the shared task edit form. Each row also carries a ⋯ menu that
+// settles the task in place (story 1.5): «Marquer fait» / «Abandonner…» when
+// pending, «Corriger» when already done or skipped. The date is tinted red for
+// overdue rows (pending and past); completed rows are greyed; skipped rows are
+// struck through and carry a reason badge.
 
 import { Palette, Theme, Card } from "theme.slint";
 import { ScrollView } from "std-widgets.slint";
@@ -14,11 +17,14 @@ export struct AgendaRow {
     label: string,
     color: color,
     completed: bool,
+    skipped: bool,
+    // Localized skip-reason label (e.g. "météo"); empty unless `skipped`.
+    skip-reason: string,
     overdue: bool,
     today: bool,
 }
 
-// A small status pill (e.g. "En retard", "Aujourd'hui").
+// A small status pill (e.g. "En retard", "Aujourd'hui", "Abandonnée · météo").
 component StatusBadge inherits Rectangle {
     in property <string> label;
     in property <color> tint;
@@ -39,20 +45,48 @@ component StatusBadge inherits Rectangle {
     }
 }
 
-// One clickable task row: colored type dot, label, status badge, planned date.
+// A single clickable row of the ⋯ context menu.
+component MenuItem inherits Rectangle {
+    in property <string> label;
+    callback chosen();
+    height: 32px;
+    border-radius: Theme.radius-sm;
+    background: touch.has-hover ? Palette.surface-alt : transparent;
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.chosen(); }
+    }
+    HorizontalLayout {
+        padding-left: Theme.space-md;
+        padding-right: Theme.space-md;
+        Text {
+            text: root.label;
+            color: Palette.text-primary;
+            font-size: Theme.font-size-body;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// One task row: colored type dot, clickable label, status badge, planned date,
+// and a ⋯ settle menu.
 component AgendaTaskRow inherits Rectangle {
     in property <AgendaRow> task;
     in property <string> overdue-label;
     in property <string> today-label;
+    in property <string> skipped-label;
+    in property <string> menu-done-label;
+    in property <string> menu-skip-label;
+    in property <string> menu-correct-label;
     callback clicked(string);
+    callback mark-done(string);
+    callback skip-requested(string);
+    callback reopen(string);
+
+    property <bool> settled: root.task.completed || root.task.skipped;
 
     border-radius: Theme.radius-sm;
-    background: touch.has-hover ? Palette.surface-alt : transparent;
-
-    touch := TouchArea {
-        mouse-cursor: pointer;
-        clicked => { root.clicked(root.task.task-id); }
-    }
+    background: rowtouch.has-hover ? Palette.surface-alt : transparent;
 
     HorizontalLayout {
         padding-left: Theme.space-sm;
@@ -66,20 +100,44 @@ component AgendaTaskRow inherits Rectangle {
             height: 12px;
             border-radius: 6px;
             background: root.task.color;
-            opacity: root.task.completed ? 0.45 : 1.0;
+            opacity: root.settled ? 0.45 : 1.0;
             y: (parent.height - self.height) / 2;
         }
 
-        Text {
-            text: root.task.label;
-            color: root.task.completed ? Palette.text-muted : Palette.text-primary;
-            font-size: Theme.font-size-body;
-            font-weight: Theme.font-weight-semibold;
+        // Clickable label. A skipped row is struck through with an overlaid line
+        // (Slint Text has no strikethrough attribute).
+        Rectangle {
             horizontal-stretch: 1;
-            vertical-alignment: center;
-            overflow: elide;
+            rowtouch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.clicked(root.task.task-id); }
+            }
+            HorizontalLayout {
+                label := Text {
+                    text: root.task.label;
+                    color: root.settled ? Palette.text-muted : Palette.text-primary;
+                    font-size: Theme.font-size-body;
+                    font-weight: Theme.font-weight-semibold;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+            }
+            if root.task.skipped: Rectangle {
+                height: 1px;
+                width: min(label.preferred-width, parent.width);
+                x: 0;
+                y: parent.height / 2;
+                background: Palette.text-muted;
+            }
         }
 
+        if root.task.skipped: StatusBadge {
+            label: root.task.skip-reason == "" ? root.skipped-label
+                 : root.skipped-label + " · " + root.task.skip-reason;
+            tint: Palette.text-muted;
+            y: (parent.height - self.height) / 2;
+        }
         if root.task.overdue: StatusBadge {
             label: root.overdue-label;
             tint: Palette.danger;
@@ -94,11 +152,58 @@ component AgendaTaskRow inherits Rectangle {
         Text {
             text: root.task.planned-on;
             color: root.task.overdue ? Palette.danger
-                 : root.task.completed ? Palette.text-muted
+                 : root.settled ? Palette.text-muted
                  : Palette.text-secondary;
             font-size: Theme.font-size-label;
             font-weight: root.task.overdue ? Theme.font-weight-semibold : Theme.font-weight-regular;
             vertical-alignment: center;
+        }
+
+        // ⋯ settle menu.
+        Rectangle {
+            width: 28px;
+            y: (parent.height - self.height) / 2;
+            height: 28px;
+            border-radius: Theme.radius-sm;
+            background: menutouch.has-hover ? Palette.surface : transparent;
+            menutouch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { menu.show(); }
+            }
+            Text {
+                text: "⋯";
+                color: Palette.text-secondary;
+                font-size: Theme.font-size-h2;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            menu := PopupWindow {
+                x: parent.width - 180px;
+                y: parent.height + 2px;
+                Rectangle {
+                    width: 180px;
+                    background: Palette.surface;
+                    border-width: Theme.border-width;
+                    border-color: Palette.border-strong;
+                    border-radius: Theme.radius-md;
+                    VerticalLayout {
+                        padding: Theme.space-xs;
+                        spacing: 0;
+                        if !root.settled: MenuItem {
+                            label: root.menu-done-label;
+                            chosen => { menu.close(); root.mark-done(root.task.task-id); }
+                        }
+                        if !root.settled: MenuItem {
+                            label: root.menu-skip-label;
+                            chosen => { menu.close(); root.skip-requested(root.task.task-id); }
+                        }
+                        if root.settled: MenuItem {
+                            label: root.menu-correct-label;
+                            chosen => { menu.close(); root.reopen(root.task.task-id); }
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -110,9 +215,16 @@ export component AgendaPage inherits Rectangle {
     in property <string> empty-text;
     in property <string> overdue-label;
     in property <string> today-label;
+    in property <string> skipped-label;
+    in property <string> menu-done-label;
+    in property <string> menu-skip-label;
+    in property <string> menu-correct-label;
     in property <[AgendaRow]> rows;
 
     callback task-clicked(string);
+    callback mark-done(string);
+    callback skip-requested(string);
+    callback reopen(string);
 
     ScrollView {
         VerticalLayout {
@@ -152,7 +264,14 @@ export component AgendaPage inherits Rectangle {
                         task: row;
                         overdue-label: root.overdue-label;
                         today-label: root.today-label;
+                        skipped-label: root.skipped-label;
+                        menu-done-label: root.menu-done-label;
+                        menu-skip-label: root.menu-skip-label;
+                        menu-correct-label: root.menu-correct-label;
                         clicked(id) => { root.task-clicked(id); }
+                        mark-done(id) => { root.mark-done(id); }
+                        skip-requested(id) => { root.skip-requested(id); }
+                        reopen(id) => { root.reopen(id); }
                     }
                 }
             }

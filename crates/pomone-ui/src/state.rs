@@ -84,6 +84,12 @@ pub(crate) struct UiState {
     pub(crate) editing_task_id: String,
     /// Page to return to after the task form closes (typically "tasks").
     pub(crate) task_form_previous_page: String,
+    /// Stringified `TaskId` targeted by the open skip-reason dialog; empty when
+    /// the dialog is closed (story 1.5).
+    pub(crate) agenda_skip_target: String,
+    /// Closed-set skip-reason keys (`"weather"`, `"pest-disease"`, …) parallel
+    /// to the skip dialog's reason ComboBox model.
+    pub(crate) agenda_skip_reason_keys: Vec<String>,
     /// Stringified `TaskTypeId`s parallel to the Task Types admin list,
     /// so callbacks emitting just a row id can be routed back to typed IDs.
     pub(crate) task_type_admin_ids: Vec<String>,

@@ -6,7 +6,7 @@
 // in-properties, keeping translations and data in a single Rust-side source
 // of truth.
 
-import { Palette, Theme, Icons, NavButton, NavSectionHeader, SecondaryButton, PrimaryButton, Card, PaletteColor } from "theme.slint";
+import { Palette, Theme, Icons, NavButton, NavSectionHeader, SecondaryButton, PrimaryButton, Card, PaletteColor, ThemedComboBox, ThemedLineEdit } from "theme.slint";
 import { HomePage } from "home.slint";
 import { Timeline, GanttBar } from "components/timeline.slint";
 import { PlantingsPage, PlantingRow } from "plantings.slint";
@@ -325,8 +325,30 @@ export component MainWindow inherits Window {
     in property <string> agenda-empty-text;
     in property <string> agenda-overdue-label;
     in property <string> agenda-today-label;
+    in property <string> agenda-skipped-label;
+    in property <string> agenda-menu-done-label;
+    in property <string> agenda-menu-skip-label;
+    in property <string> agenda-menu-correct-label;
     in property <[AgendaRow]> agenda-rows;
     callback agenda-task-clicked(string);
+    // Settle gestures from a row's ⋯ menu (story 1.5).
+    callback agenda-mark-done(string);
+    callback agenda-skip-requested(string);
+    callback agenda-reopen(string);
+
+    // ------- Skip-reason dialog (story 1.5) -------
+    // Rust sets the reason labels + shows it when «Abandonner» is chosen; on
+    // accept it reads the selected reason index + note and records the skip.
+    in property <bool> skip-dialog-visible: false;
+    in property <string> skip-dialog-title;
+    in property <[string]> skip-dialog-reason-labels;
+    in-out property <int> skip-dialog-reason-index: 0;
+    in-out property <string> skip-dialog-note;
+    in property <string> skip-dialog-note-placeholder;
+    in property <string> skip-dialog-ok-text;
+    in property <string> skip-dialog-cancel-text;
+    callback skip-dialog-accepted();
+    callback skip-dialog-cancelled();
 
     // ------- Yearly harvest section (perennials only) -------
     in property <bool> detail-is-perennial;
@@ -1395,8 +1417,15 @@ export component MainWindow inherits Window {
                 empty-text: agenda-empty-text;
                 overdue-label: agenda-overdue-label;
                 today-label: agenda-today-label;
+                skipped-label: agenda-skipped-label;
+                menu-done-label: agenda-menu-done-label;
+                menu-skip-label: agenda-menu-skip-label;
+                menu-correct-label: agenda-menu-correct-label;
                 rows: agenda-rows;
                 task-clicked(tid) => { agenda-task-clicked(tid); }
+                mark-done(tid) => { agenda-mark-done(tid); }
+                skip-requested(tid) => { agenda-skip-requested(tid); }
+                reopen(tid) => { agenda-reopen(tid); }
             }
 
             // ------- Task types catalog (create / edit / delete) -------
@@ -1643,6 +1672,57 @@ export component MainWindow inherits Window {
                     PrimaryButton {
                         text: confirm-ok-text;
                         clicked => { confirm-accepted(); }
+                    }
+                }
+            }
+        }
+    }
+
+    // ------- Skip-reason dialog (story 1.5) -------
+    // Overlays every page like the confirm dialog. The dim backdrop swallows
+    // clicks; the user picks a reason (closed set), may add a note, then
+    // Abandonner records the skip through the single fact write path.
+    if skip-dialog-visible: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #00000077;
+
+        TouchArea { } // eat clicks on the backdrop
+
+        Card {
+            width: min(420px, parent.width - 80px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: Palette.surface;
+
+            VerticalLayout {
+                padding: Theme.space-xl;
+                spacing: Theme.space-md;
+
+                Text {
+                    text: skip-dialog-title;
+                    color: Palette.text-primary;
+                    font-size: Theme.font-size-h2;
+                    font-weight: Theme.font-weight-bold;
+                }
+                ThemedComboBox {
+                    model: skip-dialog-reason-labels;
+                    current-index <=> skip-dialog-reason-index;
+                }
+                ThemedLineEdit {
+                    placeholder-text: skip-dialog-note-placeholder;
+                    text <=> skip-dialog-note;
+                }
+                HorizontalLayout {
+                    spacing: Theme.space-sm;
+                    alignment: end;
+                    SecondaryButton {
+                        text: skip-dialog-cancel-text;
+                        clicked => { skip-dialog-cancelled(); }
+                    }
+                    PrimaryButton {
+                        text: skip-dialog-ok-text;
+                        clicked => { skip-dialog-accepted(); }
                     }
                 }
             }

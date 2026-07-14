@@ -37,7 +37,7 @@ pub mod units;
 #[cfg(test)]
 mod test_helpers;
 
-pub use agenda_view::{list_agenda, AgendaRow};
+pub use agenda_view::{list_agenda, mark_task_done, reopen_task, skip_task, AgendaRow};
 pub use app::{test_backend, App};
 pub use backup::{
     backup_backend, backup_path_for, backup_sqlite, backup_stamp_now, restore_sqlite,
