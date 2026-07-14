@@ -860,7 +860,7 @@ pub(crate) fn refresh_agenda(window: &MainWindow, state: &mut UiState) -> Result
     let today = Local::now().date_naive();
     let rows: Vec<AppAgendaRow> = state
         .runtime
-        .block_on(async { list_agenda(state.app.repo(), today).await })
+        .block_on(async { list_agenda(state.app.repo(), state.app.i18n(), today).await })
         .context("failed to load tasks list")?;
 
     let mapped: Vec<SlintAgendaRow> = rows
@@ -871,6 +871,8 @@ pub(crate) fn refresh_agenda(window: &MainWindow, state: &mut UiState) -> Result
             label: SharedString::from(r.label),
             color: parse_hex_color(&r.color),
             completed: r.completed,
+            skipped: r.skipped,
+            skip_reason: SharedString::from(r.skip_reason),
             overdue: r.overdue,
             today: r.today,
         })

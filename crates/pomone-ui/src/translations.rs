@@ -280,6 +280,18 @@ pub(crate) fn apply_translations(window: &MainWindow, app: &App) {
     window.set_agenda_empty_text(SharedString::from(i18n.t("agenda-empty")));
     window.set_agenda_overdue_label(SharedString::from(i18n.t("agenda-overdue-title")));
     window.set_agenda_today_label(SharedString::from(i18n.t("agenda-today-title")));
+    // Settle menu + skipped badge (story 1.5).
+    window.set_agenda_skipped_label(SharedString::from(i18n.t("agenda-skipped-title")));
+    window.set_agenda_menu_done_label(SharedString::from(i18n.t("agenda-menu-done")));
+    window.set_agenda_menu_skip_label(SharedString::from(i18n.t("agenda-menu-skip")));
+    window.set_agenda_menu_correct_label(SharedString::from(i18n.t("agenda-menu-correct")));
+    // Skip-reason dialog chrome (story 1.5).
+    window.set_skip_dialog_title(SharedString::from(i18n.t("skip-dialog-title")));
+    window.set_skip_dialog_note_placeholder(SharedString::from(
+        i18n.t("skip-dialog-note-placeholder"),
+    ));
+    window.set_skip_dialog_ok_text(SharedString::from(i18n.t("skip-dialog-ok")));
+    window.set_skip_dialog_cancel_text(SharedString::from(i18n.t("skip-dialog-cancel")));
 
     // Shared confirmation dialog (issue #61) — static chrome.
     window.set_confirm_title(SharedString::from(i18n.t("confirm-delete-title")));

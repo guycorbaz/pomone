@@ -62,6 +62,18 @@ pub enum SkipReason {
 }
 
 impl SkipReason {
+    /// Every reason in canonical order — the single source of truth for UI
+    /// pickers (story 1.5) so the on-screen list can't drift from the enum.
+    pub const ALL: [SkipReason; 7] = [
+        SkipReason::Weather,
+        SkipReason::PestDisease,
+        SkipReason::CropFailure,
+        SkipReason::NoTime,
+        SkipReason::NotNeeded,
+        SkipReason::Replaced,
+        SkipReason::Other,
+    ];
+
     /// The canonical string literal — the single source of truth shared by the
     /// DB codec (both backends) and the event payload.
     #[must_use]

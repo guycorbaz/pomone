@@ -359,6 +359,19 @@ status-planting-status-updated = Status updated
 status-planting-deleted = Planting deleted
 agenda-overdue-title = Overdue
 agenda-today-title = Today
+agenda-skipped-title = Skipped
+# Row ⋯ settle menu (story 1.5)
+agenda-menu-done = Mark done
+agenda-menu-skip = Skip…
+agenda-menu-correct = Correct
+# Skip-reason dialog (story 1.5)
+skip-dialog-title = Skip the task
+skip-dialog-note-placeholder = Note (optional)
+skip-dialog-ok = Skip
+skip-dialog-cancel = Cancel
+status-task-done = Task marked done
+status-task-skipped = Task skipped
+status-task-reopened = Task reopened
 
 ## Unified calendar (tasks + crop-cycle milestones)
 nav-tasks = Calendar
