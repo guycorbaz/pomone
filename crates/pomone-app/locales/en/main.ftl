@@ -609,3 +609,26 @@ settings-units-explain = Units used to display and enter areas and yields. Data 
 settings-area-unit-label = Areas
 settings-mass-unit-label = Yields
 status-units-saved = Units saved
+
+## Weekly print — rough plain-text sheet (story 1.4)
+print-empty-week = No tasks this week.
+print-no-bed = (no bed)
+print-skipped = skipped
+print-week-title = Week of { $date }
+skip-reason-crop-failure = crop failure
+skip-reason-no-time = no time
+skip-reason-not-needed = not needed
+skip-reason-other = other
+skip-reason-pest-disease = pest / disease
+skip-reason-replaced = replaced
+skip-reason-weather = weather
+weekday-friday = Friday
+weekday-monday = Monday
+weekday-saturday = Saturday
+weekday-sunday = Sunday
+weekday-thursday = Thursday
+weekday-tuesday = Tuesday
+weekday-wednesday = Wednesday
+home-print-week = 🖨 Print my week (rough)
+status-week-print-written = Weekly sheet saved and opened.
+status-week-print-failed = Could not generate the weekly sheet.

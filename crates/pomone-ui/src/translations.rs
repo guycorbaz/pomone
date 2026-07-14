@@ -19,6 +19,7 @@ pub(crate) fn apply_translations(window: &MainWindow, app: &App) {
     let i18n = app.i18n();
     window.set_title_text(SharedString::from("Pomone"));
     window.set_welcome_text(SharedString::from(i18n.t("welcome-summary")));
+    window.set_print_week_text(SharedString::from(i18n.t("home-print-week")));
     window.set_version_text(SharedString::from(format!(
         "v{}",
         env!("CARGO_PKG_VERSION")

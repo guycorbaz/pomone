@@ -70,8 +70,56 @@ mod normalize {
 // harness assertions grow with it. Kept synchronous while empty; an epic that
 // needs I/O makes its own hook `async`.
 
-fn step_e1_record_facts(_app: &App) {
-    // TODO(E1): record done/skip/correct field events and assert they hold.
+/// E1 oracle: a recorded fact projects state, and that projection surfaces in
+/// the virtual PrintDoc (facts → projection → document). This is the contract
+/// epic 4 will render to PDF, asserted here at the data level.
+async fn step_e1_record_facts(app: &App) {
+    use pomone_app::facts::{record_fact, Fact};
+    use pomone_app::printdoc::{build_week_sheet, EntryState, PRINTDOC_VERSION};
+    use pomone_domain::{SkipReason, Task};
+
+    let monday = NaiveDate::from_ymd_opt(2026, 3, 2).unwrap();
+    let task_type = app
+        .repo()
+        .task_type_list()
+        .await
+        .expect("seeded task types")[0]
+        .id;
+    let task = Task::new(
+        None, None, task_type, None, None, monday, None, None, None, None,
+    );
+    app.repo().task_create(&task).await.expect("create task");
+
+    // Skip it — the fact projects onto the task in one transaction.
+    record_fact(
+        app.repo(),
+        Fact::Skipped {
+            task_id: task.id,
+            on: monday,
+            reason: SkipReason::Weather,
+            note: None,
+        },
+        monday.and_hms_opt(9, 0, 0).unwrap(),
+    )
+    .await
+    .expect("record skip fact");
+
+    // The virtual PrintDoc reflects that projection.
+    let sheet = build_week_sheet(app.repo(), monday)
+        .await
+        .expect("build week sheet");
+    assert_eq!(sheet.version, PRINTDOC_VERSION, "frozen contract version");
+    let entry = sheet
+        .days
+        .iter()
+        .flat_map(|day| &day.entries)
+        .find(|e| e.task_id == task.id)
+        .expect("the task appears on the week sheet");
+    assert_eq!(
+        entry.state,
+        EntryState::Skipped,
+        "facts → PrintDoc oracle: a skip must project to the sheet",
+    );
 }
 
 fn step_e2_plan_lines(_app: &App) {
@@ -125,7 +173,7 @@ async fn open_app(config: &AppConfig) -> App {
 /// Run every no-op epic hook, then perform one durable view-model gesture so
 /// the restart has something real to recover. Returns the created family id.
 async fn seed_baseline(app: &App) -> String {
-    step_e1_record_facts(app);
+    step_e1_record_facts(app).await;
     step_e2_plan_lines(app);
     step_e3_placement(app);
     step_e4_documents(app);
