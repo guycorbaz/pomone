@@ -11,7 +11,7 @@
 
 use crate::error::{AppError, AppResult};
 use crate::plantings_view::parse_id;
-use chrono::{Months, NaiveDate};
+use chrono::{Months, NaiveDate, NaiveDateTime};
 use pomone_db::Repository;
 use pomone_domain::{
     PlantingId, RecurrenceRule, RecurrenceUnit, Task, TaskCategory, TaskId, TaskSeries,
@@ -182,6 +182,7 @@ pub async fn create_task(
     notes: &str,
     completed: bool,
     today: NaiveDate,
+    recorded_at: NaiveDateTime,
 ) -> AppResult<String> {
     let task_type_id: TaskTypeId = parse_id(task_type_id_str)?;
     let planned_on = parse_iso_date_local(planned_on_iso)?;
@@ -209,7 +210,7 @@ pub async fn create_task(
                 task_id: task.id,
                 on: today,
             },
-            today.and_hms_opt(0, 0, 0).unwrap_or_default(),
+            recorded_at,
         )
         .await?;
     }
@@ -228,6 +229,7 @@ pub async fn update_task(
     notes: &str,
     completed: bool,
     today: NaiveDate,
+    recorded_at: NaiveDateTime,
 ) -> AppResult<()> {
     let id: TaskId = parse_id(task_id_str)?;
     let task_type_id: TaskTypeId = parse_id(task_type_id_str)?;
@@ -262,7 +264,6 @@ pub async fn update_task(
     repo.task_update(&updated).await?;
 
     // Reconcile the completion checkbox via facts, only on a real transition.
-    let recorded_at = today.and_hms_opt(0, 0, 0).unwrap_or_default();
     match (existing.completed_on.is_some(), completed) {
         (false, true) => {
             crate::facts::record_fact(
@@ -539,6 +540,7 @@ mod tests {
             "premier passage",
             false,
             today,
+            today.and_hms_opt(12, 0, 0).unwrap(),
         )
         .await
         .unwrap();
@@ -560,6 +562,7 @@ mod tests {
             "passage final",
             true,
             today,
+            today.and_hms_opt(12, 0, 0).unwrap(),
         )
         .await
         .unwrap();
@@ -578,6 +581,7 @@ mod tests {
             "passage final",
             false,
             today,
+            today.and_hms_opt(12, 0, 0).unwrap(),
         )
         .await
         .unwrap();
@@ -601,9 +605,18 @@ mod tests {
             .find(|o| o.category == "other")
             .unwrap();
         let today = NaiveDate::from_ymd_opt(2026, 5, 24).unwrap();
-        let id = create_task(&repo, "", &other.id, "2026-06-01", "", false, today)
-            .await
-            .unwrap();
+        let id = create_task(
+            &repo,
+            "",
+            &other.id,
+            "2026-06-01",
+            "",
+            false,
+            today,
+            today.and_hms_opt(12, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
         let task_id: TaskId = parse_id(&id).unwrap();
         let task = repo.task_get(task_id).await.unwrap().unwrap();
         assert!(task.planting_id.is_none());
@@ -623,9 +636,18 @@ mod tests {
         let day1 = NaiveDate::from_ymd_opt(2026, 5, 24).unwrap();
         let day2 = NaiveDate::from_ymd_opt(2026, 5, 26).unwrap();
 
-        let id = create_task(&repo, &pid, &harvest.id, "2026-05-20", "", true, day1)
-            .await
-            .unwrap();
+        let id = create_task(
+            &repo,
+            &pid,
+            &harvest.id,
+            "2026-05-20",
+            "",
+            true,
+            day1,
+            day1.and_hms_opt(12, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
         // Re-save without changing the completed bool: previous date must survive.
         update_task(
             &repo,
@@ -635,6 +657,7 @@ mod tests {
             "updated note",
             true,
             day2,
+            day2.and_hms_opt(12, 0, 0).unwrap(),
         )
         .await
         .unwrap();

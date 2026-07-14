@@ -242,7 +242,11 @@ fn try_save_task_form(window: &MainWindow, state: &mut UiState) -> Result<(), Fo
     }
     let notes = window.get_task_form_notes_text().to_string();
     let completed = window.get_task_form_completed();
-    let today = Local::now().date_naive();
+    let now = Local::now();
+    let today = now.date_naive();
+    // The UI/CLI is the only layer allowed to read the clock; the app API takes
+    // this injected `recorded_at` (story 1.3).
+    let recorded_at = now.naive_local();
 
     let is_edit = window.get_task_form_is_edit_mode();
     if is_edit {
@@ -261,6 +265,7 @@ fn try_save_task_form(window: &MainWindow, state: &mut UiState) -> Result<(), Fo
                     &notes,
                     completed,
                     today,
+                    recorded_at,
                 )
                 .await
             })
@@ -319,6 +324,7 @@ fn try_save_task_form(window: &MainWindow, state: &mut UiState) -> Result<(), Fo
                     &notes,
                     completed,
                     today,
+                    recorded_at,
                 )
                 .await
                 .map(|_| ())

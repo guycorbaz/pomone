@@ -6,7 +6,7 @@
 //! variety (and location) when the task is anchored to a planting.
 
 use crate::error::AppResult;
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime};
 use pomone_db::Repository;
 use pomone_domain::{TaskCategory, TaskId};
 use std::collections::{HashMap, HashSet};
@@ -105,10 +105,15 @@ pub async fn list_task_calendar_rows(
 /// on `on`; if it already has one, reopen it (an explicit correction). Returns
 /// the new state (`true` = now completed). The write goes through the single
 /// fact write path — never a direct task UPDATE (story 1.2).
+///
+/// `on` is the agronomic date the gesture is *about* (backdatable);
+/// `recorded_at` is the instant it was recorded, injected by the caller — no
+/// clock is read below the UI/CLI (story 1.3).
 pub async fn toggle_task_completion(
     repo: &dyn Repository,
     task_id: TaskId,
     on: NaiveDate,
+    recorded_at: NaiveDateTime,
 ) -> AppResult<bool> {
     let task = repo
         .task_get(task_id)
@@ -118,9 +123,6 @@ pub async fn toggle_task_completion(
             id: task_id.to_string(),
         })?;
     let now_completed = task.completed_on.is_none();
-    // `recorded_at` is derived from the caller-supplied date (no clock read
-    // below the UI); story 1.3 refines this to an injected timestamp.
-    let recorded_at = on.and_hms_opt(0, 0, 0).unwrap_or_default();
     let fact = if now_completed {
         crate::facts::Fact::Done { task_id, on }
     } else {
@@ -316,11 +318,16 @@ mod tests {
         );
         repo.task_create(&task).await.unwrap();
         let now = NaiveDate::from_ymd_opt(2026, 5, 11).unwrap();
-        assert!(toggle_task_completion(&repo, task.id, now).await.unwrap());
+        let at = now.and_hms_opt(9, 0, 0).unwrap();
+        assert!(toggle_task_completion(&repo, task.id, now, at)
+            .await
+            .unwrap());
         let got = repo.task_get(task.id).await.unwrap().unwrap();
         assert_eq!(got.completed_on, Some(now));
         // Toggle back.
-        assert!(!toggle_task_completion(&repo, task.id, now).await.unwrap());
+        assert!(!toggle_task_completion(&repo, task.id, now, at)
+            .await
+            .unwrap());
         let got2 = repo.task_get(task.id).await.unwrap().unwrap();
         assert_eq!(got2.completed_on, None);
     }

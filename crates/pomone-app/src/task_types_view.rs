@@ -202,9 +202,18 @@ mod tests {
             .id
             .clone();
         let today = NaiveDate::from_ymd_opt(2026, 5, 24).unwrap();
-        create_task(&repo, "", &harvest_id, "2026-06-01", "", false, today)
-            .await
-            .unwrap();
+        create_task(
+            &repo,
+            "",
+            &harvest_id,
+            "2026-06-01",
+            "",
+            false,
+            today,
+            today.and_hms_opt(12, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
 
         let rows_after = list_task_types_admin(&repo).await.unwrap();
         let harvest_row = rows_after.iter().find(|r| r.category == "harvest").unwrap();
@@ -266,9 +275,18 @@ mod tests {
             .id
             .clone();
         let today = NaiveDate::from_ymd_opt(2026, 5, 24).unwrap();
-        create_task(&repo, "", &sow_id, "2026-04-01", "", false, today)
-            .await
-            .unwrap();
+        create_task(
+            &repo,
+            "",
+            &sow_id,
+            "2026-04-01",
+            "",
+            false,
+            today,
+            today.and_hms_opt(12, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
 
         let err = delete_task_type(&repo, &sow_id).await.unwrap_err();
         match err {

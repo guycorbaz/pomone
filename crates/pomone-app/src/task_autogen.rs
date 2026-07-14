@@ -36,22 +36,43 @@ pub async fn generate_tasks_for_planting(
     // lookups (a future fix-or-create flow could insert missing categories
     // on the fly — for now, missing = skip).
     let types = repo.task_type_list().await?;
-    // Idempotency guard (issue #69): a (type, date) pair the planting
-    // already carries is not re-created.
-    let existing: std::collections::HashSet<_> = repo
-        .task_list_for_planting(planting.id)
-        .await?
+    let category_of: std::collections::HashMap<_, _> =
+        types.iter().map(|t| (t.id, t.category)).collect();
+    let planting_tasks = repo.task_list_for_planting(planting.id).await?;
+    // Idempotency guard (issue #69): a (type, date) pair the planting already
+    // carries is not re-created.
+    let existing: std::collections::HashSet<_> = planting_tasks
         .iter()
         .map(|t| (t.task_type_id, t.planned_on))
+        .collect();
+    // Skip-aware guard (story 1.3): a phase that is already SETTLED (done or
+    // skipped) for this planting must not be regenerated even at a shifted date
+    // after a replan — a deliberate decision is never resurrected. Keyed on the
+    // task's *category*, not its type, because one agronomic slot can resolve
+    // to two types: establishment is "Repiquage" (raised) or "Plantation"
+    // (bought), both category `Transplant` — a replan that flips the method
+    // must not resurrect a settled establishment.
+    //
+    // This assumes the generator emits at most one task per category per
+    // planting (Sow / Transplant / Harvest / Plant), which holds today; a
+    // future recurring-per-planting generator would need an explicit
+    // campaign-window in the key.
+    let settled_categories: std::collections::HashSet<_> = planting_tasks
+        .iter()
+        .filter(|t| t.is_settled())
+        .filter_map(|t| category_of.get(&t.task_type_id).copied())
         .collect();
     let triggers = phase_dates(planting);
     let mut created = Vec::with_capacity(triggers.len());
     for (trigger, date) in triggers {
         match resolve_type(&types, trigger) {
-            Some(tt) if existing.contains(&(tt.id, date)) => {
+            Some(tt)
+                if existing.contains(&(tt.id, date))
+                    || settled_categories.contains(&tt.category) =>
+            {
                 tracing::debug!(
                     ?trigger, planting_id = %planting.id,
-                    "auto-generated task already exists — skipping duplicate",
+                    "auto-generated task already exists or its phase is settled — skipping",
                 );
             }
             Some(tt) => {
@@ -294,5 +315,176 @@ mod tests {
         assert!(created.is_empty(), "second run must not create tasks");
         let after = repo.task_list_for_planting(planting.id).await.unwrap();
         assert_eq!(after.len(), before.len());
+    }
+
+    #[tokio::test]
+    async fn settled_task_is_not_resurrected_after_replan() {
+        use crate::facts::{record_fact, Fact};
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
+        use crate::test_helpers::seed_test_data;
+        use pomone_db::{
+            seed_defaults, LocationRepo, PlantingRepo, SqliteRepository, StrataRepo, TaskRepo,
+            VarietyRepo,
+        };
+        use pomone_domain::{Planting, PlantingSchedule, SkipReason};
+
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        seed_test_data(&repo).await.unwrap();
+        let varieties = repo.variety_list().await.unwrap();
+        let bed = repo
+            .location_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.parent_id.is_some())
+            .unwrap();
+        let strata = repo.strata_list().await.unwrap()[0].id;
+        let planting = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata,
+                d(2026, 3, 1),
+                dec!(20),
+                100,
+            ),
+        )
+        .await
+        .unwrap();
+        let planting = repo.planting_get(planting.id).await.unwrap().unwrap();
+
+        // The grower skips the earliest auto-task (the sow).
+        let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
+        let sow = tasks.iter().min_by_key(|t| t.planned_on).unwrap().clone();
+        let sow_type = sow.task_type_id;
+        record_fact(
+            &repo,
+            Fact::Skipped {
+                task_id: sow.id,
+                on: d(2026, 3, 1),
+                reason: SkipReason::Weather,
+                note: None,
+            },
+            d(2026, 3, 1).and_hms_opt(9, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        // Replan: shift the whole cycle two weeks later and re-run autogen.
+        let replanned = Planting {
+            schedule: PlantingSchedule::cycle(
+                Some(d(2026, 3, 15)),
+                Some(d(2026, 4, 19)),
+                d(2026, 6, 1),
+                d(2026, 8, 1),
+            )
+            .unwrap(),
+            ..planting
+        };
+        generate_tasks_for_planting(&repo, &replanned)
+            .await
+            .unwrap();
+
+        // The skipped sow slot is NOT resurrected at the new date.
+        let after = repo.task_list_for_planting(replanned.id).await.unwrap();
+        let sow_count = after.iter().filter(|t| t.task_type_id == sow_type).count();
+        assert_eq!(
+            sow_count, 1,
+            "a settled (skipped) task type must not be regenerated after a replan"
+        );
+    }
+
+    /// Establishment is "Repiquage" (raised) or "Plantation" (bought) — two
+    /// types, one category, one agronomic slot. A DONE Repiquage must not be
+    /// resurrected as a Plantation when a replan drops the sow date (method
+    /// flip). Also exercises the DONE branch of the settled guard.
+    #[tokio::test]
+    async fn settled_establishment_survives_method_flip_on_replan() {
+        use crate::facts::{record_fact, Fact};
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
+        use crate::test_helpers::seed_test_data;
+        use pomone_db::{
+            seed_defaults, LocationRepo, PlantingRepo, SqliteRepository, StrataRepo, TaskRepo,
+            TaskTypeRepo, VarietyRepo,
+        };
+        use pomone_domain::{Planting, PlantingSchedule};
+
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        seed_test_data(&repo).await.unwrap();
+        let varieties = repo.variety_list().await.unwrap();
+        let bed = repo
+            .location_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.parent_id.is_some())
+            .unwrap();
+        let strata = repo.strata_list().await.unwrap()[0].id;
+        // Raised transplant: sow + transplant present → a Repiquage task.
+        let planting = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata,
+                d(2026, 3, 1),
+                dec!(20),
+                100,
+            ),
+        )
+        .await
+        .unwrap();
+        let planting = repo.planting_get(planting.id).await.unwrap().unwrap();
+
+        let types = repo.task_type_list().await.unwrap();
+        let cat_of = |id| types.iter().find(|t| t.id == id).map(|t| t.category);
+        let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
+        let repiquage = tasks
+            .iter()
+            .find(|t| cat_of(t.task_type_id) == Some(TaskCategory::Transplant))
+            .expect("raised transplant yields a Repiquage task");
+
+        // Mark the Repiquage DONE.
+        record_fact(
+            &repo,
+            Fact::Done {
+                task_id: repiquage.id,
+                on: d(2026, 4, 5),
+            },
+            d(2026, 4, 5).and_hms_opt(9, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        // Replan as bought plants (no sow date) — the establishment trigger now
+        // resolves to "Plantation", a *different* type but the same category.
+        let replanned = Planting {
+            schedule: PlantingSchedule::cycle(
+                None,
+                Some(d(2026, 3, 20)),
+                d(2026, 6, 1),
+                d(2026, 8, 1),
+            )
+            .unwrap(),
+            ..planting
+        };
+        generate_tasks_for_planting(&repo, &replanned)
+            .await
+            .unwrap();
+
+        // The done establishment slot is NOT resurrected as a Plantation: still
+        // exactly one Transplant-category task.
+        let after = repo.task_list_for_planting(replanned.id).await.unwrap();
+        let establishment = after
+            .iter()
+            .filter(|t| cat_of(t.task_type_id) == Some(TaskCategory::Transplant))
+            .count();
+        assert_eq!(
+            establishment, 1,
+            "a settled establishment must not be regenerated across a method flip"
+        );
     }
 }

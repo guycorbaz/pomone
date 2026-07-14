@@ -162,6 +162,14 @@ impl Task {
         self.completed_on.is_some()
     }
 
+    /// True if the task has reached a settled state — done **or** skipped. A
+    /// settled task must not be resurrected by task auto-generation after a
+    /// replan (story 1.3).
+    #[must_use]
+    pub fn is_settled(&self) -> bool {
+        self.completed_on.is_some() || self.skipped_on.is_some()
+    }
+
     /// True if the task is still pending and planned for a date in the past.
     pub fn is_overdue(&self, today: NaiveDate) -> bool {
         !self.is_completed() && self.planned_on < today
