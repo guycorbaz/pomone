@@ -56,9 +56,12 @@ pub struct CalendarEntry {
     /// Resolved hex color of the task's `TaskType` (e.g. `"#3C6E47"`).
     pub task_color: Option<String>,
     pub category: Option<TaskCategory>,
-    /// `true` when the task carries a `completed_on` date. Always `false` for
-    /// milestones.
+    /// `true` when the task is recorded as done (shared classifier). Always
+    /// `false` for milestones.
     pub completed: bool,
+    /// `true` when the task was skipped — struck/greyed like a done pill but
+    /// distinctly (story 1.6). Always `false` for milestones.
+    pub skipped: bool,
 
     // --- Milestone-only ---
     /// Stringified `PlantingId` so the UI can route to the planting on click,
@@ -83,9 +86,10 @@ pub async fn list_calendar_entries(
     to: NaiveDate,
     categories: Option<&HashSet<TaskCategory>>,
     show_milestones: bool,
+    today: NaiveDate,
 ) -> AppResult<Vec<CalendarEntry>> {
     // Tasks — reuse the existing helper for labels, colors and filtering.
-    let task_rows = list_task_calendar_rows(repo, from, to, categories).await?;
+    let task_rows = list_task_calendar_rows(repo, from, to, categories, today).await?;
     let mut entries: Vec<CalendarEntry> = task_rows
         .into_iter()
         .map(|r| CalendarEntry {
@@ -96,6 +100,7 @@ pub async fn list_calendar_entries(
             task_color: Some(r.color),
             category: Some(r.category),
             completed: r.completed,
+            skipped: r.skipped,
             planting_id: None,
             milestone_kind: None,
         })
@@ -145,6 +150,7 @@ async fn push_milestones(
             task_color: None,
             category: None,
             completed: false,
+            skipped: false,
             planting_id: Some(e.planting_id),
             milestone_kind: Some(e.kind),
         });
@@ -215,9 +221,16 @@ mod tests {
     async fn empty_repo_yields_no_entries() {
         let repo = fresh_repo().await;
         seed_test_data(&repo).await.unwrap();
-        let entries = list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), None, true)
-            .await
-            .unwrap();
+        let entries = list_calendar_entries(
+            &repo,
+            d(2026, 1, 1),
+            d(2026, 12, 31),
+            None,
+            true,
+            d(2026, 6, 1),
+        )
+        .await
+        .unwrap();
         assert!(entries.is_empty());
     }
 
@@ -245,9 +258,16 @@ mod tests {
         .await
         .unwrap();
 
-        let entries = list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), None, true)
-            .await
-            .unwrap();
+        let entries = list_calendar_entries(
+            &repo,
+            d(2026, 1, 1),
+            d(2026, 12, 31),
+            None,
+            true,
+            d(2026, 6, 1),
+        )
+        .await
+        .unwrap();
 
         // Auto-generated tasks survive (at least Sow + Harvest for a sowing).
         assert!(entries
@@ -309,10 +329,16 @@ mod tests {
         // Filter tasks down to Sow only.
         let mut only_sow = HashSet::new();
         only_sow.insert(TaskCategory::Sow);
-        let entries =
-            list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), Some(&only_sow), true)
-                .await
-                .unwrap();
+        let entries = list_calendar_entries(
+            &repo,
+            d(2026, 1, 1),
+            d(2026, 12, 31),
+            Some(&only_sow),
+            true,
+            d(2026, 6, 1),
+        )
+        .await
+        .unwrap();
 
         // Harvest task filtered out…
         assert!(entries
@@ -350,9 +376,16 @@ mod tests {
         .await
         .unwrap();
 
-        let entries = list_calendar_entries(&repo, d(2026, 1, 1), d(2026, 12, 31), None, false)
-            .await
-            .unwrap();
+        let entries = list_calendar_entries(
+            &repo,
+            d(2026, 1, 1),
+            d(2026, 12, 31),
+            None,
+            false,
+            d(2026, 6, 1),
+        )
+        .await
+        .unwrap();
         // Tasks remain; not a single milestone is emitted.
         assert!(entries.iter().all(|e| e.kind == CalendarEntryKind::Task));
         assert!(entries

@@ -95,10 +95,10 @@ pub async fn list_agenda(
             Some(planting_label) => format!("{planting_label} · {}", tt.name),
             None => tt.name.clone(),
         };
-        let completed = task.completed_on.is_some();
-        let skipped = task.skipped_on.is_some();
-        let settled = completed || skipped;
-        let skip_reason = if skipped {
+        // Every flag comes from the single shared classifier (story 1.6) so the
+        // agenda can't tell a different story than the calendar or detail views.
+        let state = task.display_state(today);
+        let skip_reason = if state.is_skipped() {
             task.skip_reason
                 .map(|r| i18n.t(&format!("skip-reason-{}", r.as_str())))
                 .unwrap_or_default()
@@ -114,11 +114,11 @@ pub async fn list_agenda(
                 planned_on: task.planned_on.format("%Y-%m-%d").to_string(),
                 label,
                 color: tt.color.clone(),
-                completed,
-                skipped,
+                completed: state.is_done(),
+                skipped: state.is_skipped(),
                 skip_reason,
-                overdue: !settled && task.planned_on < today,
-                today: !settled && task.planned_on == today,
+                overdue: state.is_overdue(),
+                today: state.is_due_today(),
             },
             settled_on,
         ));

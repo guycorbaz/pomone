@@ -58,8 +58,13 @@ pub struct PlantingTaskRow {
     pub type_name: String,
     /// Hex color from the `TaskType` (e.g. `"#3C6E47"`), for the row's dot.
     pub color: String,
-    /// `true` if the task has a `completed_on` date set.
+    /// `true` if the task is recorded as done (from the shared classifier).
     pub completed: bool,
+    /// `true` if the task was skipped — the detail strikes/greys the row and
+    /// shows a skip badge (story 1.6). Mutually exclusive with `completed`.
+    pub skipped: bool,
+    /// Localized skip-reason label (e.g. "météo"); empty unless `skipped`.
+    pub skip_reason: String,
     /// `true` if still pending and planned in the past (relative to `today`).
     pub overdue: bool,
     /// Free-text notes, empty when unset.
@@ -76,6 +81,7 @@ pub async fn list_planting_tasks(
     repo: &dyn Repository,
     id_str: &str,
     today: NaiveDate,
+    i18n: &crate::i18n::I18n,
 ) -> AppResult<Vec<PlantingTaskRow>> {
     let uuid = Uuid::from_str(id_str)
         .map_err(|e| AppError::Inconsistent(format!("invalid PlantingId '{id_str}': {e}")))?;
@@ -91,21 +97,36 @@ pub async fn list_planting_tasks(
             // Orphan task whose type was deleted — skip rather than crash.
             // (FK is RESTRICT so this shouldn't happen, but stay defensive.)
             let tt = types_by_id.get(&task.task_type_id)?;
+            // Single shared classifier (story 1.6) — same source as the
+            // calendar and agenda, so the detail can't disagree with them.
+            let state = task.display_state(today);
+            let skip_reason = if state.is_skipped() {
+                task.skip_reason
+                    .map(|r| i18n.t(&format!("skip-reason-{}", r.as_str())))
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
             Some(PlantingTaskRow {
                 task_id: task.id.to_string(),
                 planned_on: task.planned_on.format("%Y-%m-%d").to_string(),
                 type_name: tt.name.clone(),
                 color: tt.color.clone(),
-                completed: task.completed_on.is_some(),
-                overdue: task.is_overdue(today),
+                completed: state.is_done(),
+                skipped: state.is_skipped(),
+                skip_reason,
+                overdue: state.is_overdue(),
                 notes: task.notes.unwrap_or_default(),
             })
         })
         .collect();
-    // Pending tasks first (false < true), each group by ascending date.
+    // Settled tasks last (pending first), each group by ascending date. Done
+    // and skipped both sort as settled so the pending work stays on top.
     rows.sort_by(|a, b| {
-        a.completed
-            .cmp(&b.completed)
+        let a_settled = a.completed || a.skipped;
+        let b_settled = b.completed || b.skipped;
+        a_settled
+            .cmp(&b_settled)
             .then(a.planned_on.cmp(&b.planned_on))
     });
     Ok(rows)
@@ -328,7 +349,10 @@ mod tests {
         .unwrap();
 
         let today = d(2026, 5, 1);
-        let rows = list_planting_tasks(&repo, &pid, today).await.unwrap();
+        let i18n = crate::i18n::I18n::new(crate::i18n::Lang::Fr).unwrap();
+        let rows = list_planting_tasks(&repo, &pid, today, &i18n)
+            .await
+            .unwrap();
 
         // At least the manual weeding + the auto-gen tasks are present.
         assert!(rows.len() >= 2);
@@ -345,9 +369,94 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn skipped_planting_task_is_flagged_reasoned_and_sorts_after_pending() {
+        use crate::tasks_view::create_task;
+        use pomone_db::TaskTypeRepo;
+        use pomone_domain::field_event::SkipReason;
+        use pomone_domain::TaskCategory;
+
+        let repo = fresh_repo().await;
+        seed_test_data(&repo).await.unwrap();
+        let varieties = repo.variety_list().await.unwrap();
+        let locations = repo.location_list().await.unwrap();
+        let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        let strata = repo.strata_list().await.unwrap()[0].id;
+        let planting = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(
+                varieties[0].id,
+                bed.id,
+                strata,
+                d(2026, 3, 1),
+                dec!(20),
+                100,
+            ),
+        )
+        .await
+        .unwrap();
+        let pid = planting.id.to_string();
+
+        // A manual weeding, planned in the past, then skipped.
+        let weeding = repo
+            .task_type_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|t| t.category == TaskCategory::Weeding)
+            .unwrap();
+        let today = d(2026, 5, 1);
+        let task_id = create_task(
+            &repo,
+            &pid,
+            &weeding.id.to_string(),
+            "2026-04-15",
+            "",
+            false,
+            today,
+            today.and_hms_opt(12, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
+        let tid = pomone_domain::ids::TaskId::from(uuid::Uuid::parse_str(&task_id).unwrap());
+        crate::facts::record_fact(
+            &repo,
+            crate::facts::Fact::Skipped {
+                task_id: tid,
+                on: today,
+                reason: SkipReason::PestDisease,
+                note: None,
+            },
+            today.and_hms_opt(13, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let i18n = crate::i18n::I18n::new(crate::i18n::Lang::Fr).unwrap();
+        let rows = list_planting_tasks(&repo, &pid, today, &i18n)
+            .await
+            .unwrap();
+        let weed = rows.iter().find(|r| r.type_name == "Désherbage").unwrap();
+        assert!(weed.skipped);
+        assert!(!weed.completed, "skipped is never conflated with done");
+        assert!(!weed.overdue, "a skipped task is a decision, not a debt");
+        assert!(!weed.skip_reason.is_empty());
+        assert_ne!(weed.skip_reason, "skip-reason-pest-disease", "localized");
+        // Settled rows sort after any pending one.
+        let weed_idx = rows
+            .iter()
+            .position(|r| r.type_name == "Désherbage")
+            .unwrap();
+        let has_pending_after = rows[weed_idx + 1..]
+            .iter()
+            .any(|r| !(r.completed || r.skipped));
+        assert!(!has_pending_after, "settled rows come last");
+    }
+
+    #[tokio::test]
     async fn planting_tasks_rejects_invalid_id() {
         let repo = fresh_repo().await;
-        let err = list_planting_tasks(&repo, "not-a-uuid", d(2026, 5, 1))
+        let i18n = crate::i18n::I18n::new(crate::i18n::Lang::Fr).unwrap();
+        let err = list_planting_tasks(&repo, "not-a-uuid", d(2026, 5, 1), &i18n)
             .await
             .unwrap_err();
         assert!(matches!(err, AppError::Inconsistent(_)));

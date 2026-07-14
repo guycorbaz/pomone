@@ -172,9 +172,87 @@ impl Task {
 
     /// True if the task is still **pending** (neither done nor skipped) and
     /// planned for a date in the past. A skipped task is a deliberate decision,
-    /// not a debt — it never counts as overdue (story 1.5).
+    /// not a debt — it never counts as overdue (story 1.5). Delegates to the
+    /// single classifier so overdue can't drift from the other views.
+    #[must_use]
     pub fn is_overdue(&self, today: NaiveDate) -> bool {
-        !self.is_settled() && self.planned_on < today
+        self.display_state(today).is_overdue()
+    }
+
+    /// Classify the task into the one display state every view renders from
+    /// (story 1.6). This is the **single shared predicate**: the calendar,
+    /// agenda and planting detail all derive their per-row flags from this
+    /// rather than re-inspecting `completed_on`/`skipped_on`/`planned_on`
+    /// independently, so they can never tell different stories about the same
+    /// task. Settled states (done/skipped) win over date-derived ones — a
+    /// skipped task is never overdue, and skipped is never conflated with done.
+    #[must_use]
+    pub fn display_state(&self, today: NaiveDate) -> TaskDisplayState {
+        if self.completed_on.is_some() {
+            TaskDisplayState::Done
+        } else if self.skipped_on.is_some() {
+            TaskDisplayState::Skipped
+        } else if self.planned_on < today {
+            TaskDisplayState::Overdue
+        } else if self.planned_on == today {
+            TaskDisplayState::DueToday
+        } else {
+            TaskDisplayState::Upcoming
+        }
+    }
+}
+
+/// The single classification every view renders a task from (story 1.6).
+///
+/// Exactly one variant holds for a `(task, today)` pair. The two **settled**
+/// variants (`Done`, `Skipped`) are terminal decisions and take precedence over
+/// the three date-derived **pending** variants (`Overdue`, `DueToday`,
+/// `Upcoming`). Keeping `Done` and `Skipped` distinct is what guarantees a
+/// skipped task never counts as done in any aggregate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskDisplayState {
+    /// Pending, planned in the future.
+    Upcoming,
+    /// Pending, planned for today.
+    DueToday,
+    /// Pending, planned in the past — a debt.
+    Overdue,
+    /// Settled: recorded as done.
+    Done,
+    /// Settled: deliberately skipped (a decision, not a debt).
+    Skipped,
+}
+
+impl TaskDisplayState {
+    /// Done **or** skipped — a terminal decision was recorded.
+    #[must_use]
+    pub fn is_settled(self) -> bool {
+        matches!(self, Self::Done | Self::Skipped)
+    }
+
+    /// Recorded as done. **Never** true for a skipped task — the guarantee that
+    /// skipped is never conflated with done in counts or styling.
+    #[must_use]
+    pub fn is_done(self) -> bool {
+        matches!(self, Self::Done)
+    }
+
+    /// Deliberately skipped.
+    #[must_use]
+    pub fn is_skipped(self) -> bool {
+        matches!(self, Self::Skipped)
+    }
+
+    /// Pending and planned in the past.
+    #[must_use]
+    pub fn is_overdue(self) -> bool {
+        matches!(self, Self::Overdue)
+    }
+
+    /// Pending and planned for today.
+    #[must_use]
+    pub fn is_due_today(self) -> bool {
+        matches!(self, Self::DueToday)
     }
 }
 
@@ -246,6 +324,43 @@ mod tests {
         skipped.skip_reason = Some(crate::field_event::SkipReason::Weather);
         assert!(skipped.is_settled());
         assert!(!skipped.is_overdue(d(2026, 6, 1)));
+    }
+
+    #[test]
+    fn display_state_classifies_every_case_exactly_once() {
+        // fresh_task is planned 2026-05-01, pending.
+        let upcoming = fresh_task();
+        assert_eq!(
+            upcoming.display_state(d(2026, 4, 1)),
+            TaskDisplayState::Upcoming
+        );
+        assert_eq!(
+            upcoming.display_state(d(2026, 5, 1)),
+            TaskDisplayState::DueToday
+        );
+        assert_eq!(
+            upcoming.display_state(d(2026, 6, 1)),
+            TaskDisplayState::Overdue
+        );
+
+        // Settled states win over any date-derived state.
+        let done = fresh_task().mark_completed(d(2026, 5, 3));
+        assert_eq!(done.display_state(d(2026, 6, 1)), TaskDisplayState::Done);
+        assert!(done.display_state(d(2026, 6, 1)).is_done());
+
+        let mut skipped = fresh_task();
+        skipped.skipped_on = Some(d(2026, 5, 1));
+        let st = skipped.display_state(d(2026, 6, 1)); // past-planned, but skipped
+        assert_eq!(st, TaskDisplayState::Skipped);
+        assert!(st.is_settled());
+        assert!(!st.is_done(), "skipped is never conflated with done");
+        assert!(!st.is_overdue(), "skipped is never a debt");
+
+        // is_overdue delegates to the classifier — same answer.
+        assert_eq!(
+            upcoming.is_overdue(d(2026, 6, 1)),
+            upcoming.display_state(d(2026, 6, 1)).is_overdue()
+        );
     }
 
     #[test]

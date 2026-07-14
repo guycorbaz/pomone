@@ -36,6 +36,11 @@ export struct PlantingTaskRow {
     type-name: string,
     color: color,
     completed: bool,
+    // `true` when the task was skipped — row greyed + struck + reason badge
+    // (story 1.6). Mutually exclusive with `completed`.
+    skipped: bool,
+    // Localized skip-reason label; empty unless `skipped`.
+    skip-reason: string,
     overdue: bool,
     notes: string,
 }
@@ -86,6 +91,7 @@ export component PlantingDetailPage inherits Rectangle {
     in property <string> tasks-empty-text;
     in property <string> tasks-overdue-badge;   // localized "overdue"
     in property <string> tasks-done-badge;      // localized "done"
+    in property <string> tasks-skipped-badge;   // localized "skipped"
     in property <[PlantingTaskRow]> task-rows;
     callback task-clicked(string);              // task-id
 
@@ -454,17 +460,30 @@ export component PlantingDetailPage inherits Rectangle {
                             y: (parent.height - self.height) / 2;
                         }
 
-                        Text {
-                            text: task.type-name;
-                            color: task.completed ? Palette.text-muted : Palette.text-primary;
-                            font-size: Theme.font-size-body;
-                            font-weight: Theme.font-weight-semibold;
+                        // Label, struck through when skipped (Slint has no
+                        // strikethrough attribute — overlay a thin line).
+                        Rectangle {
                             horizontal-stretch: 1;
-                            vertical-alignment: center;
-                            overflow: elide;
+                            name := Text {
+                                text: task.type-name;
+                                color: (task.completed || task.skipped) ? Palette.text-muted : Palette.text-primary;
+                                font-size: Theme.font-size-body;
+                                font-weight: Theme.font-weight-semibold;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                width: 100%;
+                            }
+                            if task.skipped: Rectangle {
+                                height: 1px;
+                                width: min(name.preferred-width, parent.width);
+                                x: 0;
+                                y: parent.height / 2;
+                                background: Palette.text-muted;
+                            }
                         }
 
-                        // Status badge: done > overdue (mutually exclusive).
+                        // Status badge: done > skipped > overdue (mutually
+                        // exclusive; skipped carries its reason).
                         if task.completed: Text {
                             text: tasks-done-badge;
                             color: Palette.success;
@@ -472,7 +491,15 @@ export component PlantingDetailPage inherits Rectangle {
                             font-weight: Theme.font-weight-semibold;
                             vertical-alignment: center;
                         }
-                        if !task.completed && task.overdue: Text {
+                        if task.skipped: Text {
+                            text: task.skip-reason == "" ? tasks-skipped-badge
+                                : tasks-skipped-badge + " · " + task.skip-reason;
+                            color: Palette.text-muted;
+                            font-size: Theme.font-size-label;
+                            font-weight: Theme.font-weight-semibold;
+                            vertical-alignment: center;
+                        }
+                        if !task.completed && !task.skipped && task.overdue: Text {
                             text: tasks-overdue-badge;
                             color: Palette.danger;
                             font-size: Theme.font-size-label;
@@ -482,7 +509,7 @@ export component PlantingDetailPage inherits Rectangle {
 
                         Text {
                             text: task.planned-on;
-                            color: task.overdue && !task.completed ? Palette.danger : Palette.text-secondary;
+                            color: task.overdue && !task.completed && !task.skipped ? Palette.danger : Palette.text-secondary;
                             font-size: Theme.font-size-label;
                             vertical-alignment: center;
                         }

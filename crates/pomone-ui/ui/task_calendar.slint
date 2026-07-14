@@ -38,6 +38,9 @@ export struct TaskRow {
     // `true` once the task carries a completed_on date. Renders with reduced
     // opacity + a checkmark glyph so users see at a glance what's done.
     completed: bool,
+    // `true` when the task was skipped (story 1.6). Renders greyed + struck
+    // through with a ⊘ glyph — a deliberate non-doing, distinct from done.
+    skipped: bool,
 }
 
 /// One filter chip for the per-category toggle row above the calendar.
@@ -122,10 +125,11 @@ component TaskPill inherits Rectangle {
     background: task.is-milestone ? transparent : task.color;
     border-width: task.is-milestone ? 1px : 0;
     border-color: root.kind-color;
-    // Completed = dimmed so done items stay visible but visually retreat.
-    // The dragged pill itself fades to a placeholder while the ghost flies.
+    // Settled (done or skipped) = dimmed so they stay visible but visually
+    // retreat. The dragged pill itself fades to a placeholder while the ghost
+    // flies.
     opacity: root.did-drag ? 0.3
-           : task.completed ? 0.45
+           : (task.completed || task.skipped) ? 0.45
            : (touch.has-hover ? 0.85 : 1.0);
     animate opacity { duration: Theme.transition-fast; }
 
@@ -196,19 +200,34 @@ component TaskPill inherits Rectangle {
             padding-right: 6px;
             spacing: 4px;
             Text {
-                text: task.is-milestone ? task.glyph : (task.completed ? "✓" : "•");
+                text: task.is-milestone ? task.glyph
+                    : task.completed ? "✓"
+                    : task.skipped ? "⊘"
+                    : "•";
                 color: task.is-milestone ? root.kind-color : Palette.text-on-primary;
                 font-size: Theme.font-size-label;
                 font-weight: Theme.font-weight-semibold;
                 vertical-alignment: center;
             }
-            Text {
-                text: task.label;
-                color: task.is-milestone ? root.kind-color : Palette.text-on-primary;
-                font-size: Theme.font-size-label;
-                vertical-alignment: center;
-                overflow: elide;
+            // Label, struck through when skipped (Slint has no strikethrough
+            // attribute, so overlay a thin line — same idiom as the agenda).
+            Rectangle {
                 horizontal-stretch: 1;
+                lbl := Text {
+                    text: task.label;
+                    color: task.is-milestone ? root.kind-color : Palette.text-on-primary;
+                    font-size: Theme.font-size-label;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    width: 100%;
+                }
+                if task.skipped: Rectangle {
+                    height: 1px;
+                    width: min(lbl.preferred-width, parent.width);
+                    x: 0;
+                    y: parent.height / 2;
+                    background: Palette.text-on-primary;
+                }
             }
         }
     }
