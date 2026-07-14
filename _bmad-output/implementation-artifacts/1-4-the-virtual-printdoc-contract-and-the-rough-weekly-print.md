@@ -1,6 +1,6 @@
 # Story 1.4: The virtual PrintDoc contract and the rough weekly print
 
-Status: in-review
+Status: done
 
 ## Story
 
