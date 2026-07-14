@@ -611,3 +611,27 @@ settings-units-explain = Unités utilisées pour afficher et saisir les surfaces
 settings-area-unit-label = Surfaces
 settings-mass-unit-label = Rendements
 status-units-saved = Unités enregistrées
+
+## Weekly print — rough plain-text sheet (story 1.4)
+print-empty-week = Aucune tâche cette semaine.
+print-no-bed = (hors planche)
+print-skipped = ignorée
+print-week-title = Semaine du { $start } au { $end }
+skip-reason-crop-failure = culture ratée
+skip-reason-no-time = manque de temps
+skip-reason-not-needed = inutile
+skip-reason-other = autre
+skip-reason-pest-disease = ravageur / maladie
+skip-reason-replaced = remplacée
+skip-reason-weather = météo
+weekday-friday = Vendredi
+weekday-monday = Lundi
+weekday-saturday = Samedi
+weekday-sunday = Dimanche
+weekday-thursday = Jeudi
+weekday-tuesday = Mardi
+weekday-wednesday = Mercredi
+home-print-week = 🖨 Imprimer ma semaine (brut)
+status-week-print-written = Feuille de la semaine enregistrée et ouverte.
+status-week-print-failed = Impossible de générer la feuille de la semaine.
+status-week-print-saved-not-opened = Feuille enregistrée (impossible de l'ouvrir automatiquement).

@@ -96,6 +96,9 @@ export component MainWindow inherits Window {
     // Opens the bundled user manual PDF with the system default viewer.
     // Does not change `current-page`.
     callback open-manual();
+    // Home "print my week (rough)" label + action (story 1.4).
+    in property <string> print-week-text;
+    callback print-week();
 
     // ------- Plantings page state forwarded to PlantingsPage -------
     in property <string> plantings-title-text;
@@ -998,7 +1001,9 @@ export component MainWindow inherits Window {
                 gantt-bars: gantt-bars;
                 gantt-month-labels: gantt-month-labels;
                 gantt-today-day: gantt-today-day;
+                print-week-text: print-week-text;
                 row-clicked(pid) => { planting-row-clicked(pid); }
+                print-week() => { print-week(); }
             }
 
             // ------- Plantings -------

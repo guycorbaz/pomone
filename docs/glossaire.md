@@ -42,6 +42,25 @@ Deux tables :
 | planting-status | Statut de plantation | Planting status | État du cycle de vie d'une plantation : en cours, terminée, échouée, abandonnée. | planting-status |
 | task-category | Catégorie de tâche | Task category | Enum stable qui classe un type de tâche (semis, repiquage, récolte, désherbage…). | category |
 | task-series | Série (récurrente) | Series (recurring) | Un modèle de tâche qui se répète à intervalle régulier (arrosage, tonte) ; chaque occurrence est une tâche datée. | task-form-series |
+| printdoc | Feuille de semaine (PrintDoc) | Week sheet (PrintDoc) | Contrat de données figé et versionné (v1) projetant les tâches d'une semaine (par jour puis planche, tour-de-plaine, états ☐/☒/⊘) pour l'impression — rendu texte en story 1.4, PDF en épic 4. | print |
+
+## Le contrat PrintDoc (`WeekSheet`, v1)
+
+Le **PrintDoc** est un contrat de données **figé et versionné** (`PRINTDOC_VERSION`,
+actuellement **1**) — voir `crates/pomone-app/src/printdoc.rs`. Il est
+**neutre en langue** : il porte des enums (`EntryState` = Pending/Done/Skipped,
+`SkipReason`) et des dates (`NaiveDate`), jamais de chaînes localisées ; chaque
+moteur de rendu localise le chrome (jours, mot « ignorée », motifs) via Fluent
+(préfixe `print`). Forme v1 :
+
+- `WeekSheet { version, week_start (lundi), week_end (dimanche), days: [DaySheet] }`
+- `DaySheet { date, entries: [Entry] }` — entrées triées planche puis opération.
+- `Entry { task_id, state, bed?, crop?, task, skip_reason? }`.
+
+Story 1.4 le rend en **texte simple** (`render_text`) ; l'épic 4 rendra le même
+contrat en **PDF**. Le harness paper-loop l'utilise comme oracle `faits → PrintDoc`
+et en vérifie la forme (`version`). **Toute évolution cassante = bump de
+`PRINTDOC_VERSION`.**
 
 ## Table 2 — Vocabulaire documenté et planifié (hors gate)
 

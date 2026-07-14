@@ -39,6 +39,14 @@ enum Command {
         /// Path to the `.bak` file to restore.
         file: PathBuf,
     },
+    /// Export the rough plain-text weekly print of the tasks planned this week
+    /// (Monday→Sunday of the target date) to a dated file next to the database
+    /// (story 1.4 — dogfooding). SQLite default location.
+    PrintWeek {
+        /// A date inside the target week, `YYYY-MM-DD` (default: today).
+        #[arg(long)]
+        week: Option<String>,
+    },
 }
 
 fn main() -> Result<()> {
@@ -54,7 +62,39 @@ fn main() -> Result<()> {
         Some(Command::SeedDemo) => seed_demo(),
         Some(Command::Backup { output }) => backup(output),
         Some(Command::Restore { file }) => restore(file),
+        Some(Command::PrintWeek { week }) => print_week(week),
     }
+}
+
+/// Build + write the rough weekly print, then report the path.
+fn print_week(week: Option<String>) -> Result<()> {
+    use chrono::NaiveDate;
+
+    let reference = match week {
+        Some(s) => NaiveDate::parse_from_str(&s, "%Y-%m-%d")
+            .with_context(|| format!("invalid --week date {s:?} (expected YYYY-MM-DD)"))?,
+        None => Local::now().date_naive(),
+    };
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .context("failed to build tokio runtime")?;
+    let config = AppConfig::load_or_default().context("failed to load Pomone config")?;
+    // Backend-independent: next to the SQLite DB, or the OS data dir on MariaDB.
+    let dir = pomone_app::printdoc::export_dir(&config);
+
+    let app = runtime
+        .block_on(App::new(config))
+        .context("failed to open the backend")?;
+    let path = runtime
+        .block_on(async {
+            pomone_app::printdoc::export_week_sheet(app.repo(), app.i18n(), reference, &dir).await
+        })
+        .context("failed to export the weekly print")?;
+
+    println!("Weekly print written to {}", path.display());
+    Ok(())
 }
 
 /// Resolve the SQLite database path from the active config, or bail with a

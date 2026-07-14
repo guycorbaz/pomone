@@ -7,7 +7,7 @@
 // change to the month width applies to both. Perennials are omitted — their
 // multi-year span doesn't fit the single-season axis.
 
-import { Palette, Theme, Card, SectionHeader } from "theme.slint";
+import { Palette, Theme, Card, SectionHeader, SecondaryButton } from "theme.slint";
 import { Timeline, GanttBar } from "components/timeline.slint";
 
 // A small legend entry: a colored line swatch + its label.
@@ -148,7 +148,10 @@ export component HomePage inherits VerticalLayout {
     in property <[string]> gantt-month-labels;
     in property <int> gantt-today-day;
 
+    in property <string> print-week-text;
     callback row-clicked(string);
+    // Export the rough plain-text weekly print (story 1.4).
+    callback print-week();
 
     // Shared horizontal scale for the Gantt + the curve.
     property <length> month-width: 80px;
@@ -164,6 +167,16 @@ export component HomePage inherits VerticalLayout {
         color: Palette.text-secondary;
         font-size: Theme.font-size-body;
         wrap: word-wrap;
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        SecondaryButton {
+            text: root.print-week-text;
+            clicked => {
+                root.print-week();
+            }
+        }
     }
 
     // ----- Season card: Gantt + bed-usage curve on one shared axis -----

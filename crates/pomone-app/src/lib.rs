@@ -23,6 +23,7 @@ pub mod locations_view;
 pub mod migration;
 pub mod planting_detail_view;
 pub mod plantings_view;
+pub mod printdoc;
 pub mod services;
 pub mod strata_view;
 pub mod task_autogen;
