@@ -317,6 +317,7 @@ export component MainWindow inherits Window {
     in property <string> detail-tasks-empty-text;
     in property <string> detail-tasks-overdue-badge;
     in property <string> detail-tasks-done-badge;
+    in property <string> detail-tasks-skipped-badge;
     in property <[PlantingTaskRow]> detail-task-rows;
     callback detail-task-clicked(string);
 
@@ -1110,6 +1111,7 @@ export component MainWindow inherits Window {
                 tasks-empty-text: detail-tasks-empty-text;
                 tasks-overdue-badge: detail-tasks-overdue-badge;
                 tasks-done-badge: detail-tasks-done-badge;
+                tasks-skipped-badge: detail-tasks-skipped-badge;
                 task-rows: detail-task-rows;
                 task-clicked(id) => { detail-task-clicked(id); }
                 status-label: detail-status-label;

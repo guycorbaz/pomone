@@ -54,7 +54,7 @@ pub use location::Location;
 pub use location_kind::LocationKind;
 pub use planting::{Planting, PlantingSchedule, PlantingStatus};
 pub use strata::Strata;
-pub use task::Task;
+pub use task::{Task, TaskDisplayState};
 pub use task_series::{RecurrenceRule, RecurrenceUnit, TaskSeries};
 pub use task_type::{TaskCategory, TaskImplement, TaskMethod, TaskType};
 pub use treatment::Treatment;

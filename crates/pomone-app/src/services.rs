@@ -332,9 +332,12 @@ pub async fn planting_has_activity(
     planting_id: PlantingId,
 ) -> AppResult<bool> {
     let tasks = repo.task_list_for_planting(planting_id).await?;
+    // "Real activity" = a task actually *done* (or logged labor). A skipped task
+    // is a decision, not work performed, so it never counts as done here
+    // (story 1.6) — `is_completed` is the done-only predicate, never `is_settled`.
     Ok(tasks
         .iter()
-        .any(|t| t.completed_on.is_some() || t.labor_hours.is_some_and(|h| h > Decimal::ZERO)))
+        .any(|t| t.is_completed() || t.labor_hours.is_some_and(|h| h > Decimal::ZERO)))
 }
 
 /// Delete a planting, but only if it has no recorded activity.

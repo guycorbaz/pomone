@@ -553,6 +553,7 @@ pub(crate) fn apply_translations(window: &MainWindow, app: &App) {
     window.set_detail_tasks_empty_text(SharedString::from(i18n.t("empty-planting-tasks")));
     window.set_detail_tasks_overdue_badge(SharedString::from(i18n.t("task-badge-overdue")));
     window.set_detail_tasks_done_badge(SharedString::from(i18n.t("task-badge-done")));
+    window.set_detail_tasks_skipped_badge(SharedString::from(i18n.t("agenda-skipped-title")));
 
     // Life-cycle status & delete (issue #63). The options model is parallel to
     // `status_from_index` / `status_to_index`: active, completed, failed,

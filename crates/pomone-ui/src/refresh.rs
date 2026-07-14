@@ -579,7 +579,8 @@ pub(crate) fn refresh_planting_detail(
         let harvests =
             list_yearly_harvests_for_planting(state.app.repo(), planting_id, state.app.mass_unit())
                 .await?;
-        let tasks = list_planting_tasks(state.app.repo(), planting_id, today).await?;
+        let tasks =
+            list_planting_tasks(state.app.repo(), planting_id, today, state.app.i18n()).await?;
         let treatments = list_treatments_for_planting(state.app.repo(), planting_id).await?;
         Ok((detail, harvests, tasks, treatments))
     });
@@ -631,6 +632,8 @@ pub(crate) fn refresh_planting_detail(
             type_name: SharedString::from(t.type_name),
             color: parse_hex_color(&t.color),
             completed: t.completed,
+            skipped: t.skipped,
+            skip_reason: SharedString::from(t.skip_reason),
             overdue: t.overdue,
             notes: SharedString::from(t.notes),
         })
@@ -707,6 +710,7 @@ pub(crate) fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) ->
                 grid_end,
                 filter_arg,
                 show_milestones,
+                Local::now().date_naive(),
             )
             .await
         })
@@ -729,6 +733,7 @@ pub(crate) fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) ->
                     .as_deref()
                     .map_or_else(|| parse_hex_color("#3C6E47"), parse_hex_color),
                 completed: e.completed,
+                skipped: e.skipped,
             },
             CalendarEntryKind::Milestone => {
                 let kind = e.milestone_kind.unwrap_or(CalendarEventKind::Sowing);
@@ -741,6 +746,7 @@ pub(crate) fn refresh_task_calendar(window: &MainWindow, state: &mut UiState) ->
                     label: SharedString::from(e.label.clone()),
                     color: parse_hex_color("#3C6E47"), // unused for milestones
                     completed: false,
+                    skipped: false,
                 }
             }
         };

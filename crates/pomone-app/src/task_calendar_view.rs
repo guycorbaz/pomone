@@ -27,8 +27,11 @@ pub struct TaskCalendarRow {
     pub category: TaskCategory,
     /// Hex color from the `TaskType` (e.g. `"#3C6E47"`).
     pub color: String,
-    /// `true` if the task has a `completed_on` date set.
+    /// `true` if the task is recorded as done (from the shared classifier).
     pub completed: bool,
+    /// `true` if the task was skipped — the calendar strikes/greys the pill
+    /// (story 1.6). Mutually exclusive with `completed`.
+    pub skipped: bool,
 }
 
 /// Fetch all tasks whose `planned_on` falls inside `[from, to]` and decorate
@@ -50,6 +53,7 @@ pub async fn list_task_calendar_rows(
     from: NaiveDate,
     to: NaiveDate,
     categories: Option<&HashSet<TaskCategory>>,
+    today: NaiveDate,
 ) -> AppResult<Vec<TaskCalendarRow>> {
     let tasks = repo.task_list_in_range(from, to).await?;
     let types = repo.task_type_list().await?;
@@ -74,6 +78,11 @@ pub async fn list_task_calendar_rows(
                 continue;
             }
         }
+        // A future-dated skipped task must vanish from forward-looking cells
+        // (FR18/FR49, story 1.6) — a past skip stays, struck.
+        if task.hidden_from_upcoming(today) {
+            continue;
+        }
         let context = task
             .planting_id
             .and_then(|pid| plant_by_id.get(&pid))
@@ -87,6 +96,8 @@ pub async fn list_task_calendar_rows(
             Some(planting_label) => format!("{planting_label} · {}", tt.name),
             None => tt.name.clone(),
         };
+        // Route through the single shared classifier (story 1.6).
+        let state = task.display_state(today);
         rows.push(TaskCalendarRow {
             task_id: task.id,
             planted_on: task.planned_on,
@@ -94,7 +105,8 @@ pub async fn list_task_calendar_rows(
             type_name: tt.name.clone(),
             category: tt.category,
             color: tt.color.clone(),
-            completed: task.completed_on.is_some(),
+            completed: state.is_done(),
+            skipped: state.is_skipped(),
         });
     }
     rows.sort_by_key(|r| r.planted_on);
@@ -172,6 +184,7 @@ mod tests {
             NaiveDate::from_ymd_opt(2026, 1, 1).unwrap(),
             NaiveDate::from_ymd_opt(2026, 12, 31).unwrap(),
             None,
+            NaiveDate::from_ymd_opt(2026, 5, 20).unwrap(),
         )
         .await
         .unwrap();
@@ -215,6 +228,7 @@ mod tests {
             NaiveDate::from_ymd_opt(2026, 5, 1).unwrap(),
             NaiveDate::from_ymd_opt(2026, 5, 31).unwrap(),
             None,
+            NaiveDate::from_ymd_opt(2026, 5, 20).unwrap(),
         )
         .await
         .unwrap();
@@ -265,9 +279,10 @@ mod tests {
 
         let from = NaiveDate::from_ymd_opt(2026, 5, 1).unwrap();
         let to = NaiveDate::from_ymd_opt(2026, 5, 31).unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 5, 20).unwrap();
 
         // None → all rows.
-        let all = list_task_calendar_rows(&repo, from, to, None)
+        let all = list_task_calendar_rows(&repo, from, to, None, today)
             .await
             .unwrap();
         assert_eq!(all.len(), 3);
@@ -276,7 +291,7 @@ mod tests {
         let mut wanted = HashSet::new();
         wanted.insert(TaskCategory::Harvest);
         wanted.insert(TaskCategory::Weeding);
-        let filtered = list_task_calendar_rows(&repo, from, to, Some(&wanted))
+        let filtered = list_task_calendar_rows(&repo, from, to, Some(&wanted), today)
             .await
             .unwrap();
         assert_eq!(filtered.len(), 2);
@@ -285,7 +300,7 @@ mod tests {
             .all(|r| r.category == TaskCategory::Harvest || r.category == TaskCategory::Weeding));
 
         // Empty set → nothing.
-        let none = list_task_calendar_rows(&repo, from, to, Some(&HashSet::new()))
+        let none = list_task_calendar_rows(&repo, from, to, Some(&HashSet::new()), today)
             .await
             .unwrap();
         assert!(none.is_empty());
@@ -330,6 +345,123 @@ mod tests {
             .unwrap());
         let got2 = repo.task_get(task.id).await.unwrap().unwrap();
         assert_eq!(got2.completed_on, None);
+    }
+
+    #[tokio::test]
+    async fn skipped_task_pill_is_flagged_skipped_not_completed() {
+        use pomone_db::{TaskRepo, TaskTypeRepo};
+        use pomone_domain::field_event::SkipReason;
+        use pomone_domain::Task;
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let tt = repo
+            .task_type_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        let task = Task::new(
+            None,
+            None,
+            tt.id,
+            None,
+            None,
+            NaiveDate::from_ymd_opt(2026, 5, 10).unwrap(),
+            None,
+            None,
+            None,
+            None,
+        );
+        repo.task_create(&task).await.unwrap();
+        // Skip through the single write path (story 1.2).
+        crate::facts::record_fact(
+            &repo,
+            crate::facts::Fact::Skipped {
+                task_id: task.id,
+                on: NaiveDate::from_ymd_opt(2026, 5, 11).unwrap(),
+                reason: SkipReason::Weather,
+                note: None,
+            },
+            NaiveDate::from_ymd_opt(2026, 5, 11)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let rows = list_task_calendar_rows(
+            &repo,
+            NaiveDate::from_ymd_opt(2026, 5, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 5, 31).unwrap(),
+            None,
+            NaiveDate::from_ymd_opt(2026, 5, 20).unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].skipped, "skipped pill must be flagged skipped");
+        assert!(!rows[0].completed, "skipped is never conflated with done");
+    }
+
+    #[tokio::test]
+    async fn future_dated_skip_vanishes_from_calendar() {
+        use pomone_db::{TaskRepo, TaskTypeRepo};
+        use pomone_domain::field_event::SkipReason;
+        use pomone_domain::Task;
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let tt = repo
+            .task_type_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .next()
+            .unwrap();
+        // Planned in the future, skipped today.
+        let task = Task::new(
+            None,
+            None,
+            tt.id,
+            None,
+            None,
+            NaiveDate::from_ymd_opt(2026, 6, 10).unwrap(),
+            None,
+            None,
+            None,
+            None,
+        );
+        repo.task_create(&task).await.unwrap();
+        crate::facts::record_fact(
+            &repo,
+            crate::facts::Fact::Skipped {
+                task_id: task.id,
+                on: NaiveDate::from_ymd_opt(2026, 5, 20).unwrap(),
+                reason: SkipReason::Weather,
+                note: None,
+            },
+            NaiveDate::from_ymd_opt(2026, 5, 20)
+                .unwrap()
+                .and_hms_opt(9, 0, 0)
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let rows = list_task_calendar_rows(
+            &repo,
+            NaiveDate::from_ymd_opt(2026, 6, 1).unwrap(),
+            NaiveDate::from_ymd_opt(2026, 6, 30).unwrap(),
+            None,
+            NaiveDate::from_ymd_opt(2026, 5, 20).unwrap(),
+        )
+        .await
+        .unwrap();
+        assert!(
+            rows.is_empty(),
+            "future-dated skip must vanish from the grid"
+        );
     }
 
     #[tokio::test]
