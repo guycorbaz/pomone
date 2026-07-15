@@ -20,6 +20,7 @@
 #![cfg_attr(not(test), warn(clippy::print_stdout, clippy::print_stderr))]
 
 pub mod crop;
+pub mod crop_plan;
 pub mod date_calc;
 pub mod error;
 pub mod family;
@@ -41,14 +42,16 @@ mod validation;
 
 // Re-export the most commonly used types at the crate root for ergonomics.
 pub use crop::{Crop, Lifespan, ProductivePattern, PruningSeason};
+pub use crop_plan::CropPlanLine;
 pub use error::{DomainError, DomainResult};
 pub use family::{Family, DEFAULT_FAMILY_COLOR};
 pub use field_event::{skip_payload, FactKind, FieldEvent, SkipReason};
 pub use harvest::YearlyHarvest;
 pub use holidays::{holiday_on, holidays_in_year, Holiday, HolidayRegion};
 pub use ids::{
-    CropId, FamilyId, FieldEventId, LocationId, LocationKindId, PlantingId, StrataId, TaskId,
-    TaskImplementId, TaskMethodId, TaskSeriesId, TaskTypeId, TreatmentId, VarietyId,
+    CropId, CropPlanLineId, FamilyId, FieldEventId, LocationId, LocationKindId, PlantingId,
+    StrataId, TaskId, TaskImplementId, TaskMethodId, TaskSeriesId, TaskTypeId, TreatmentId,
+    VarietyId,
 };
 pub use location::Location;
 pub use location_kind::LocationKind;

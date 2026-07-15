@@ -9,10 +9,10 @@ use crate::error::DbResult;
 use async_trait::async_trait;
 use chrono::NaiveDate;
 use pomone_domain::{
-    Crop, CropId, Family, FamilyId, FieldEvent, FieldEventId, Location, LocationId, LocationKind,
-    LocationKindId, Planting, PlantingId, SkipReason, Strata, StrataId, Task, TaskId,
-    TaskImplement, TaskImplementId, TaskMethod, TaskMethodId, TaskSeries, TaskSeriesId, TaskType,
-    TaskTypeId, Treatment, TreatmentId, Variety, VarietyId, YearlyHarvest,
+    Crop, CropId, CropPlanLine, CropPlanLineId, Family, FamilyId, FieldEvent, FieldEventId,
+    Location, LocationId, LocationKind, LocationKindId, Planting, PlantingId, SkipReason, Strata,
+    StrataId, Task, TaskId, TaskImplement, TaskImplementId, TaskMethod, TaskMethodId, TaskSeries,
+    TaskSeriesId, TaskType, TaskTypeId, Treatment, TreatmentId, Variety, VarietyId, YearlyHarvest,
 };
 use uuid::Uuid;
 
@@ -204,6 +204,19 @@ pub trait TreatmentRepo: Send + Sync {
     async fn treatment_delete(&self, id: TreatmentId) -> DbResult<()>;
 }
 
+/// Crop-plan lines — the winter plan (Epic 2, story 2.1). Full CRUD: unlike
+/// treatments, plan lines are edited in place (the grid, story 2.3+).
+#[async_trait]
+pub trait CropPlanLineRepo: Send + Sync {
+    async fn crop_plan_line_get(&self, id: CropPlanLineId) -> DbResult<Option<CropPlanLine>>;
+    /// Every plan line, newest-entered first is not meaningful (no timestamp);
+    /// ordered by `variety_id` then id for a stable, deterministic listing.
+    async fn crop_plan_line_list(&self) -> DbResult<Vec<CropPlanLine>>;
+    async fn crop_plan_line_create(&self, line: &CropPlanLine) -> DbResult<()>;
+    async fn crop_plan_line_update(&self, line: &CropPlanLine) -> DbResult<()>;
+    async fn crop_plan_line_delete(&self, id: CropPlanLineId) -> DbResult<()>;
+}
+
 /// The append-only field-event journal (story 1.1). There is deliberately no
 /// update or delete: corrections are new events, and the client-generated id
 /// makes `field_event_create` idempotent (a replayed insert is a no-op).
@@ -255,6 +268,7 @@ pub trait Repository:
     + TaskSeriesRepo
     + TaskRepo
     + TreatmentRepo
+    + CropPlanLineRepo
     + FieldEventRepo
     + FactsRepo
     + Send

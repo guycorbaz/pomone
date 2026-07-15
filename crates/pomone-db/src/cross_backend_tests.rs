@@ -501,6 +501,77 @@ async fn scenario_record_fact_rejects_missing_task(repo: &dyn Repository) {
     );
 }
 
+/// Crop-plan line (story 2.1): full CRUD round-trip identically on both
+/// backends, plus the `variety` FK `RESTRICT` guard. Exercises the decimal
+/// (`bed_meters`), the two `u32` columns and the `bool` `draft` — the columns
+/// whose SQLite (TEXT/INTEGER) vs MariaDB (DECIMAL/INT/BOOLEAN) encodings must
+/// decode to the same domain value.
+async fn scenario_crop_plan_line(repo: &dyn Repository) {
+    use pomone_domain::CropPlanLine;
+
+    let family = Family::new("Asteraceae", None, None).unwrap();
+    repo.family_create(&family).await.unwrap();
+    let crop = Crop::new(
+        family.id,
+        "Laitue",
+        None,
+        Lifespan::Annual,
+        PruningSeason::None,
+    )
+    .unwrap();
+    repo.crop_create(&crop).await.unwrap();
+    let variety = Variety::new(
+        crop.id,
+        Lifespan::Annual,
+        "Batavia",
+        None,
+        VarietyProfile::Annual(AnnualProfile::new(Some(20), 45, 30).unwrap()),
+    )
+    .unwrap();
+    repo.variety_create(&variety).await.unwrap();
+
+    // Create + get: every column round-trips (draft true, stagger 14, dec meters).
+    let line =
+        CropPlanLine::new(variety.id, 6, dec!(15.5), 14, true, Some("batavia".into())).unwrap();
+    repo.crop_plan_line_create(&line).await.unwrap();
+    assert_eq!(
+        repo.crop_plan_line_get(line.id).await.unwrap().unwrap(),
+        line
+    );
+
+    // Update (promote from draft, change quantities) keeps identity.
+    let promoted = line
+        .clone()
+        .with_updates(variety.id, 8, dec!(20), 0, false, None)
+        .unwrap();
+    repo.crop_plan_line_update(&promoted).await.unwrap();
+    let got = repo.crop_plan_line_get(line.id).await.unwrap().unwrap();
+    assert_eq!(got, promoted);
+    assert!(!got.draft && got.stagger_days == 0 && got.notes.is_none());
+
+    // List sees it.
+    assert_eq!(repo.crop_plan_line_list().await.unwrap().len(), 1);
+
+    // A variety planned by a line cannot be deleted (ON DELETE RESTRICT).
+    assert!(
+        repo.variety_delete(variety.id).await.is_err(),
+        "variety FK RESTRICT must block deleting a planned variety"
+    );
+
+    // Delete the line, then the variety frees up; a second delete is NotFound.
+    repo.crop_plan_line_delete(line.id).await.unwrap();
+    assert!(repo.crop_plan_line_get(line.id).await.unwrap().is_none());
+    let err = repo.crop_plan_line_delete(line.id).await.unwrap_err();
+    assert!(matches!(
+        err,
+        DbError::NotFound {
+            kind: "crop_plan_line",
+            ..
+        }
+    ));
+    repo.variety_delete(variety.id).await.unwrap();
+}
+
 // ============================================================
 // SQLite test entry points (always run)
 // ============================================================
@@ -556,6 +627,11 @@ mod sqlite_backend {
     #[tokio::test]
     async fn record_fact_rejects_missing_task() {
         scenario_record_fact_rejects_missing_task(&fresh().await).await;
+    }
+
+    #[tokio::test]
+    async fn crop_plan_line() {
+        scenario_crop_plan_line(&fresh().await).await;
     }
 }
 
@@ -619,5 +695,11 @@ mod mariadb_backend {
     #[ignore = "requires Docker for MariaDB testcontainer"]
     async fn record_fact_rejects_missing_task() {
         scenario_record_fact_rejects_missing_task(&fresh_repo().await).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker for MariaDB testcontainer"]
+    async fn crop_plan_line() {
+        scenario_crop_plan_line(&fresh_repo().await).await;
     }
 }
