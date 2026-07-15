@@ -54,7 +54,7 @@ pub use ids::{
     LocationKindId, PlantingId, StrataId, TaskId, TaskImplementId, TaskMethodId, TaskSeriesId,
     TaskTypeId, TreatmentId, VarietyId,
 };
-pub use itk::{check_positions_unique, ItkActivity, ItkTemplate};
+pub use itk::{ItkActivity, ItkTemplate};
 pub use location::Location;
 pub use location_kind::LocationKind;
 pub use planting::{Planting, PlantingSchedule, PlantingStatus};

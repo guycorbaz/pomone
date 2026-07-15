@@ -11,7 +11,6 @@
 //! and a crop **without** an ITK keeps the shipped variety-profile autogen
 //! (fallback). No doses in R1 (planned treatments are R2).
 
-use crate::error::{DomainError, DomainResult};
 use crate::ids::{CropId, ItkActivityId, ItkTemplateId, TaskImplementId, TaskMethodId, TaskTypeId};
 use crate::validation::normalize_optional;
 use serde::{Deserialize, Serialize};
@@ -116,21 +115,13 @@ impl ItkActivity {
     }
 }
 
-/// Validate that a set of activities forms a coherent ITK template.
-///
-/// The only cross-row rule today is that `position`s are unique within a
-/// template — two activities must not claim the same slot, or reordering and
-/// deterministic rendering break. Returns [`DomainError::DuplicatePosition`]
-/// on the first collision.
-pub fn check_positions_unique(activities: &[ItkActivity]) -> DomainResult<()> {
-    let mut seen = std::collections::BTreeSet::new();
-    for a in activities {
-        if !seen.insert(a.position) {
-            return Err(DomainError::DuplicatePosition(a.position));
-        }
-    }
-    Ok(())
-}
+// Note: `position` gives a stable, deterministic ordering (the list reads
+// `ORDER BY position, id`, so equal positions simply tiebreak by id). A
+// cross-row "positions unique within a template" *guarantee* is deferred to the
+// story-2.5 editor, which owns the batch save/reorder path where such a check
+// can be enforced (in the domain or via a schema constraint); shipping an
+// unenforced guard here would be false confidence, so it is intentionally not
+// added in this persistence-only story.
 
 #[cfg(test)]
 mod tests {
@@ -191,17 +182,6 @@ mod tests {
         assert_eq!(updated.task_type_id, new_type);
         assert_eq!(updated.offset_days, 12);
         assert_eq!(updated.position, 1);
-    }
-
-    #[test]
-    fn positions_unique_accepts_distinct_rejects_duplicate() {
-        let tpl = ItkTemplateId::new();
-        let mk = |pos| ItkActivity::new(tpl, TaskTypeId::new(), 0, None, None, None, pos, None);
-        assert!(check_positions_unique(&[mk(0), mk(1), mk(2)]).is_ok());
-        assert!(matches!(
-            check_positions_unique(&[mk(0), mk(1), mk(1)]),
-            Err(DomainError::DuplicatePosition(1))
-        ));
     }
 
     #[test]

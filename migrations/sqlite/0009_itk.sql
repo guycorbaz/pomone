@@ -8,6 +8,13 @@
 --
 -- Split from the planned "0008_planning" (see 0008_crop_plan_line.sql): each
 -- table lands with its own domain, and migrations are immutable once applied.
+--
+-- `offset_days` is the domain's `i32` (INT matches exactly, negatives included).
+-- `position` is a `u32` stored as INTEGER (same convention as series/plants_count;
+-- MariaDB mirrors with `INT` — a value above 2^31 would diverge, but 0-based
+-- ordering never reaches it). No `UNIQUE(template_id, position)`: ordering is
+-- deterministic via `ORDER BY position, id`, and uniqueness enforcement belongs
+-- to the story-2.5 editor's save path (see itk.rs).
 CREATE TABLE itk_template (
     id       BLOB NOT NULL PRIMARY KEY,
     crop_id  BLOB NOT NULL UNIQUE REFERENCES crop(id) ON DELETE CASCADE

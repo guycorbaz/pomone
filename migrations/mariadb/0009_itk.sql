@@ -5,6 +5,11 @@
 -- ordered activity (task type at a signed day-offset from establishment),
 -- optionally pinned to the revived dormant task_method/task_implement FKs
 -- (no parallel columns). Invariants live in the domain, not CHECK constraints.
+--
+-- `offset_days` = domain i32 (INT matches). `position` = domain u32 stored as
+-- INT (same convention as series/plants_count; 0-based ordering stays tiny). No
+-- UNIQUE(template_id, position): ordering is `ORDER BY position, id`, and
+-- uniqueness enforcement is deferred to the 2.5 editor's save path.
 CREATE TABLE itk_template (
     id       BINARY(16) NOT NULL PRIMARY KEY,
     crop_id  BINARY(16) NOT NULL,

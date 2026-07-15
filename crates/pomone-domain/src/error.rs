@@ -85,9 +85,6 @@ pub enum DomainError {
         max: usize,
         len: usize,
     },
-
-    #[error("duplicate ITK activity position: {0}")]
-    DuplicatePosition(u32),
 }
 
 /// Convenience type for domain results.
