@@ -6,6 +6,11 @@
 -- validity. Invariants (`series ≥ 1`, `bed_meters > 0`) live in the domain
 -- constructor, not in CHECK constraints. ITK template tables land with story
 -- 2.2 (migration 0009).
+--
+-- `series`/`stagger_days` mirror SQLite's INTEGER with `INT` (same convention as
+-- `plants_count`/`duration_min`); realistic counts are tiny. `bed_meters` is
+-- `DECIMAL(20,6)` mirroring SQLite's decimal-as-TEXT (the established codec
+-- tradeoff used by dose, area_m2…).
 CREATE TABLE crop_plan_line (
     id           BINARY(16)    NOT NULL PRIMARY KEY,
     variety_id   BINARY(16)    NOT NULL,

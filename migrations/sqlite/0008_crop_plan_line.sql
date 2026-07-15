@@ -9,6 +9,12 @@
 -- `bed_meters > 0` are enforced in the domain constructor (`CropPlanLine::new`).
 -- Quantity is bed-meters in R1; a polymorphic occupancy discriminant is
 -- deferred. The ITK template tables land with story 2.2 (migration 0009).
+--
+-- `series`/`stagger_days` are the domain's `u32` but stored as INTEGER, same as
+-- `plants_count`/`duration_min` (realistic counts are tiny; MariaDB's mirror
+-- uses `INT` — a value above 2^31 would diverge, but that's unreachable input).
+-- `bed_meters` is decimal-as-TEXT: exact here, `DECIMAL(20,6)` on MariaDB — the
+-- established codec tradeoff (dose, area_m2…), fine for bed-meters.
 CREATE TABLE crop_plan_line (
     id           BLOB    NOT NULL PRIMARY KEY,
     variety_id   BLOB    NOT NULL REFERENCES variety(id) ON DELETE RESTRICT,

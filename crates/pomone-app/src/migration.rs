@@ -453,18 +453,25 @@ mod tests {
         let source = seeded_repo().await;
         seed_test_data(&source).await.unwrap();
         let variety = source.variety_list().await.unwrap()[0].id;
-        let line =
+        // Two lines (one a draft) so the copy exercises more than a single row.
+        let line1 =
             CropPlanLine::new(variety, 6, dec!(15), 14, true, Some("batavia".into())).unwrap();
-        source.crop_plan_line_create(&line).await.unwrap();
+        let line2 = CropPlanLine::new(variety, 3, dec!(20), 0, false, None).unwrap();
+        source.crop_plan_line_create(&line1).await.unwrap();
+        source.crop_plan_line_create(&line2).await.unwrap();
 
         let target = SqliteRepository::in_memory().await.unwrap();
         let report = copy_all(&source, &target).await.unwrap();
 
-        assert_eq!(report.crop_plan_lines, 1);
+        assert_eq!(report.crop_plan_lines, 2);
         assert_eq!(
-            target.crop_plan_line_get(line.id).await.unwrap(),
-            Some(line),
+            target.crop_plan_line_get(line1.id).await.unwrap(),
+            Some(line1),
             "the plan line must migrate intact"
+        );
+        assert_eq!(
+            target.crop_plan_line_get(line2.id).await.unwrap(),
+            Some(line2)
         );
     }
 
