@@ -8,9 +8,10 @@
 //! The crop's [`ItkTemplate`] is created lazily on the first activity add, so a
 //! crop with no ITK stays ITK-less (and keeps the variety-profile autogen).
 //!
-//! Ordering is kept correct **by construction**: adds append at the tail and
-//! reorder swaps adjacent positions, so positions stay a contiguous `0..n`
-//! sequence with no duplicates — no free-form position editing to validate.
+//! Ordering is kept correct **by construction**: adds append after the current
+//! maximum position and reorder swaps adjacent positions, so positions stay a
+//! strictly increasing, **unique** sequence (deleting a middle activity leaves a
+//! harmless gap, never a collision) — no free-form position editing to validate.
 
 use crate::error::{AppError, AppResult};
 use crate::i18n::I18n;
@@ -159,8 +160,8 @@ pub async fn itk_implement_options(repo: &dyn Repository) -> AppResult<Vec<ItkOp
 }
 
 /// Add or update an activity. On add the crop's template is created lazily and
-/// the activity is appended (position = current count). On update the position
-/// is preserved. Returns the activity id.
+/// the activity is appended (position = current max + 1, gap-safe). On update
+/// the position is preserved. Returns the activity id.
 pub async fn save_itk_activity(
     repo: &dyn Repository,
     input: &ItkActivityInput,
@@ -178,12 +179,16 @@ pub async fn save_itk_activity(
     if input.id.trim().is_empty() {
         let crop_id: CropId = parse_id(&input.crop_id)?;
         let template = get_or_create_template(repo, crop_id).await?;
-        let position = u32::try_from(
-            repo.itk_activity_list_for_template(template.id)
-                .await?
-                .len(),
-        )
-        .unwrap_or(u32::MAX);
+        // Append after the current maximum, NOT `len()` — deleting a middle
+        // activity leaves a gap, and `len()` could then reuse a live position
+        // (duplicate positions break ordering and adjacent-swap reorder).
+        let position = repo
+            .itk_activity_list_for_template(template.id)
+            .await?
+            .iter()
+            .map(|a| a.position)
+            .max()
+            .map_or(0, |m| m.saturating_add(1));
         let activity = ItkActivity::new(
             template.id,
             task_type_id,
@@ -444,6 +449,37 @@ mod tests {
             .await
             .unwrap()
             .is_empty());
+    }
+
+    #[tokio::test]
+    async fn add_after_deleting_a_middle_activity_keeps_positions_unique() {
+        // Regression (review 2.5): appending must use max+1, not len(), so a
+        // delete-then-add can't reuse a live position.
+        let (repo, crop, tt) = repo_with_crop().await;
+        for off in ["-10", "0", "20"] {
+            save_itk_activity(&repo, &input(&crop, &tt, off))
+                .await
+                .unwrap();
+        }
+        let rows = list_itk_activities(&repo, &crop, &i18n()).await.unwrap();
+        let middle = rows[1].id.clone();
+        delete_itk_activity(&repo, &middle).await.unwrap();
+
+        // Add a new activity — it must not collide with the surviving "J+20".
+        save_itk_activity(&repo, &input(&crop, &tt, "30"))
+            .await
+            .unwrap();
+        let rows = list_itk_activities(&repo, &crop, &i18n()).await.unwrap();
+        let positions: Vec<u32> = rows.iter().map(|r| r.position).collect();
+        let mut unique = positions.clone();
+        unique.sort_unstable();
+        unique.dedup();
+        assert_eq!(unique.len(), positions.len(), "positions stay unique");
+        assert_eq!(
+            rows.last().unwrap().offset_label,
+            "J+30",
+            "the add lands at the tail"
+        );
     }
 
     #[tokio::test]
