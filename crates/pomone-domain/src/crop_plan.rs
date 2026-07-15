@@ -113,14 +113,16 @@ impl CropPlanLine {
     /// (`first_on`, `first_on + stagger`, … `first_on + (series-1)·stagger`).
     /// Empty when `first_on` is unset — the grid then shows no derived dates.
     /// A `Days` overflow (absurd stagger) truncates the sequence rather than
-    /// panicking.
+    /// panicking, and the count is capped at [`MAX_SUCCESSIONS`] so an absurd
+    /// `series` can't drive an unbounded allocation (real plans have ≤ ~52).
     #[must_use]
     pub fn succession_dates(&self) -> Vec<NaiveDate> {
         let Some(first) = self.first_on else {
             return Vec::new();
         };
-        let mut out = Vec::with_capacity(self.series as usize);
-        for k in 0..self.series {
+        let count = self.series.min(MAX_SUCCESSIONS);
+        let mut out = Vec::with_capacity(count as usize);
+        for k in 0..count {
             let offset = u64::from(self.stagger_days) * u64::from(k);
             match first.checked_add_days(Days::new(offset)) {
                 Some(d) => out.push(d),
@@ -130,6 +132,11 @@ impl CropPlanLine {
         out
     }
 }
+
+/// Upper bound on succession dates materialized by [`CropPlanLine::succession_dates`].
+/// A defensive cap: a real staggered succession is a few dozen at most, so a
+/// pathological `series` (up to `u32::MAX`) can't force a huge allocation.
+pub const MAX_SUCCESSIONS: u32 = 366;
 
 #[cfg(test)]
 mod tests {
@@ -238,6 +245,22 @@ mod tests {
     fn succession_dates_empty_without_first_on() {
         let line = CropPlanLine::new(VarietyId::new(), 3, dec!(10), 14, None, false, None).unwrap();
         assert!(line.succession_dates().is_empty());
+    }
+
+    #[test]
+    fn succession_dates_are_capped_for_absurd_series() {
+        // An absurd series must not drive an unbounded allocation.
+        let line = CropPlanLine::new(
+            VarietyId::new(),
+            u32::MAX,
+            dec!(1),
+            0,
+            Some(d(2026, 1, 1)),
+            false,
+            None,
+        )
+        .unwrap();
+        assert_eq!(line.succession_dates().len(), MAX_SUCCESSIONS as usize);
     }
 
     #[test]
