@@ -136,6 +136,11 @@ define_id!(
     "Identifier for one ordered activity inside an ITK template (a task type at \
      a signed day-offset from establishment)."
 );
+define_id!(
+    PlannedPlantingId,
+    "Identifier for a planned (generated, not-yet-placed) planting produced from \
+     a crop-plan line succession."
+);
 
 #[cfg(test)]
 mod tests {

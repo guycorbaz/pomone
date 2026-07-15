@@ -40,6 +40,9 @@ pub struct PlanRow {
     /// Derived, read-only: the succession dates as a compact `first → last`
     /// (or the single date, or empty when `first_on` is unset).
     pub derived_dates: String,
+    /// How many planned plantings this line has generated (story 2.6), as a
+    /// string for the grid's «Generate (N)» affordance.
+    pub generated_count: String,
 }
 
 /// List every plan line as a grid row, newest-anchored first then by id for a
@@ -51,9 +54,18 @@ pub async fn list_plan_rows(repo: &dyn Repository, _i18n: &I18n) -> AppResult<Ve
     let var_by_id: HashMap<_, _> = varieties.iter().map(|v| (v.id, v)).collect();
     let crop_by_id: HashMap<_, _> = crops.iter().map(|c| (c.id, c)).collect();
 
+    // Generated-planting counts per line (story 2.6), one read for the lot.
+    let mut generated: HashMap<pomone_domain::CropPlanLineId, usize> = HashMap::new();
+    for pp in repo.planned_planting_list_all().await? {
+        *generated.entry(pp.crop_plan_line_id).or_default() += 1;
+    }
+
     Ok(lines
         .into_iter()
-        .map(|line| plan_row(&line, &var_by_id, &crop_by_id))
+        .map(|line| {
+            let count = generated.get(&line.id).copied().unwrap_or(0);
+            plan_row(&line, &var_by_id, &crop_by_id, count)
+        })
         .collect())
 }
 
@@ -193,6 +205,7 @@ fn plan_row(
     line: &CropPlanLine,
     var_by_id: &HashMap<VarietyId, &pomone_domain::Variety>,
     crop_by_id: &HashMap<pomone_domain::CropId, &pomone_domain::Crop>,
+    generated_count: usize,
 ) -> PlanRow {
     let variety_label = var_by_id.get(&line.variety_id).map_or_else(
         || "?".to_owned(),
@@ -212,6 +225,7 @@ fn plan_row(
         draft: line.draft,
         notes: line.notes.clone().unwrap_or_default(),
         derived_dates: format_derived_dates(&line.succession_dates()),
+        generated_count: generated_count.to_string(),
     }
 }
 

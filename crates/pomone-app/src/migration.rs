@@ -38,6 +38,7 @@ pub struct MigrationReport {
     pub tasks: usize,
     pub treatments: usize,
     pub crop_plan_lines: usize,
+    pub planned_plantings: usize,
     pub itk_templates: usize,
     pub itk_activities: usize,
     pub field_events: usize,
@@ -142,6 +143,13 @@ pub async fn copy_all(
         report.crop_plan_lines += 1;
     }
 
+    // 3b-bis. Planned plantings (story 2.6) — reference crop-plan lines
+    //         (copied just above) and varieties.
+    for pp in source.planned_planting_list_all().await? {
+        target.planned_planting_create(&pp).await?;
+        report.planned_plantings += 1;
+    }
+
     // 3c. ITK templates + activities (story 2.2) — templates reference crops,
     //     activities reference their template + task lookups (all copied above).
     for crop in source.crop_list().await? {
@@ -192,6 +200,7 @@ async fn target_has_data(target: &dyn Repository) -> AppResult<bool> {
         || !target.planting_list().await?.is_empty()
         || !target.task_list().await?.is_empty()
         || !target.crop_plan_line_list().await?.is_empty()
+        || !target.planned_planting_list_all().await?.is_empty()
         || target_has_itk(target).await?
         || !target.field_event_list_all().await?.is_empty())
 }
@@ -499,6 +508,42 @@ mod tests {
         assert_eq!(
             target.crop_plan_line_get(line2.id).await.unwrap(),
             Some(line2)
+        );
+    }
+
+    #[tokio::test]
+    async fn copy_all_carries_planned_plantings_over() {
+        use crate::generation::generate_from_plan_line;
+        use crate::plan_view::{save_plan_line, PlanLineInput};
+        use pomone_db::PlannedPlantingRepo;
+
+        let source = seeded_repo().await;
+        seed_test_data(&source).await.unwrap();
+        let variety = source.variety_list().await.unwrap()[0].id.to_string();
+        let line_id = save_plan_line(
+            &source,
+            &PlanLineInput {
+                variety_id: variety,
+                series: "3".into(),
+                bed_meters: "15".into(),
+                stagger_days: "14".into(),
+                first_on: "2026-04-01".into(),
+                draft: false,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        generate_from_plan_line(&source, &line_id).await.unwrap();
+
+        let target = SqliteRepository::in_memory().await.unwrap();
+        let report = copy_all(&source, &target).await.unwrap();
+
+        assert_eq!(report.planned_plantings, 3);
+        assert_eq!(
+            target.planned_planting_list_all().await.unwrap(),
+            source.planned_planting_list_all().await.unwrap(),
+            "planned plantings migrate intact"
         );
     }
 

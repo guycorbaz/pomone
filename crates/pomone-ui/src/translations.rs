@@ -285,6 +285,7 @@ pub(crate) fn apply_translations(window: &MainWindow, app: &App) {
     window.set_plan_empty_text(SharedString::from(i18n.t("plan-empty")));
     window.set_plan_add_line_text(SharedString::from(i18n.t("plan-add-line")));
     window.set_plan_derived_placeholder(SharedString::from(i18n.t("plan-derived-placeholder")));
+    window.set_plan_generate_label(SharedString::from(i18n.t("plan-generate-label")));
     window.set_plan_col_variety(SharedString::from(i18n.t("plan-col-variety")));
     window.set_plan_col_series(SharedString::from(i18n.t("plan-col-series")));
     window.set_plan_col_bed_meters(SharedString::from(i18n.t("plan-col-bed-meters")));

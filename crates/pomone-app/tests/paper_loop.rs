@@ -122,8 +122,60 @@ async fn step_e1_record_facts(app: &App) {
     );
 }
 
-fn step_e2_plan_lines(_app: &App) {
-    // TODO(E2): create plan lines + ITK templates, generate staggered plantings.
+/// E2 planning dataset: a crop-plan line generates its staggered planned
+/// plantings (line-linked, unplaced). The harness now carries the plan so the
+/// kill/replay cycle proves the planning layer survives an interruption too.
+async fn step_e2_plan_lines(app: &App) {
+    use pomone_app::generation::generate_from_plan_line;
+    use pomone_app::plan_view::{save_plan_line, PlanLineInput};
+    use pomone_domain::{
+        AnnualProfile, Crop, Family, Lifespan, PruningSeason, Variety, VarietyProfile,
+    };
+
+    let family = Family::new("Asteraceae (paper-loop)", None, None).unwrap();
+    app.repo().family_create(&family).await.unwrap();
+    let crop = Crop::new(
+        family.id,
+        "Laitue",
+        None,
+        Lifespan::Annual,
+        PruningSeason::None,
+    )
+    .unwrap();
+    app.repo().crop_create(&crop).await.unwrap();
+    let variety = Variety::new(
+        crop.id,
+        Lifespan::Annual,
+        "Batavia",
+        None,
+        VarietyProfile::Annual(AnnualProfile::new(Some(20), 45, 30).unwrap()),
+    )
+    .unwrap();
+    app.repo().variety_create(&variety).await.unwrap();
+
+    let line_id = save_plan_line(
+        app.repo(),
+        &PlanLineInput {
+            variety_id: variety.id.to_string(),
+            series: "6".into(),
+            bed_meters: "15".into(),
+            stagger_days: "14".into(),
+            first_on: "2026-04-01".into(),
+            draft: false,
+            ..Default::default()
+        },
+    )
+    .await
+    .expect("save plan line");
+
+    let n = generate_from_plan_line(app.repo(), &line_id)
+        .await
+        .expect("generate from plan line");
+    assert_eq!(n, 6, "the line generates 6 staggered planned plantings");
+    assert_eq!(
+        app.repo().planned_planting_list_all().await.unwrap().len(),
+        6,
+    );
 }
 
 fn step_e3_placement(_app: &App) {
@@ -174,7 +226,7 @@ async fn open_app(config: &AppConfig) -> App {
 /// the restart has something real to recover. Returns the created family id.
 async fn seed_baseline(app: &App) -> String {
     step_e1_record_facts(app).await;
-    step_e2_plan_lines(app);
+    step_e2_plan_lines(app).await;
     step_e3_placement(app);
     step_e4_documents(app);
     step_e5_reconcile(app);

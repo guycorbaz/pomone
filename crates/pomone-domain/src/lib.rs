@@ -31,6 +31,7 @@ pub mod ids;
 pub mod itk;
 pub mod location;
 pub mod location_kind;
+pub mod planned_planting;
 pub mod planting;
 pub mod strata;
 pub mod task;
@@ -51,12 +52,13 @@ pub use harvest::YearlyHarvest;
 pub use holidays::{holiday_on, holidays_in_year, Holiday, HolidayRegion};
 pub use ids::{
     CropId, CropPlanLineId, FamilyId, FieldEventId, ItkActivityId, ItkTemplateId, LocationId,
-    LocationKindId, PlantingId, StrataId, TaskId, TaskImplementId, TaskMethodId, TaskSeriesId,
-    TaskTypeId, TreatmentId, VarietyId,
+    LocationKindId, PlannedPlantingId, PlantingId, StrataId, TaskId, TaskImplementId, TaskMethodId,
+    TaskSeriesId, TaskTypeId, TreatmentId, VarietyId,
 };
 pub use itk::{ItkActivity, ItkTemplate};
 pub use location::Location;
 pub use location_kind::LocationKind;
+pub use planned_planting::PlannedPlanting;
 pub use planting::{Planting, PlantingSchedule, PlantingStatus};
 pub use strata::Strata;
 pub use task::{Task, TaskDisplayState};

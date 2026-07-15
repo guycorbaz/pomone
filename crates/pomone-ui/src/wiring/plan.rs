@@ -8,7 +8,9 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, SharedString};
 
-use pomone_app::{delete_plan_line, duplicate_plan_line, save_plan_line, PlanLineInput};
+use pomone_app::{
+    delete_plan_line, duplicate_plan_line, generate_from_plan_line, save_plan_line, PlanLineInput,
+};
 
 use crate::forms::localize_app_error;
 use crate::{refresh_plan, UiState};
@@ -119,6 +121,55 @@ pub(crate) fn wire_plan(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
             }
             if let Err(e) = refresh_plan(&window, &mut s) {
                 tracing::error!(error = %e, "failed to refresh plan grid after delete");
+            }
+        });
+    }
+
+    // Generate the line's staggered planned plantings (story 2.6).
+    {
+        let state = Rc::clone(state);
+        let weak = window.as_weak();
+        window.on_plan_generate(move |row_index| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let Some(id) = usize::try_from(row_index)
+                .ok()
+                .and_then(|i| s.plan_rows.get(i))
+                .map(|r| r.id.clone())
+            else {
+                return;
+            };
+            match s
+                .runtime
+                .block_on(async { generate_from_plan_line(s.app.repo(), &id).await })
+            {
+                Ok(n) => {
+                    let mut args = fluent::FluentArgs::new();
+                    args.set("count", i64::try_from(n).unwrap_or(i64::MAX));
+                    let msg = s.app.i18n().t_args("plan-generated", &args);
+                    window.set_plan_status_text(SharedString::from(msg));
+                    window.set_plan_status_is_error(false);
+                    if let Err(e) = refresh_plan(&window, &mut s) {
+                        tracing::error!(error = %e, "failed to refresh plan grid after generate");
+                    }
+                }
+                Err(e) => {
+                    // The two generation guards get friendly messages; anything
+                    // else falls back to the generic localizer.
+                    let msg = match &e {
+                        pomone_app::AppError::Inconsistent(s2) if s2 == "plan_line_is_draft" => {
+                            s.app.i18n().t("plan-generate-draft")
+                        }
+                        pomone_app::AppError::Inconsistent(s2) if s2 == "plan_line_has_no_date" => {
+                            s.app.i18n().t("plan-generate-no-date")
+                        }
+                        _ => localize_app_error(s.app.i18n(), &e),
+                    };
+                    window.set_plan_status_text(SharedString::from(msg));
+                    window.set_plan_status_is_error(true);
+                }
             }
         });
     }

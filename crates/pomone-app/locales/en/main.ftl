@@ -378,6 +378,10 @@ plan-col-draft = Draft
 plan-col-notes = Notes
 plan-draft-badge = Draft
 plan-no-variety = Add a variety (Crops) before creating a plan line.
+plan-generate-label = Generate
+plan-generated = { $count } planned planting(s) generated.
+plan-generate-draft = Can't generate a draft line — promote it first.
+plan-generate-no-date = Set a first date before generating.
 # Row ⋯ settle menu (story 1.5)
 agenda-menu-done = Mark done
 agenda-menu-skip = Skip…

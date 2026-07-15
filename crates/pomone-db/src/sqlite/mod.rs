@@ -9,6 +9,7 @@ mod field_event;
 mod itk;
 mod location;
 mod location_kind;
+mod planned_planting;
 mod planting;
 mod strata;
 mod task;
