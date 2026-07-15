@@ -362,6 +362,23 @@ status-planting-deleted = Plantation supprimée
 agenda-overdue-title = En retard
 agenda-today-title = Aujourd'hui
 agenda-skipped-title = Abandonnée
+
+## Plan grid (Epic 2, story 2.3)
+nav-plan = Plan
+title-plan = Plan de culture
+plan-hint = Saisie type tableur : tape dans une cellule, Entrée valide la ligne (refus inline si invalide). Les colonnes grises (dates) sont calculées, non modifiables.
+plan-empty = Aucune ligne de plan. Ajoute-en une pour commencer.
+plan-add-line = + Ajouter une ligne
+plan-derived-placeholder = —
+plan-col-variety = Variété
+plan-col-series = Séries
+plan-col-bed-meters = m/série
+plan-col-stagger = Échelon. (j)
+plan-col-first-on = 1re date
+plan-col-derived = Dates (calculées)
+plan-col-draft = Brouillon
+plan-col-notes = Notes
+plan-no-variety = Ajoute d'abord une variété (Cultures) avant de créer une ligne de plan.
 # Row ⋯ settle menu (story 1.5)
 agenda-menu-done = Marquer fait
 agenda-menu-skip = Abandonner…

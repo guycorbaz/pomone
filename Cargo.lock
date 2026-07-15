@@ -4252,6 +4252,7 @@ dependencies = [
  "pomone-db",
  "pomone-domain",
  "pretty_assertions",
+ "proptest",
  "rstest",
  "rust_decimal",
  "rust_decimal_macros",

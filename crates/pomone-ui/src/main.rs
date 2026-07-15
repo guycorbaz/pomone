@@ -44,7 +44,7 @@ pub(crate) use forms::{
 pub(crate) use refresh::{
     all_category_keys, color_chooser_palette, first_of_month, open_planting_detail,
     refresh_after_task_form, refresh_agenda, refresh_bed_usage, refresh_cultures, refresh_families,
-    refresh_locations, refresh_planting_detail, refresh_plantings, refresh_strata,
+    refresh_locations, refresh_plan, refresh_planting_detail, refresh_plantings, refresh_strata,
     refresh_task_calendar, refresh_varieties_of_selected_crop, reset_crop_form_to_create,
     reset_families_form_to_create, reset_variety_form_to_create, weekday_offset_mon, AXIS_DAYS,
 };
@@ -96,6 +96,8 @@ fn main() -> Result<()> {
         task_form_planting_ids: Vec::new(),
         editing_task_id: String::new(),
         task_form_previous_page: "tasks".to_owned(),
+        plan_rows: Vec::new(),
+        plan_variety_option_ids: Vec::new(),
         agenda_skip_target: String::new(),
         agenda_skip_reason_keys: Vec::new(),
         task_type_admin_ids: Vec::new(),
@@ -149,6 +151,7 @@ fn main() -> Result<()> {
     wiring::confirm::wire_confirm(&window, &state);
     wiring::task_calendar::wire_task_calendar(&window, &state);
     wiring::agenda::wire_agenda(&window, &state);
+    wiring::plan::wire_plan(&window, &state);
     wiring::task_form::wire_task_form(&window, &state);
     wiring::task_types::wire_task_types(&window, &state);
 

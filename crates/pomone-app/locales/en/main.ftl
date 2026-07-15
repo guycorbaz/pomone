@@ -360,6 +360,23 @@ status-planting-deleted = Planting deleted
 agenda-overdue-title = Overdue
 agenda-today-title = Today
 agenda-skipped-title = Skipped
+
+## Plan grid (Epic 2, story 2.3)
+nav-plan = Plan
+title-plan = Crop plan
+plan-hint = Spreadsheet-style entry: type in a cell, Enter validates the row (inline refusal if invalid). Grey columns (dates) are computed, not editable.
+plan-empty = No plan lines yet. Add one to get started.
+plan-add-line = + Add a line
+plan-derived-placeholder = —
+plan-col-variety = Variety
+plan-col-series = Series
+plan-col-bed-meters = m/series
+plan-col-stagger = Stagger (d)
+plan-col-first-on = First date
+plan-col-derived = Dates (computed)
+plan-col-draft = Draft
+plan-col-notes = Notes
+plan-no-variety = Add a variety (Crops) before creating a plan line.
 # Row ⋯ settle menu (story 1.5)
 agenda-menu-done = Mark done
 agenda-menu-skip = Skip…

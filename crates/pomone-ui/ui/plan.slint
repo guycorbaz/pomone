@@ -1,0 +1,229 @@
+// Pomone — the plan grid (Epic 2, story 2.3).
+//
+// A spreadsheet-faithful «workshop» for entering crop-plan lines: white
+// editable cells (variety picker, series, bed-meters, stagger, first date,
+// notes, a draft toggle) versus a grey read-only **derived** column showing the
+// computed succession dates. Keyboard-first: type into a cell, Enter commits the
+// row (validated on commit — an invalid cell keeps its value and the status
+// bar explains); Échap restores from the last saved snapshot on reload.
+//
+// Rust (`plan_view`) owns the data: it lists rows, parses the edited strings,
+// validates (locale decimals, ISO dates) and persists. The grid emits `commit`
+// with the row's current cell strings and Rust does the rest.
+
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton } from "theme.slint";
+import { ScrollView, LineEdit, ComboBox, CheckBox } from "std-widgets.slint";
+
+// One plan-grid row. `variety-index` indexes into `variety-options`; the derived
+// dates + variety-label are display-only.
+export struct PlanGridRow {
+    id: string,
+    variety-index: int,
+    series: string,
+    bed-meters: string,
+    stagger-days: string,
+    first-on: string,
+    draft: bool,
+    notes: string,
+    derived-dates: string,
+}
+
+// A single editable grid row. Holds no state of its own beyond the widgets;
+// on Enter (or toggle/pick) it emits `commit` with every current cell value so
+// Rust can validate + persist the whole row at once.
+component GridRow inherits Rectangle {
+    in property <PlanGridRow> data;
+    in property <int> index;
+    in property <[string]> variety-options;
+    in property <string> derived-placeholder;
+    callback commit(int, int, string, string, string, string, bool, string);
+    callback remove(int);
+
+    height: Theme.control-height + 2 * Theme.space-xs;
+    background: index.mod(2) == 0 ? Palette.surface : Palette.surface-alt;
+
+    function fire() {
+        root.commit(
+            root.index, variety-cb.current-index,
+            series-edit.text, bed-edit.text, stagger-edit.text,
+            first-edit.text, draft-box.checked, notes-edit.text);
+    }
+
+    HorizontalLayout {
+        padding-left: Theme.space-sm;
+        padding-right: Theme.space-sm;
+        spacing: Theme.space-sm;
+
+        variety-cb := ComboBox {
+            width: 22%;
+            model: root.variety-options;
+            current-index: root.data.variety-index;
+            selected => { root.fire(); }
+        }
+        series-edit := LineEdit {
+            width: 8%;
+            horizontal-alignment: right;
+            text: root.data.series;
+            accepted => { root.fire(); }
+        }
+        bed-edit := LineEdit {
+            width: 10%;
+            horizontal-alignment: right;
+            text: root.data.bed-meters;
+            accepted => { root.fire(); }
+        }
+        stagger-edit := LineEdit {
+            width: 9%;
+            horizontal-alignment: right;
+            text: root.data.stagger-days;
+            accepted => { root.fire(); }
+        }
+        first-edit := LineEdit {
+            width: 12%;
+            placeholder-text: "AAAA-MM-JJ";
+            text: root.data.first-on;
+            accepted => { root.fire(); }
+        }
+        // Derived, read-only, visually distinct (grey italic), non-focusable.
+        Text {
+            width: 16%;
+            text: root.data.derived-dates == "" ? root.derived-placeholder : root.data.derived-dates;
+            color: Palette.text-muted;
+            font-italic: true;
+            font-size: Theme.font-size-label;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        draft-box := CheckBox {
+            width: 7%;
+            checked: root.data.draft;
+            toggled => { root.fire(); }
+        }
+        notes-edit := LineEdit {
+            horizontal-stretch: 1;
+            text: root.data.notes;
+            accepted => { root.fire(); }
+        }
+        Rectangle {
+            width: 28px;
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.remove(root.index); }
+            }
+            Text {
+                text: "✕";
+                color: Palette.text-secondary;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+export component PlanPage inherits Rectangle {
+    background: Palette.background;
+
+    in property <string> title-text;
+    in property <string> hint-text;
+    in property <string> empty-text;
+    in property <string> add-line-text;
+    in property <string> derived-placeholder;
+    // Column headers, in order.
+    in property <string> col-variety;
+    in property <string> col-series;
+    in property <string> col-bed-meters;
+    in property <string> col-stagger;
+    in property <string> col-first-on;
+    in property <string> col-derived;
+    in property <string> col-draft;
+    in property <string> col-notes;
+    in property <[string]> variety-options;
+    in property <[PlanGridRow]> rows;
+    in property <string> status-text;
+    in property <bool> status-is-error;
+
+    // (row-index, variety-index, series, bed-meters, stagger, first-on, draft, notes)
+    callback commit(int, int, string, string, string, string, bool, string);
+    callback remove(int);
+    callback add-line();
+
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-lg;
+
+        Text {
+            text: root.title-text;
+            color: Palette.primary;
+            font-size: Theme.font-size-h1;
+            font-weight: Theme.font-weight-bold;
+        }
+        Text {
+            text: root.hint-text;
+            color: Palette.text-secondary;
+            font-size: Theme.font-size-body;
+            wrap: word-wrap;
+        }
+
+        Card {
+            VerticalLayout {
+                padding: Theme.space-md;
+                spacing: Theme.space-xs;
+
+                // Sticky-feel header (tabular). Widths mirror GridRow.
+                HorizontalLayout {
+                    padding-left: Theme.space-sm;
+                    padding-right: Theme.space-sm;
+                    spacing: Theme.space-sm;
+                    Text { width: 22%; text: root.col-variety; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                    Text { width: 8%; text: root.col-series; horizontal-alignment: right; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                    Text { width: 10%; text: root.col-bed-meters; horizontal-alignment: right; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                    Text { width: 9%; text: root.col-stagger; horizontal-alignment: right; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                    Text { width: 12%; text: root.col-first-on; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                    Text { width: 16%; text: root.col-derived; font-weight: Theme.font-weight-semibold; color: Palette.text-muted; font-size: Theme.font-size-label; }
+                    Text { width: 7%; text: root.col-draft; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                    Text { horizontal-stretch: 1; text: root.col-notes; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                    Rectangle { width: 28px; }
+                }
+
+                if root.rows.length == 0: Text {
+                    text: root.empty-text;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-body;
+                }
+
+                ScrollView {
+                    min-height: 240px;
+                    VerticalLayout {
+                        for row[i] in root.rows: GridRow {
+                            data: row;
+                            index: i;
+                            variety-options: root.variety-options;
+                            derived-placeholder: root.derived-placeholder;
+                            commit(idx, vidx, s, b, st, f, d, n) => {
+                                root.commit(idx, vidx, s, b, st, f, d, n);
+                            }
+                            remove(idx) => { root.remove(idx); }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    padding-top: Theme.space-sm;
+                    spacing: Theme.space-md;
+                    SecondaryButton {
+                        text: root.add-line-text;
+                        clicked => { root.add-line(); }
+                    }
+                    if root.status-text != "": Text {
+                        text: root.status-text;
+                        color: root.status-is-error ? Palette.danger : Palette.text-secondary;
+                        font-size: Theme.font-size-label;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+    }
+}

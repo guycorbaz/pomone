@@ -84,6 +84,12 @@ pub(crate) struct UiState {
     pub(crate) editing_task_id: String,
     /// Page to return to after the task form closes (typically "tasks").
     pub(crate) task_form_previous_page: String,
+    /// Plan-grid rows currently displayed, parallel to the Slint grid — the
+    /// commit callback indexes into this to recover a row's id (story 2.3).
+    pub(crate) plan_rows: Vec<pomone_app::PlanRow>,
+    /// Variety-option ids parallel to the grid's variety picker model, so a
+    /// picked index resolves back to a `VarietyId` string.
+    pub(crate) plan_variety_option_ids: Vec<String>,
     /// Stringified `TaskId` targeted by the open skip-reason dialog; empty when
     /// the dialog is closed (story 1.5).
     pub(crate) agenda_skip_target: String,
