@@ -531,8 +531,16 @@ async fn scenario_crop_plan_line(repo: &dyn Repository) {
     repo.variety_create(&variety).await.unwrap();
 
     // Create + get: every column round-trips (draft true, stagger 14, dec meters).
-    let line =
-        CropPlanLine::new(variety.id, 6, dec!(15.5), 14, true, Some("batavia".into())).unwrap();
+    let line = CropPlanLine::new(
+        variety.id,
+        6,
+        dec!(15.5),
+        14,
+        Some(d(2026, 4, 1)),
+        true,
+        Some("batavia".into()),
+    )
+    .unwrap();
     repo.crop_plan_line_create(&line).await.unwrap();
     assert_eq!(
         repo.crop_plan_line_get(line.id).await.unwrap().unwrap(),
@@ -542,7 +550,7 @@ async fn scenario_crop_plan_line(repo: &dyn Repository) {
     // Update (promote from draft, change quantities) keeps identity.
     let promoted = line
         .clone()
-        .with_updates(variety.id, 8, dec!(20), 0, false, None)
+        .with_updates(variety.id, 8, dec!(20), 0, None, false, None)
         .unwrap();
     repo.crop_plan_line_update(&promoted).await.unwrap();
     let got = repo.crop_plan_line_get(line.id).await.unwrap().unwrap();

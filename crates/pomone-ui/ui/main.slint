@@ -14,6 +14,7 @@ import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
 import { LocationsPage, LocationItem } from "locations.slint";
 import { TaskCalendarPage, TaskCalendarDay, TaskRow, TaskCategoryChip } from "task_calendar.slint";
 import { AgendaPage, AgendaRow } from "agenda.slint";
+import { PlanPage, PlanGridRow } from "plan.slint";
 import { TaskFormPage } from "task_form.slint";
 import { TaskTypesPage, TaskTypeAdminItem } from "task_types.slint";
 import { FamiliesPage, FamilyAdminItem } from "families.slint";
@@ -320,6 +321,30 @@ export component MainWindow inherits Window {
     in property <string> detail-tasks-skipped-badge;
     in property <[PlantingTaskRow]> detail-task-rows;
     callback detail-task-clicked(string);
+
+    // ------- Plan grid (Epic 2, story 2.3) -------
+    in property <string> nav-plan-text;
+    in property <string> plan-title-text;
+    in property <string> plan-hint-text;
+    in property <string> plan-empty-text;
+    in property <string> plan-add-line-text;
+    in property <string> plan-derived-placeholder;
+    in property <string> plan-col-variety;
+    in property <string> plan-col-series;
+    in property <string> plan-col-bed-meters;
+    in property <string> plan-col-stagger;
+    in property <string> plan-col-first-on;
+    in property <string> plan-col-derived;
+    in property <string> plan-col-draft;
+    in property <string> plan-col-notes;
+    in property <[string]> plan-variety-options;
+    in property <[PlanGridRow]> plan-rows;
+    in property <string> plan-status-text;
+    in property <bool> plan-status-is-error;
+    callback navigate-plan();
+    callback plan-commit(int, int, string, string, string, string, bool, string);
+    callback plan-remove(int);
+    callback plan-add-line();
 
     // ------- Agenda page (overdue / today / upcoming) -------
     in property <string> agenda-title-text;
@@ -901,6 +926,12 @@ export component MainWindow inherits Window {
                     clicked => { current-page = "plantings"; navigate-plantings(); }
                 }
                 NavButton {
+                    text: nav-plan-text;
+                    icon: Icons.plantings;
+                    selected: current-page == "plan";
+                    clicked => { current-page = "plan"; navigate-plan(); }
+                }
+                NavButton {
                     text: nav-tasks-text;
                     tip: TooltipCatalog.nav-tasks;
                     icon: Icons.tasks;
@@ -1428,6 +1459,30 @@ export component MainWindow inherits Window {
                 mark-done(tid) => { agenda-mark-done(tid); }
                 skip-requested(tid) => { agenda-skip-requested(tid); }
                 reopen(tid) => { agenda-reopen(tid); }
+            }
+
+            // ------- Plan grid (Epic 2) -------
+            if current-page == "plan": PlanPage {
+                title-text: plan-title-text;
+                hint-text: plan-hint-text;
+                empty-text: plan-empty-text;
+                add-line-text: plan-add-line-text;
+                derived-placeholder: plan-derived-placeholder;
+                col-variety: plan-col-variety;
+                col-series: plan-col-series;
+                col-bed-meters: plan-col-bed-meters;
+                col-stagger: plan-col-stagger;
+                col-first-on: plan-col-first-on;
+                col-derived: plan-col-derived;
+                col-draft: plan-col-draft;
+                col-notes: plan-col-notes;
+                variety-options: plan-variety-options;
+                rows: plan-rows;
+                status-text: plan-status-text;
+                status-is-error: plan-status-is-error;
+                commit(i, v, s, b, st, f, d, n) => { plan-commit(i, v, s, b, st, f, d, n); }
+                remove(i) => { plan-remove(i); }
+                add-line() => { plan-add-line(); }
             }
 
             // ------- Task types catalog (create / edit / delete) -------

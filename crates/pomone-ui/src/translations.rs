@@ -278,6 +278,22 @@ pub(crate) fn apply_translations(window: &MainWindow, app: &App) {
     window.set_nav_agenda_text(SharedString::from(i18n.t("nav-agenda")));
     window.set_agenda_title_text(SharedString::from(i18n.t("title-agenda")));
     window.set_agenda_empty_text(SharedString::from(i18n.t("agenda-empty")));
+    // Plan grid (Epic 2, story 2.3).
+    window.set_nav_plan_text(SharedString::from(i18n.t("nav-plan")));
+    window.set_plan_title_text(SharedString::from(i18n.t("title-plan")));
+    window.set_plan_hint_text(SharedString::from(i18n.t("plan-hint")));
+    window.set_plan_empty_text(SharedString::from(i18n.t("plan-empty")));
+    window.set_plan_add_line_text(SharedString::from(i18n.t("plan-add-line")));
+    window.set_plan_derived_placeholder(SharedString::from(i18n.t("plan-derived-placeholder")));
+    window.set_plan_col_variety(SharedString::from(i18n.t("plan-col-variety")));
+    window.set_plan_col_series(SharedString::from(i18n.t("plan-col-series")));
+    window.set_plan_col_bed_meters(SharedString::from(i18n.t("plan-col-bed-meters")));
+    window.set_plan_col_stagger(SharedString::from(i18n.t("plan-col-stagger")));
+    window.set_plan_col_first_on(SharedString::from(i18n.t("plan-col-first-on")));
+    window.set_plan_col_derived(SharedString::from(i18n.t("plan-col-derived")));
+    window.set_plan_col_draft(SharedString::from(i18n.t("plan-col-draft")));
+    window.set_plan_col_notes(SharedString::from(i18n.t("plan-col-notes")));
+
     window.set_agenda_overdue_label(SharedString::from(i18n.t("agenda-overdue-title")));
     window.set_agenda_today_label(SharedString::from(i18n.t("agenda-today-title")));
     // Settle menu + skipped badge (story 1.5).

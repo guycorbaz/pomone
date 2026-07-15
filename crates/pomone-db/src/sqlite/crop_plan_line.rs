@@ -10,7 +10,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 const CROP_PLAN_LINE_COLUMNS: &str =
-    "id, variety_id, series, bed_meters, stagger_days, draft, notes";
+    "id, variety_id, series, bed_meters, stagger_days, first_on, draft, notes";
 
 #[async_trait]
 impl CropPlanLineRepo for SqliteRepository {
@@ -36,14 +36,15 @@ impl CropPlanLineRepo for SqliteRepository {
     async fn crop_plan_line_create(&self, line: &CropPlanLine) -> DbResult<()> {
         sqlx::query(
             "INSERT INTO crop_plan_line \
-             (id, variety_id, series, bed_meters, stagger_days, draft, notes) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+             (id, variety_id, series, bed_meters, stagger_days, first_on, draft, notes) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         )
         .bind(line.id.as_uuid())
         .bind(line.variety_id.as_uuid())
         .bind(i64::from(line.series))
         .bind(decimal_to_text(line.bed_meters))
         .bind(i64::from(line.stagger_days))
+        .bind(line.first_on)
         .bind(line.draft)
         .bind(line.notes.as_deref())
         .execute(&self.pool)
@@ -54,13 +55,14 @@ impl CropPlanLineRepo for SqliteRepository {
     async fn crop_plan_line_update(&self, line: &CropPlanLine) -> DbResult<()> {
         let result = sqlx::query(
             "UPDATE crop_plan_line SET variety_id = ?2, series = ?3, bed_meters = ?4, \
-             stagger_days = ?5, draft = ?6, notes = ?7 WHERE id = ?1",
+             stagger_days = ?5, first_on = ?6, draft = ?7, notes = ?8 WHERE id = ?1",
         )
         .bind(line.id.as_uuid())
         .bind(line.variety_id.as_uuid())
         .bind(i64::from(line.series))
         .bind(decimal_to_text(line.bed_meters))
         .bind(i64::from(line.stagger_days))
+        .bind(line.first_on)
         .bind(line.draft)
         .bind(line.notes.as_deref())
         .execute(&self.pool)
@@ -104,6 +106,7 @@ fn row_to_crop_plan_line(row: sqlx::sqlite::SqliteRow) -> DbResult<CropPlanLine>
         stagger_days: u32::try_from(stagger_days).map_err(|_| {
             DbError::Malformed(format!("stagger_days out of u32 range: {stagger_days}"))
         })?,
+        first_on: row.try_get("first_on")?,
         draft: row.try_get("draft")?,
         notes: row.try_get("notes")?,
     })
@@ -137,7 +140,16 @@ mod tests {
     }
 
     fn sample(vid: VarietyId, series: u32, draft: bool) -> CropPlanLine {
-        CropPlanLine::new(vid, series, dec!(15), 14, draft, Some("batavia".into())).unwrap()
+        CropPlanLine::new(
+            vid,
+            series,
+            dec!(15),
+            14,
+            chrono::NaiveDate::from_ymd_opt(2026, 4, 1),
+            draft,
+            Some("batavia".into()),
+        )
+        .unwrap()
     }
 
     #[tokio::test]
@@ -156,7 +168,7 @@ mod tests {
         repo.crop_plan_line_create(&line).await.unwrap();
         let promoted = line
             .clone()
-            .with_updates(vid, 8, dec!(20), 7, false, None)
+            .with_updates(vid, 8, dec!(20), 7, None, false, None)
             .unwrap();
         repo.crop_plan_line_update(&promoted).await.unwrap();
         let got = repo.crop_plan_line_get(line.id).await.unwrap().unwrap();

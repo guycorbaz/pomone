@@ -481,9 +481,9 @@ mod tests {
         seed_test_data(&source).await.unwrap();
         let variety = source.variety_list().await.unwrap()[0].id;
         // Two lines (one a draft) so the copy exercises more than a single row.
-        let line1 =
-            CropPlanLine::new(variety, 6, dec!(15), 14, true, Some("batavia".into())).unwrap();
-        let line2 = CropPlanLine::new(variety, 3, dec!(20), 0, false, None).unwrap();
+        let line1 = CropPlanLine::new(variety, 6, dec!(15), 14, None, true, Some("batavia".into()))
+            .unwrap();
+        let line2 = CropPlanLine::new(variety, 3, dec!(20), 0, None, false, None).unwrap();
         source.crop_plan_line_create(&line1).await.unwrap();
         source.crop_plan_line_create(&line2).await.unwrap();
 

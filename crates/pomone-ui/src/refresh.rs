@@ -8,7 +8,7 @@ use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use pomone_app::{
     bed_usage_series, get_planting_detail, list_agenda, list_calendar_entries, list_crops,
     list_families_admin, list_family_options, list_location_kind_options, list_location_options,
-    list_locations_tree, list_parent_options, list_planting_tasks, list_plantings,
+    list_locations_tree, list_parent_options, list_plan_rows, list_planting_tasks, list_plantings,
     list_strata_options, list_strata_rows, list_task_category_options,
     list_treatments_for_planting, list_varieties_for_crop, list_variety_options,
     list_yearly_harvests_for_planting, planting_status_key, AgendaRow as AppAgendaRow, App,
@@ -27,10 +27,10 @@ use crate::generated::{
     AgendaRow as SlintAgendaRow, CropRow as SlintCropRow, DetailLine as SlintDetailLine,
     FamilyAdminItem as SlintFamilyAdminItem, GanttBar as SlintGanttBar,
     LocationItem as SlintLocationItem, MainWindow, PaletteColor as SlintPaletteColor,
-    PlantingRow as SlintPlantingRow, PlantingTaskRow as SlintPlantingTaskRow,
-    StrataItem as SlintStrataItem, TaskCalendarDay as SlintTaskCalendarDay,
-    TaskCategoryChip as SlintTaskCategoryChip, TaskRow as SlintTaskRow,
-    TreatmentRow as SlintTreatmentRow, VarietyRow as SlintVarietyRow,
+    PlanGridRow as SlintPlanGridRow, PlantingRow as SlintPlantingRow,
+    PlantingTaskRow as SlintPlantingTaskRow, StrataItem as SlintStrataItem,
+    TaskCalendarDay as SlintTaskCalendarDay, TaskCategoryChip as SlintTaskCategoryChip,
+    TaskRow as SlintTaskRow, TreatmentRow as SlintTreatmentRow, VarietyRow as SlintVarietyRow,
     YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
@@ -884,6 +884,54 @@ pub(crate) fn refresh_agenda(window: &MainWindow, state: &mut UiState) -> Result
         })
         .collect();
     window.set_agenda_rows(ModelRc::new(VecModel::from(mapped)));
+    Ok(())
+}
+
+/// Load the plan grid: variety options (for the picker) + the plan rows, mapped
+/// to the Slint grid. Stores the app rows + option ids in `state` so the grid's
+/// `commit(row_index, variety_index, …)` can resolve ids back (story 2.3).
+pub(crate) fn refresh_plan(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let (rows, options) = state
+        .runtime
+        .block_on(async {
+            let rows = list_plan_rows(state.app.repo(), state.app.i18n()).await?;
+            let options = list_variety_options(state.app.repo()).await?;
+            Ok::<_, AppError>((rows, options))
+        })
+        .context("failed to load the plan grid")?;
+
+    // Variety picker model + the parallel id list for index → id resolution.
+    let option_labels: Vec<SharedString> = options
+        .iter()
+        .map(|o| SharedString::from(o.label.clone()))
+        .collect();
+    state.plan_variety_option_ids = options.iter().map(|o| o.id.clone()).collect();
+    window.set_plan_variety_options(ModelRc::new(VecModel::from(option_labels)));
+
+    let mapped: Vec<SlintPlanGridRow> = rows
+        .iter()
+        .map(|r| {
+            let variety_index = state
+                .plan_variety_option_ids
+                .iter()
+                .position(|id| id == &r.variety_id)
+                .and_then(|p| i32::try_from(p).ok())
+                .unwrap_or(0);
+            SlintPlanGridRow {
+                id: SharedString::from(r.id.clone()),
+                variety_index,
+                series: SharedString::from(r.series.clone()),
+                bed_meters: SharedString::from(r.bed_meters.clone()),
+                stagger_days: SharedString::from(r.stagger_days.clone()),
+                first_on: SharedString::from(r.first_on.clone()),
+                draft: r.draft,
+                notes: SharedString::from(r.notes.clone()),
+                derived_dates: SharedString::from(r.derived_dates.clone()),
+            }
+        })
+        .collect();
+    window.set_plan_rows(ModelRc::new(VecModel::from(mapped)));
+    state.plan_rows = rows;
     Ok(())
 }
 

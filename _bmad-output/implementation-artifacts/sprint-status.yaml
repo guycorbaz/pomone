@@ -71,7 +71,7 @@ development_status:
   epic-2: in-progress
   2-1-plan-line-persistence-migration-0008: done
   2-2-itk-templates-on-crops: done
-  2-3-the-plan-grid-entry: backlog
+  2-3-the-plan-grid-entry: done
   2-4-duplication-drafts-and-session-resume: backlog
   2-5-the-itk-editor-screen: backlog
   2-6-generation-plan-line-to-staggered-plantings: backlog

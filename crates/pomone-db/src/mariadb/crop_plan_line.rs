@@ -10,7 +10,7 @@ use sqlx::Row;
 use uuid::Uuid;
 
 const CROP_PLAN_LINE_COLUMNS: &str =
-    "id, variety_id, series, bed_meters, stagger_days, draft, notes";
+    "id, variety_id, series, bed_meters, stagger_days, first_on, draft, notes";
 
 #[async_trait]
 impl CropPlanLineRepo for MariaDbRepository {
@@ -36,14 +36,15 @@ impl CropPlanLineRepo for MariaDbRepository {
     async fn crop_plan_line_create(&self, line: &CropPlanLine) -> DbResult<()> {
         sqlx::query(
             "INSERT INTO crop_plan_line \
-             (id, variety_id, series, bed_meters, stagger_days, draft, notes) \
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+             (id, variety_id, series, bed_meters, stagger_days, first_on, draft, notes) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(line.id.as_uuid())
         .bind(line.variety_id.as_uuid())
         .bind(i64::from(line.series))
         .bind(line.bed_meters)
         .bind(i64::from(line.stagger_days))
+        .bind(line.first_on)
         .bind(line.draft)
         .bind(line.notes.as_deref())
         .execute(&self.pool)
@@ -54,12 +55,13 @@ impl CropPlanLineRepo for MariaDbRepository {
     async fn crop_plan_line_update(&self, line: &CropPlanLine) -> DbResult<()> {
         let result = sqlx::query(
             "UPDATE crop_plan_line SET variety_id = ?, series = ?, bed_meters = ?, \
-             stagger_days = ?, draft = ?, notes = ? WHERE id = ?",
+             stagger_days = ?, first_on = ?, draft = ?, notes = ? WHERE id = ?",
         )
         .bind(line.variety_id.as_uuid())
         .bind(i64::from(line.series))
         .bind(line.bed_meters)
         .bind(i64::from(line.stagger_days))
+        .bind(line.first_on)
         .bind(line.draft)
         .bind(line.notes.as_deref())
         .bind(line.id.as_uuid())
@@ -103,6 +105,7 @@ fn row_to_crop_plan_line(row: sqlx::mysql::MySqlRow) -> DbResult<CropPlanLine> {
         stagger_days: u32::try_from(stagger_days).map_err(|_| {
             DbError::Malformed(format!("stagger_days out of u32 range: {stagger_days}"))
         })?,
+        first_on: row.try_get("first_on")?,
         draft: row.try_get("draft")?,
         notes: row.try_get("notes")?,
     })
