@@ -374,6 +374,7 @@ plan-col-bed-meters = m/series
 plan-col-stagger = Stagger (d)
 plan-col-first-on = First date
 plan-col-derived = Dates (computed)
+plan-col-needs = Need (m)
 plan-col-draft = Draft
 plan-col-notes = Notes
 plan-draft-badge = Draft
@@ -382,6 +383,18 @@ plan-generate-label = Generate
 plan-generated = { $count } planned planting(s) generated.
 plan-generate-draft = Can't generate a draft line — promote it first.
 plan-generate-no-date = Set a first date before generating.
+# Needs list «Besoins» (story 2.7)
+nav-needs = Needs
+title-needs = Needs list
+needs-hint = Per-variety totals aggregated from every non-draft plan line, placed or not. «Buy by» is the earliest sowing date — order the seed or plants before then.
+needs-empty = Nothing to order yet. Add non-draft plan lines with dates.
+needs-col-variety = Variety
+needs-col-quantity = Quantity (m)
+needs-col-buy-by = Buy by
+needs-col-lines = Lines
+needs-buy-by-none = no date
+needs-print = Print
+needs-print-disabled = Printing arrives in a later version (documents).
 # Row ⋯ settle menu (story 1.5)
 agenda-menu-done = Mark done
 agenda-menu-skip = Skip…

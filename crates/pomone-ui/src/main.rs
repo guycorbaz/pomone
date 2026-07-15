@@ -44,9 +44,10 @@ pub(crate) use forms::{
 pub(crate) use refresh::{
     all_category_keys, color_chooser_palette, first_of_month, open_planting_detail,
     refresh_after_task_form, refresh_agenda, refresh_bed_usage, refresh_cultures, refresh_families,
-    refresh_locations, refresh_plan, refresh_planting_detail, refresh_plantings, refresh_strata,
-    refresh_task_calendar, refresh_varieties_of_selected_crop, reset_crop_form_to_create,
-    reset_families_form_to_create, reset_variety_form_to_create, weekday_offset_mon, AXIS_DAYS,
+    refresh_locations, refresh_needs, refresh_plan, refresh_planting_detail, refresh_plantings,
+    refresh_strata, refresh_task_calendar, refresh_varieties_of_selected_crop,
+    reset_crop_form_to_create, reset_families_form_to_create, reset_variety_form_to_create,
+    weekday_offset_mon, AXIS_DAYS,
 };
 pub(crate) use state::{PendingDelete, UiState};
 pub(crate) use translations::{apply_translations, apply_unit_labels};
@@ -157,6 +158,7 @@ fn main() -> Result<()> {
     wiring::task_calendar::wire_task_calendar(&window, &state);
     wiring::agenda::wire_agenda(&window, &state);
     wiring::plan::wire_plan(&window, &state);
+    wiring::needs::wire_needs(&window, &state);
     wiring::itk::wire_itk(&window, &state);
     wiring::task_form::wire_task_form(&window, &state);
     wiring::task_types::wire_task_types(&window, &state);

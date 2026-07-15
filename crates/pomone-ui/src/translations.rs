@@ -292,9 +292,23 @@ pub(crate) fn apply_translations(window: &MainWindow, app: &App) {
     window.set_plan_col_stagger(SharedString::from(i18n.t("plan-col-stagger")));
     window.set_plan_col_first_on(SharedString::from(i18n.t("plan-col-first-on")));
     window.set_plan_col_derived(SharedString::from(i18n.t("plan-col-derived")));
+    window.set_plan_col_needs(SharedString::from(i18n.t("plan-col-needs")));
     window.set_plan_col_draft(SharedString::from(i18n.t("plan-col-draft")));
     window.set_plan_col_notes(SharedString::from(i18n.t("plan-col-notes")));
     window.set_plan_draft_badge(SharedString::from(i18n.t("plan-draft-badge")));
+
+    // Needs list «Besoins» (story 2.7).
+    window.set_nav_needs_text(SharedString::from(i18n.t("nav-needs")));
+    window.set_needs_title_text(SharedString::from(i18n.t("title-needs")));
+    window.set_needs_hint_text(SharedString::from(i18n.t("needs-hint")));
+    window.set_needs_empty_text(SharedString::from(i18n.t("needs-empty")));
+    window.set_needs_col_variety(SharedString::from(i18n.t("needs-col-variety")));
+    window.set_needs_col_quantity(SharedString::from(i18n.t("needs-col-quantity")));
+    window.set_needs_col_buy_by(SharedString::from(i18n.t("needs-col-buy-by")));
+    window.set_needs_col_lines(SharedString::from(i18n.t("needs-col-lines")));
+    window.set_needs_buy_by_none(SharedString::from(i18n.t("needs-buy-by-none")));
+    window.set_needs_print_text(SharedString::from(i18n.t("needs-print")));
+    window.set_needs_print_disabled_tip(SharedString::from(i18n.t("needs-print-disabled")));
 
     window.set_agenda_overdue_label(SharedString::from(i18n.t("agenda-overdue-title")));
     window.set_agenda_today_label(SharedString::from(i18n.t("agenda-today-title")));

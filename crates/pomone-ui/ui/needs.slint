@@ -1,0 +1,161 @@
+// Pomone — the needs list «Besoins» (Epic 2, story 2.7).
+//
+// A read-only, per-variety aggregation of the non-draft plan lines: how much of
+// each variety the season needs (bed-meters) and the earliest date the seed or
+// plants must be in hand (buy-by, backward-computed from the first sow). Placed
+// or not — it reads from the plan lines, so unplaced work counts too.
+//
+// Printing is Epic 4 (the PrintDoc/export pipeline); the «print» button is
+// deliberately disabled with a tooltip that says so, rather than shipping a
+// dead-end action.
+
+import { Palette, Theme, Card, SecondaryButton } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+// One aggregated needs row (mirror of app `NeedRow`, strings only).
+export struct NeedsListRow {
+    variety-label: string,
+    quantity: string,
+    buy-by: string,
+    line-count: string,
+}
+
+export component NeedsPage inherits Rectangle {
+    in property <string> title-text;
+    in property <string> hint-text;
+    in property <string> empty-text;
+    in property <string> col-variety;
+    in property <string> col-quantity;
+    in property <string> col-buy-by;
+    in property <string> col-lines;
+    in property <string> buy-by-none;
+    in property <[NeedsListRow]> rows;
+    // Print is deferred to Epic 4 — the button is disabled and explains itself.
+    in property <string> print-text;
+    in property <string> print-disabled-tip;
+
+    VerticalLayout {
+        padding: Theme.space-2xl;
+        spacing: Theme.space-lg;
+
+        Text {
+            text: root.title-text;
+            color: Palette.primary;
+            font-size: Theme.font-size-h1;
+            font-weight: Theme.font-weight-bold;
+        }
+        Text {
+            text: root.hint-text;
+            color: Palette.text-secondary;
+            font-size: Theme.font-size-body;
+            wrap: word-wrap;
+        }
+
+        Card {
+            VerticalLayout {
+                padding: Theme.space-md;
+                spacing: Theme.space-xs;
+
+                // Header. Widths mirror the rows below.
+                HorizontalLayout {
+                    padding-left: Theme.space-sm;
+                    padding-right: Theme.space-sm;
+                    spacing: Theme.space-sm;
+                    Text { horizontal-stretch: 1; text: root.col-variety; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                    Text { width: 20%; text: root.col-quantity; horizontal-alignment: right; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                    Text { width: 20%; text: root.col-buy-by; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                    Text { width: 12%; text: root.col-lines; horizontal-alignment: right; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
+                }
+
+                if root.rows.length == 0: Text {
+                    text: root.empty-text;
+                    color: Palette.text-muted;
+                    font-size: Theme.font-size-body;
+                }
+
+                ScrollView {
+                    min-height: 240px;
+                    VerticalLayout {
+                        for row[i] in root.rows: Rectangle {
+                            height: Theme.control-height + Theme.space-xs;
+                            background: i.mod(2) == 0 ? Palette.surface : Palette.surface-alt;
+                            border-radius: Theme.radius-sm;
+                            HorizontalLayout {
+                                padding-left: Theme.space-sm;
+                                padding-right: Theme.space-sm;
+                                spacing: Theme.space-sm;
+                                Text {
+                                    horizontal-stretch: 1;
+                                    text: row.variety-label;
+                                    color: Palette.text-primary;
+                                    font-size: Theme.font-size-body;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    width: 20%;
+                                    text: row.quantity;
+                                    horizontal-alignment: right;
+                                    color: Palette.text-primary;
+                                    font-size: Theme.font-size-body;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    width: 20%;
+                                    text: row.buy-by == "" ? root.buy-by-none : row.buy-by;
+                                    color: row.buy-by == "" ? Palette.text-muted : Palette.text-primary;
+                                    font-italic: row.buy-by == "";
+                                    font-size: Theme.font-size-body;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    width: 12%;
+                                    text: row.line-count;
+                                    horizontal-alignment: right;
+                                    color: Palette.text-secondary;
+                                    font-size: Theme.font-size-body;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Print lives in Epic 4. Disabled, with an honest tooltip on
+                // hover (a disabled button gets no hover of its own, so a
+                // TouchArea sits over it purely to host the explanation).
+                HorizontalLayout {
+                    padding-top: Theme.space-sm;
+                    Rectangle {
+                        width: print-btn.preferred-width;
+                        height: print-btn.preferred-height;
+                        print-btn := SecondaryButton {
+                            text: root.print-text;
+                            enabled: false;
+                        }
+                        print-touch := TouchArea {
+                            mouse-cursor: not-allowed;
+                        }
+                        if print-touch.has-hover: Rectangle {
+                            x: 0;
+                            y: parent.height + 4px;
+                            width: tip-text.preferred-width + 2 * Theme.space-sm;
+                            height: tip-text.preferred-height + 2 * Theme.space-xs;
+                            background: Palette.surface-alt;
+                            border-color: Palette.border;
+                            border-width: 1px;
+                            border-radius: Theme.radius-sm;
+                            tip-text := Text {
+                                text: root.print-disabled-tip;
+                                color: Palette.text-secondary;
+                                font-size: Theme.font-size-label;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle { vertical-stretch: 1; }
+    }
+}

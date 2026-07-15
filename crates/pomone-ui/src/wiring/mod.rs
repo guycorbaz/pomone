@@ -28,6 +28,7 @@ pub(crate) mod families;
 pub(crate) mod home;
 pub(crate) mod itk;
 pub(crate) mod locations;
+pub(crate) mod needs;
 pub(crate) mod plan;
 pub(crate) mod planting_detail;
 pub(crate) mod plantings;
