@@ -341,9 +341,13 @@ export component MainWindow inherits Window {
     in property <[PlanGridRow]> plan-rows;
     in property <string> plan-status-text;
     in property <bool> plan-status-is-error;
+    in property <string> plan-draft-badge;
+    in property <string> plan-focus-id;
     callback navigate-plan();
     callback plan-commit(int, int, string, string, string, string, bool, string);
     callback plan-remove(int);
+    callback plan-duplicate(int);
+    callback plan-duplicate-current();
     callback plan-add-line();
 
     // ------- Agenda page (overdue / today / upcoming) -------
@@ -1480,8 +1484,12 @@ export component MainWindow inherits Window {
                 rows: plan-rows;
                 status-text: plan-status-text;
                 status-is-error: plan-status-is-error;
+                draft-badge: plan-draft-badge;
+                focus-id: plan-focus-id;
                 commit(i, v, s, b, st, f, d, n) => { plan-commit(i, v, s, b, st, f, d, n); }
                 remove(i) => { plan-remove(i); }
+                duplicate(i) => { plan-duplicate(i); }
+                duplicate-current() => { plan-duplicate-current(); }
                 add-line() => { plan-add-line(); }
             }
 

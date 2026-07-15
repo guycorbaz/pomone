@@ -931,6 +931,8 @@ pub(crate) fn refresh_plan(window: &MainWindow, state: &mut UiState) -> Result<(
         })
         .collect();
     window.set_plan_rows(ModelRc::new(VecModel::from(mapped)));
+    // Re-focus the last-touched row on reopen (session resume, story 2.4).
+    window.set_plan_focus_id(SharedString::from(state.plan_last_edited_id.clone()));
     state.plan_rows = rows;
     Ok(())
 }

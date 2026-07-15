@@ -90,6 +90,10 @@ pub(crate) struct UiState {
     /// Variety-option ids parallel to the grid's variety picker model, so a
     /// picked index resolves back to a `VarietyId` string.
     pub(crate) plan_variety_option_ids: Vec<String>,
+    /// Id of the last plan line the grower touched (edited / added / duplicated)
+    /// — the Ctrl+D duplication target and the row the grid re-focuses when the
+    /// plan screen is reopened (story 2.4 session resume).
+    pub(crate) plan_last_edited_id: String,
     /// Stringified `TaskId` targeted by the open skip-reason dialog; empty when
     /// the dialog is closed (story 1.5).
     pub(crate) agenda_skip_target: String,

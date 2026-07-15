@@ -378,6 +378,7 @@ plan-col-first-on = 1re date
 plan-col-derived = Dates (calculées)
 plan-col-draft = Brouillon
 plan-col-notes = Notes
+plan-draft-badge = Brouillon
 plan-no-variety = Ajoute d'abord une variété (Cultures) avant de créer une ligne de plan.
 # Row ⋯ settle menu (story 1.5)
 agenda-menu-done = Marquer fait

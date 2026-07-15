@@ -36,11 +36,20 @@ component GridRow inherits Rectangle {
     in property <int> index;
     in property <[string]> variety-options;
     in property <string> derived-placeholder;
+    in property <string> draft-badge;
+    // The row the plan screen re-focuses on reopen (session resume, story 2.4).
+    in property <bool> highlighted;
     callback commit(int, int, string, string, string, string, bool, string);
     callback remove(int);
+    callback duplicate(int);
 
     height: Theme.control-height + 2 * Theme.space-xs;
-    background: index.mod(2) == 0 ? Palette.surface : Palette.surface-alt;
+    // Draft rows are visibly marked (subtle tint); the resumed line gets a focus
+    // ring so the eye lands where it left off.
+    background: root.data.draft ? Palette.surface-alt : (index.mod(2) == 0 ? Palette.surface : Palette.surface-alt);
+    border-width: root.highlighted ? Theme.focus-ring-width : 0;
+    border-color: Palette.focus-ring;
+    border-radius: Theme.radius-sm;
 
     function fire() {
         root.commit(
@@ -94,25 +103,51 @@ component GridRow inherits Rectangle {
             vertical-alignment: center;
             overflow: elide;
         }
-        draft-box := CheckBox {
+        HorizontalLayout {
             width: 7%;
-            checked: root.data.draft;
-            toggled => { root.fire(); }
+            spacing: Theme.space-xs;
+            draft-box := CheckBox {
+                checked: root.data.draft;
+                toggled => { root.fire(); }
+            }
+            // Explicit "draft" chip so the state reads at a glance, not only
+            // from the checkbox (story 2.4 "visibly marked").
+            if root.data.draft: Text {
+                text: root.draft-badge;
+                color: Palette.warning;
+                font-size: Theme.font-size-label;
+                font-weight: Theme.font-weight-semibold;
+                vertical-alignment: center;
+            }
         }
         notes-edit := LineEdit {
             horizontal-stretch: 1;
             text: root.data.notes;
             accepted => { root.fire(); }
         }
+        // Duplicate (story 2.4): a faithful copy to edit in place.
         Rectangle {
             width: 28px;
-            TouchArea {
+            dup-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.duplicate(root.index); }
+            }
+            Text {
+                text: "⧉";
+                color: dup-touch.has-hover ? Palette.primary : Palette.text-secondary;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle {
+            width: 28px;
+            del-touch := TouchArea {
                 mouse-cursor: pointer;
                 clicked => { root.remove(root.index); }
             }
             Text {
                 text: "✕";
-                color: Palette.text-secondary;
+                color: del-touch.has-hover ? Palette.danger : Palette.text-secondary;
                 horizontal-alignment: center;
                 vertical-alignment: center;
             }
@@ -141,11 +176,29 @@ export component PlanPage inherits Rectangle {
     in property <[PlanGridRow]> rows;
     in property <string> status-text;
     in property <bool> status-is-error;
+    in property <string> draft-badge;
+    // Id of the row to re-focus on reopen (session resume, story 2.4).
+    in property <string> focus-id;
 
     // (row-index, variety-index, series, bed-meters, stagger, first-on, draft, notes)
     callback commit(int, int, string, string, string, string, bool, string);
     callback remove(int);
+    callback duplicate(int);
+    // Ctrl+D — duplicate the last-touched line (Rust resolves which).
+    callback duplicate-current();
     callback add-line();
+
+    // Page-level key handler for the spreadsheet Ctrl+D duplication.
+    forward-focus: keys;
+    keys := FocusScope {
+        key-pressed(event) => {
+            if (event.modifiers.control && event.text == "d") {
+                root.duplicate-current();
+                return accept;
+            }
+            return reject;
+        }
+    }
 
     VerticalLayout {
         padding: Theme.space-2xl;
@@ -182,7 +235,7 @@ export component PlanPage inherits Rectangle {
                     Text { width: 16%; text: root.col-derived; font-weight: Theme.font-weight-semibold; color: Palette.text-muted; font-size: Theme.font-size-label; }
                     Text { width: 7%; text: root.col-draft; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
                     Text { horizontal-stretch: 1; text: root.col-notes; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
-                    Rectangle { width: 28px; }
+                    Rectangle { width: 56px; }
                 }
 
                 if root.rows.length == 0: Text {
@@ -199,10 +252,13 @@ export component PlanPage inherits Rectangle {
                             index: i;
                             variety-options: root.variety-options;
                             derived-placeholder: root.derived-placeholder;
+                            draft-badge: root.draft-badge;
+                            highlighted: row.id == root.focus-id && root.focus-id != "";
                             commit(idx, vidx, s, b, st, f, d, n) => {
                                 root.commit(idx, vidx, s, b, st, f, d, n);
                             }
                             remove(idx) => { root.remove(idx); }
+                            duplicate(idx) => { root.duplicate(idx); }
                         }
                     }
                 }

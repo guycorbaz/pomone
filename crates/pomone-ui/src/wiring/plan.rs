@@ -8,7 +8,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, SharedString};
 
-use pomone_app::{delete_plan_line, save_plan_line, PlanLineInput};
+use pomone_app::{delete_plan_line, duplicate_plan_line, save_plan_line, PlanLineInput};
 
 use crate::forms::localize_app_error;
 use crate::{refresh_plan, UiState};
@@ -73,7 +73,8 @@ pub(crate) fn wire_plan(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
                     .runtime
                     .block_on(async { save_plan_line(s.app.repo(), &input).await });
                 match result {
-                    Ok(_) => {
+                    Ok(saved_id) => {
+                        s.plan_last_edited_id = saved_id;
                         window.set_plan_status_text(SharedString::from(""));
                         window.set_plan_status_is_error(false);
                         if let Err(e) = refresh_plan(&window, &mut s) {
@@ -148,14 +149,17 @@ pub(crate) fn wire_plan(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
                 draft: true,
                 notes: String::new(),
             };
-            if let Err(e) = s
+            match s
                 .runtime
                 .block_on(async { save_plan_line(s.app.repo(), &input).await })
             {
-                let msg = localize_app_error(s.app.i18n(), &e);
-                window.set_plan_status_text(SharedString::from(msg));
-                window.set_plan_status_is_error(true);
-                return;
+                Ok(new_id) => s.plan_last_edited_id = new_id,
+                Err(e) => {
+                    let msg = localize_app_error(s.app.i18n(), &e);
+                    window.set_plan_status_text(SharedString::from(msg));
+                    window.set_plan_status_is_error(true);
+                    return;
+                }
             }
             window.set_plan_status_text(SharedString::from(""));
             window.set_plan_status_is_error(false);
@@ -163,5 +167,71 @@ pub(crate) fn wire_plan(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
                 tracing::error!(error = %e, "failed to refresh plan grid after add");
             }
         });
+    }
+
+    // Duplicate a specific row (the ⧉ button).
+    {
+        let state = Rc::clone(state);
+        let weak = window.as_weak();
+        window.on_plan_duplicate(move |row_index| {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            let Some(id) = usize::try_from(row_index)
+                .ok()
+                .and_then(|i| s.plan_rows.get(i))
+                .map(|r| r.id.clone())
+            else {
+                return;
+            };
+            duplicate_and_refresh(&window, &mut s, &id);
+        });
+    }
+
+    // Ctrl+D — duplicate the last-touched line (session-aware).
+    {
+        let state = Rc::clone(state);
+        let weak = window.as_weak();
+        window.on_plan_duplicate_current(move || {
+            let Some(window) = weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            // Fall back to the last row if nothing was touched yet this session.
+            let target = if s.plan_last_edited_id.is_empty() {
+                s.plan_rows.last().map(|r| r.id.clone())
+            } else {
+                Some(s.plan_last_edited_id.clone())
+            };
+            let Some(id) = target else {
+                return;
+            };
+            duplicate_and_refresh(&window, &mut s, &id);
+        });
+    }
+}
+
+/// Duplicate `id`, focus the copy (session resume), and refresh — shared by the
+/// per-row ⧉ button and the Ctrl+D shortcut.
+fn duplicate_and_refresh(window: &MainWindow, s: &mut UiState, id: &str) {
+    match s
+        .runtime
+        .block_on(async { duplicate_plan_line(s.app.repo(), id).await })
+    {
+        Ok(new_id) => {
+            s.plan_last_edited_id = new_id;
+            window.set_plan_status_text(SharedString::from(""));
+            window.set_plan_status_is_error(false);
+        }
+        Err(e) => {
+            let msg = localize_app_error(s.app.i18n(), &e);
+            window.set_plan_status_text(SharedString::from(msg));
+            window.set_plan_status_is_error(true);
+            return;
+        }
+    }
+    if let Err(e) = refresh_plan(window, s) {
+        tracing::error!(error = %e, "failed to refresh plan grid after duplicate");
     }
 }

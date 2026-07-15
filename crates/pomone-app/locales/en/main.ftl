@@ -376,6 +376,7 @@ plan-col-first-on = First date
 plan-col-derived = Dates (computed)
 plan-col-draft = Draft
 plan-col-notes = Notes
+plan-draft-badge = Draft
 plan-no-variety = Add a variety (Crops) before creating a plan line.
 # Row ⋯ settle menu (story 1.5)
 agenda-menu-done = Mark done

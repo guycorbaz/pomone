@@ -98,6 +98,7 @@ fn main() -> Result<()> {
         task_form_previous_page: "tasks".to_owned(),
         plan_rows: Vec::new(),
         plan_variety_option_ids: Vec::new(),
+        plan_last_edited_id: String::new(),
         agenda_skip_target: String::new(),
         agenda_skip_reason_keys: Vec::new(),
         task_type_admin_ids: Vec::new(),
