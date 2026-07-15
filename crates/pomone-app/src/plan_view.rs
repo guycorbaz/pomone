@@ -40,8 +40,10 @@ pub struct PlanRow {
     /// Derived, read-only: the succession dates as a compact `first → last`
     /// (or the single date, or empty when `first_on` is unset).
     pub derived_dates: String,
-    /// How many planned plantings this line has generated (story 2.6), as a
-    /// string for the grid's «Generate (N)» affordance.
+    /// How many planned plantings this line **has** generated (story 2.6), as a
+    /// string for the grid's «Generate (N)» affordance. Reflects the actual rows,
+    /// so after editing `series` it lags until the grower re-generates — the
+    /// count means "generated so far", not "will generate".
     pub generated_count: String,
 }
 

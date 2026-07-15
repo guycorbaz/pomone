@@ -269,6 +269,19 @@ async fn assert_reopens_clean(app: &App, created_id: &str, mode: FailureMode) {
         normalize::snapshot(&reversed),
         "{mode:?}: normalization is not order-stable"
     );
+
+    // The planning dataset (story 2.6) must survive the crash too: the 6 planned
+    // plantings generated in step_e2 are still there after the reopen.
+    let planned = app
+        .repo()
+        .planned_planting_list_all()
+        .await
+        .expect("list planned plantings after restart");
+    assert_eq!(
+        planned.len(),
+        6,
+        "{mode:?}: generated planned plantings did not survive the crash/reopen"
+    );
 }
 
 /// One full paper loop for a single failure mode.
