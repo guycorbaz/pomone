@@ -126,6 +126,16 @@ define_id!(
     "Identifier for a crop-plan line (a planned variety × series × bed-meters, \
      staggered, that later generates plantings)."
 );
+define_id!(
+    ItkTemplateId,
+    "Identifier for a crop's itinéraire technique (ITK) template — the ordered \
+     set of activities that describes how the crop is grown."
+);
+define_id!(
+    ItkActivityId,
+    "Identifier for one ordered activity inside an ITK template (a task type at \
+     a signed day-offset from establishment)."
+);
 
 #[cfg(test)]
 mod tests {

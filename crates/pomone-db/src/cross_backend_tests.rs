@@ -572,6 +572,113 @@ async fn scenario_crop_plan_line(repo: &dyn Repository) {
     repo.variety_delete(variety.id).await.unwrap();
 }
 
+/// ITK templates + activities (story 2.2): full round-trip on both backends,
+/// the revived dormant `task_method`/`task_implement` FKs (optional, SET NULL on
+/// delete), one-template-per-crop (UNIQUE), and the template→activity cascade.
+async fn scenario_itk(repo: &dyn Repository) {
+    use pomone_domain::{
+        ItkActivity, ItkTemplate, TaskCategory, TaskImplement, TaskMethod, TaskType,
+    };
+
+    let family = Family::new("Asteraceae", None, None).unwrap();
+    repo.family_create(&family).await.unwrap();
+    let crop = Crop::new(
+        family.id,
+        "Laitue",
+        None,
+        Lifespan::Annual,
+        PruningSeason::None,
+    )
+    .unwrap();
+    repo.crop_create(&crop).await.unwrap();
+    let tt = TaskType::new("Préparation", TaskCategory::Other, "#8a8a8a").unwrap();
+    repo.task_type_create(&tt).await.unwrap();
+    let method = TaskMethod::new("Manuel", None).unwrap();
+    repo.task_method_create(&method).await.unwrap();
+    let implement = TaskImplement::new("Grelinette", None).unwrap();
+    repo.task_implement_create(&implement).await.unwrap();
+
+    // Template + two activities (one pins the dormant method/implement FKs).
+    let template = ItkTemplate::new(crop.id);
+    repo.itk_template_create(&template).await.unwrap();
+    assert_eq!(
+        repo.itk_template_get_for_crop(crop.id).await.unwrap(),
+        Some(template.clone())
+    );
+
+    let a0 = ItkActivity::new(
+        template.id,
+        tt.id,
+        -10,
+        Some(method.id),
+        Some(implement.id),
+        Some("préparation planche".into()),
+        0,
+        Some("béchage".into()),
+    );
+    let a1 = ItkActivity::new(
+        template.id,
+        tt.id,
+        20,
+        None,
+        None,
+        Some("désherbage".into()),
+        1,
+        None,
+    );
+    // Insert out of order — the list must come back position-sorted.
+    repo.itk_activity_create(&a1).await.unwrap();
+    repo.itk_activity_create(&a0).await.unwrap();
+    let got = repo
+        .itk_activity_list_for_template(template.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        got,
+        vec![a0.clone(), a1.clone()],
+        "activities ordered by position"
+    );
+    assert_eq!(got[0].method_id, Some(method.id));
+
+    // A second template for the same crop is refused (UNIQUE crop_id).
+    assert!(repo
+        .itk_template_create(&ItkTemplate::new(crop.id))
+        .await
+        .is_err());
+
+    // Deleting the method SET NULLs the activity's method_id (dormant-FK revive).
+    repo.task_method_delete(method.id).await.unwrap();
+    let after = repo
+        .itk_activity_list_for_template(template.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        after[0].method_id, None,
+        "method delete must SET NULL, not cascade"
+    );
+    assert_eq!(
+        after[0].implement_id,
+        Some(implement.id),
+        "implement untouched"
+    );
+
+    // Deleting the template cascades to its activities.
+    repo.itk_template_delete(template.id).await.unwrap();
+    assert!(repo
+        .itk_activity_list_for_template(template.id)
+        .await
+        .unwrap()
+        .is_empty());
+    let err = repo.itk_template_delete(template.id).await.unwrap_err();
+    assert!(matches!(
+        err,
+        DbError::NotFound {
+            kind: "itk_template",
+            ..
+        }
+    ));
+}
+
 // ============================================================
 // SQLite test entry points (always run)
 // ============================================================
@@ -632,6 +739,11 @@ mod sqlite_backend {
     #[tokio::test]
     async fn crop_plan_line() {
         scenario_crop_plan_line(&fresh().await).await;
+    }
+
+    #[tokio::test]
+    async fn itk() {
+        scenario_itk(&fresh().await).await;
     }
 }
 
@@ -701,5 +813,11 @@ mod mariadb_backend {
     #[ignore = "requires Docker for MariaDB testcontainer"]
     async fn crop_plan_line() {
         scenario_crop_plan_line(&fresh_repo().await).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker for MariaDB testcontainer"]
+    async fn itk() {
+        scenario_itk(&fresh_repo().await).await;
     }
 }

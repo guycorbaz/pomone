@@ -276,6 +276,58 @@ mod tests {
         assert_eq!(phase_dates(&p), vec![(Trigger::Plant, d(2026, 3, 15))]);
     }
 
+    /// Story 2.2 clause 5: a crop with **no** ITK keeps the shipped
+    /// variety-profile autogen (fallback). ITK persistence must not change
+    /// generation for ITK-less crops — generation stays variety-profile-driven
+    /// until story 2.6 wires ITKs in.
+    #[tokio::test]
+    async fn itk_less_crop_keeps_variety_profile_autogen() {
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
+        use crate::test_helpers::seed_test_data;
+        use pomone_db::{
+            seed_defaults, ItkRepo, LocationRepo, SqliteRepository, StrataRepo, TaskRepo,
+            VarietyRepo,
+        };
+
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        seed_test_data(&repo).await.unwrap();
+        let variety = repo.variety_list().await.unwrap()[0].clone();
+        let locations = repo.location_list().await.unwrap();
+        let bed = locations.iter().find(|l| l.parent_id.is_some()).unwrap();
+        let strata = repo.strata_list().await.unwrap()[0].id;
+
+        // The crop has no ITK template.
+        assert!(
+            repo.itk_template_get_for_crop(variety.crop_id)
+                .await
+                .unwrap()
+                .is_none(),
+            "precondition: crop has no ITK"
+        );
+
+        let planting = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(
+                variety.id,
+                bed.id,
+                strata,
+                d(2026, 3, 1),
+                dec!(20),
+                100,
+            ),
+        )
+        .await
+        .unwrap();
+
+        // Variety-profile autogen still produced the cycle's tasks.
+        let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
+        assert!(
+            !tasks.is_empty(),
+            "ITK-less crop must still autogen from the variety profile"
+        );
+    }
+
     #[tokio::test]
     async fn generating_twice_creates_no_duplicates() {
         use crate::services::{create_annual_planting, AnnualPlantingRequest};

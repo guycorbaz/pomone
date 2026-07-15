@@ -68,9 +68,9 @@ development_status:
   epic-1-retrospective: done
 
   # Epic 2: Planifier les cultures — lignes de plan et ITK
-  epic-2: backlog
-  2-1-plan-line-persistence-migration-0008: backlog
-  2-2-itk-templates-on-crops: backlog
+  epic-2: in-progress
+  2-1-plan-line-persistence-migration-0008: done
+  2-2-itk-templates-on-crops: done
   2-3-the-plan-grid-entry: backlog
   2-4-duplication-drafts-and-session-resume: backlog
   2-5-the-itk-editor-screen: backlog

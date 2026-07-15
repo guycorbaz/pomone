@@ -17,7 +17,7 @@ mod cross_backend_tests;
 pub use error::{DbError, DbResult};
 pub use mariadb::MariaDbRepository;
 pub use repository::{
-    CropPlanLineRepo, CropRepo, FactOutcome, FactsRepo, FamilyRepo, FieldEventRepo,
+    CropPlanLineRepo, CropRepo, FactOutcome, FactsRepo, FamilyRepo, FieldEventRepo, ItkRepo,
     LocationKindRepo, LocationRepo, PlantingRepo, Repository, StrataRepo, TaskImplementRepo,
     TaskMethodRepo, TaskProjection, TaskRepo, TaskSeriesRepo, TaskTypeRepo, TreatmentRepo,
     VarietyRepo, YearlyHarvestRepo,
