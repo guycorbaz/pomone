@@ -10,6 +10,7 @@
 
 import { Palette, Theme, Card, PrimaryButton, SecondaryButton, SectionHeader, ThemedLineEdit, ThemedComboBox } from "theme.slint";
 import { ListView, ScrollView } from "std-widgets.slint";
+import { ItkEditor, ItkActivityRow } from "itk_editor.slint";
 
 export struct CropRow {
     id: string,
@@ -228,6 +229,36 @@ export component CulturesPage inherits Rectangle {
     in property <string> empty-varieties-text;
     in property <string> no-crop-selected-text;
     in property <[VarietyRow]> varieties;
+
+    // ---- ITK editor (story 2.5), fed from MainWindow ----
+    in property <string> itk-title;
+    in property <string> itk-empty-text;
+    in property <[ItkActivityRow]> itk-activities;
+    in property <[string]> itk-type-options;
+    in property <[string]> itk-method-options;
+    in property <[string]> itk-implement-options;
+    in property <bool> itk-has-methods;
+    in property <bool> itk-has-implements;
+    in property <string> itk-form-editing-id;
+    in-out property <int> itk-form-type-index;
+    in-out property <string> itk-form-offset;
+    in-out property <int> itk-form-method-index;
+    in-out property <int> itk-form-implement-index;
+    in-out property <string> itk-form-label;
+    in property <string> itk-offset-placeholder;
+    in property <string> itk-label-placeholder;
+    in property <string> itk-add-label;
+    in property <string> itk-save-label;
+    in property <string> itk-cancel-label;
+    in property <string> itk-method-label;
+    in property <string> itk-implement-label;
+    in property <string> itk-edit-tip;
+    in property <string> itk-delete-tip;
+    callback itk-save();
+    callback itk-move(string, bool);
+    callback itk-edit(string);
+    callback itk-remove(string);
+    callback itk-cancel-edit();
 
     in property <string> new-variety-section;
     in property <string> new-variety-section-pluriannual;
@@ -693,6 +724,39 @@ export component CulturesPage inherits Rectangle {
                     }
                 }
             }
+        }
+
+        // ITK editor for the selected crop (story 2.5).
+        if selected-crop-index >= 0: ItkEditor {
+            title: root.itk-title;
+            empty-text: root.itk-empty-text;
+            enabled: true;
+            activities: root.itk-activities;
+            type-options: root.itk-type-options;
+            method-options: root.itk-method-options;
+            implement-options: root.itk-implement-options;
+            has-methods: root.itk-has-methods;
+            has-implements: root.itk-has-implements;
+            form-editing-id: root.itk-form-editing-id;
+            form-type-index <=> root.itk-form-type-index;
+            form-offset <=> root.itk-form-offset;
+            form-method-index <=> root.itk-form-method-index;
+            form-implement-index <=> root.itk-form-implement-index;
+            form-label <=> root.itk-form-label;
+            offset-placeholder: root.itk-offset-placeholder;
+            label-placeholder: root.itk-label-placeholder;
+            add-label: root.itk-add-label;
+            save-label: root.itk-save-label;
+            cancel-label: root.itk-cancel-label;
+            method-label: root.itk-method-label;
+            implement-label: root.itk-implement-label;
+            edit-tip: root.itk-edit-tip;
+            delete-tip: root.itk-delete-tip;
+            save() => { root.itk-save(); }
+            move(id, up) => { root.itk-move(id, up); }
+            edit(id) => { root.itk-edit(id); }
+            remove(id) => { root.itk-remove(id); }
+            cancel-edit() => { root.itk-cancel-edit(); }
         }
 
         // Shared status line

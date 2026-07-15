@@ -25,6 +25,8 @@ pub(crate) enum PendingDelete {
     Family(String),
     /// Treatment id (a row in the detail page's treatments table). Issue #82.
     Treatment(String),
+    /// ITK activity id (a row in the crop's ITK editor). Story 2.5.
+    ItkActivity(String),
 }
 
 /// Mutable, single-threaded UI state. Slint runs on the main thread and tokio
@@ -94,6 +96,13 @@ pub(crate) struct UiState {
     /// — the Ctrl+D duplication target and the row the grid re-focuses when the
     /// plan screen is reopened (story 2.4 session resume).
     pub(crate) plan_last_edited_id: String,
+    /// ITK editor (story 2.5): the selected crop's activity rows (for id/field
+    /// lookup on «edit»), plus the option-id lists parallel to the pickers'
+    /// label models (index 0 of method/implement is the "— none —" entry).
+    pub(crate) itk_activity_rows: Vec<pomone_app::ItkActivityRow>,
+    pub(crate) itk_type_option_ids: Vec<String>,
+    pub(crate) itk_method_option_ids: Vec<String>,
+    pub(crate) itk_implement_option_ids: Vec<String>,
     /// Stringified `TaskId` targeted by the open skip-reason dialog; empty when
     /// the dialog is closed (story 1.5).
     pub(crate) agenda_skip_target: String,

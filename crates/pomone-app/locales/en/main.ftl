@@ -664,3 +664,19 @@ home-print-week = 🖨 Print my week (rough)
 status-week-print-written = Weekly sheet saved and opened.
 status-week-print-failed = Could not generate the weekly sheet.
 status-week-print-saved-not-opened = Sheet saved (could not open it automatically).
+
+## ITK editor (Epic 2, story 2.5)
+itk-title = Growing schedule (ITK)
+itk-empty = No activities yet. An ITK-less crop keeps variety-profile generation.
+itk-none = — none —
+itk-offset-placeholder = Offset (e.g. -10, 20)
+itk-label-placeholder = Label (optional)
+itk-add = Add activity
+itk-save = Save
+itk-cancel = Cancel
+itk-method = Method
+itk-implement = Implement
+itk-edit-tip = Edit
+itk-delete-tip = Delete
+itk-delete-confirm = Delete this activity from the growing schedule?
+itk-delete-confirm-referenced = Delete this activity? { $count } generated task(s) reference it.

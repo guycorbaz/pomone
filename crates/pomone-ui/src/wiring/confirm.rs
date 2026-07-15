@@ -47,6 +47,9 @@ pub(crate) fn wire_confirm(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
                 Some(PendingDelete::Location(id)) => do_delete_location(&window, &mut s, &id),
                 Some(PendingDelete::Family(id)) => do_delete_family(&window, &mut s, &id),
                 Some(PendingDelete::Treatment(id)) => do_delete_treatment_row(&window, &mut s, &id),
+                Some(PendingDelete::ItkActivity(id)) => {
+                    crate::wiring::itk::do_delete_itk_activity(&window, &mut s, &id);
+                }
                 None => {}
             }
         });

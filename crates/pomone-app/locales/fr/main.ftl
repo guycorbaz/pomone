@@ -666,3 +666,19 @@ home-print-week = 🖨 Imprimer ma semaine (brut)
 status-week-print-written = Feuille de la semaine enregistrée et ouverte.
 status-week-print-failed = Impossible de générer la feuille de la semaine.
 status-week-print-saved-not-opened = Feuille enregistrée (impossible de l'ouvrir automatiquement).
+
+## ITK editor (Epic 2, story 2.5)
+itk-title = Itinéraire technique
+itk-empty = Aucune activité. Une culture sans ITK garde la génération par profil de variété.
+itk-none = — aucun —
+itk-offset-placeholder = Décalage (ex. -10, 20)
+itk-label-placeholder = Libellé (facultatif)
+itk-add = Ajouter l'activité
+itk-save = Enregistrer
+itk-cancel = Annuler
+itk-method = Méthode
+itk-implement = Outil
+itk-edit-tip = Modifier
+itk-delete-tip = Supprimer
+itk-delete-confirm = Supprimer cette activité de l'itinéraire technique ?
+itk-delete-confirm-referenced = Supprimer cette activité ? { $count } tâche(s) générée(s) la référencent.

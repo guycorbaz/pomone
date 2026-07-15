@@ -11,6 +11,7 @@ import { HomePage } from "home.slint";
 import { Timeline, GanttBar } from "components/timeline.slint";
 import { PlantingsPage, PlantingRow } from "plantings.slint";
 import { CulturesPage, CropRow, VarietyRow } from "cultures.slint";
+import { ItkActivityRow } from "itk_editor.slint";
 import { LocationsPage, LocationItem } from "locations.slint";
 import { TaskCalendarPage, TaskCalendarDay, TaskRow, TaskCategoryChip } from "task_calendar.slint";
 import { AgendaPage, AgendaRow } from "agenda.slint";
@@ -209,6 +210,36 @@ export component MainWindow inherits Window {
     in property <string> no-crop-selected-text;
     in property <[VarietyRow]> varieties;
     in-out property <bool> selected-crop-is-annual: true;
+
+    // ---- ITK editor (story 2.5) ----
+    in property <string> itk-title;
+    in property <string> itk-empty-text;
+    in property <[ItkActivityRow]> itk-activities;
+    in property <[string]> itk-type-options;
+    in property <[string]> itk-method-options;
+    in property <[string]> itk-implement-options;
+    in property <bool> itk-has-methods;
+    in property <bool> itk-has-implements;
+    in property <string> itk-form-editing-id;
+    in-out property <int> itk-form-type-index;
+    in-out property <string> itk-form-offset;
+    in-out property <int> itk-form-method-index;
+    in-out property <int> itk-form-implement-index;
+    in-out property <string> itk-form-label;
+    in property <string> itk-offset-placeholder;
+    in property <string> itk-label-placeholder;
+    in property <string> itk-add-label;
+    in property <string> itk-save-label;
+    in property <string> itk-cancel-label;
+    in property <string> itk-method-label;
+    in property <string> itk-implement-label;
+    in property <string> itk-edit-tip;
+    in property <string> itk-delete-tip;
+    callback itk-save();
+    callback itk-move(string, bool);
+    callback itk-edit(string);
+    callback itk-remove(string);
+    callback itk-cancel-edit();
 
     in property <string> new-variety-section;
     in property <string> new-variety-section-pluriannual;
@@ -1313,6 +1344,36 @@ export component MainWindow inherits Window {
                 variety-cancel-text: variety-cancel-text;
                 edit-variety(id) => { edit-variety(id); }
                 cancel-variety-edit => { cancel-variety-edit(); }
+
+                // ITK editor (story 2.5)
+                itk-title: itk-title;
+                itk-empty-text: itk-empty-text;
+                itk-activities: itk-activities;
+                itk-type-options: itk-type-options;
+                itk-method-options: itk-method-options;
+                itk-implement-options: itk-implement-options;
+                itk-has-methods: itk-has-methods;
+                itk-has-implements: itk-has-implements;
+                itk-form-editing-id: itk-form-editing-id;
+                itk-form-type-index <=> itk-form-type-index;
+                itk-form-offset <=> itk-form-offset;
+                itk-form-method-index <=> itk-form-method-index;
+                itk-form-implement-index <=> itk-form-implement-index;
+                itk-form-label <=> itk-form-label;
+                itk-offset-placeholder: itk-offset-placeholder;
+                itk-label-placeholder: itk-label-placeholder;
+                itk-add-label: itk-add-label;
+                itk-save-label: itk-save-label;
+                itk-cancel-label: itk-cancel-label;
+                itk-method-label: itk-method-label;
+                itk-implement-label: itk-implement-label;
+                itk-edit-tip: itk-edit-tip;
+                itk-delete-tip: itk-delete-tip;
+                itk-save() => { itk-save(); }
+                itk-move(id, up) => { itk-move(id, up); }
+                itk-edit(id) => { itk-edit(id); }
+                itk-remove(id) => { itk-remove(id); }
+                itk-cancel-edit() => { itk-cancel-edit(); }
             }
 
             // ------- Settings -------

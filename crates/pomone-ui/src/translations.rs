@@ -477,6 +477,18 @@ pub(crate) fn apply_translations(window: &MainWindow, app: &App) {
     window.set_varieties_title(SharedString::from(i18n.t("varieties-title")));
     window.set_empty_varieties_text(SharedString::from(i18n.t("empty-varieties")));
     window.set_no_crop_selected_text(SharedString::from(i18n.t("no-crop-selected")));
+    // ITK editor (story 2.5).
+    window.set_itk_title(SharedString::from(i18n.t("itk-title")));
+    window.set_itk_empty_text(SharedString::from(i18n.t("itk-empty")));
+    window.set_itk_offset_placeholder(SharedString::from(i18n.t("itk-offset-placeholder")));
+    window.set_itk_label_placeholder(SharedString::from(i18n.t("itk-label-placeholder")));
+    window.set_itk_add_label(SharedString::from(i18n.t("itk-add")));
+    window.set_itk_save_label(SharedString::from(i18n.t("itk-save")));
+    window.set_itk_cancel_label(SharedString::from(i18n.t("itk-cancel")));
+    window.set_itk_method_label(SharedString::from(i18n.t("itk-method")));
+    window.set_itk_implement_label(SharedString::from(i18n.t("itk-implement")));
+    window.set_itk_edit_tip(SharedString::from(i18n.t("itk-edit-tip")));
+    window.set_itk_delete_tip(SharedString::from(i18n.t("itk-delete-tip")));
     window.set_new_crop_section(SharedString::from(i18n.t("new-crop-section")));
     window.set_new_variety_section(SharedString::from(i18n.t("new-variety-section")));
     window.set_new_variety_section_pluriannual(SharedString::from(

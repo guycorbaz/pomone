@@ -99,6 +99,10 @@ fn main() -> Result<()> {
         plan_rows: Vec::new(),
         plan_variety_option_ids: Vec::new(),
         plan_last_edited_id: String::new(),
+        itk_activity_rows: Vec::new(),
+        itk_type_option_ids: Vec::new(),
+        itk_method_option_ids: Vec::new(),
+        itk_implement_option_ids: Vec::new(),
         agenda_skip_target: String::new(),
         agenda_skip_reason_keys: Vec::new(),
         task_type_admin_ids: Vec::new(),
@@ -153,6 +157,7 @@ fn main() -> Result<()> {
     wiring::task_calendar::wire_task_calendar(&window, &state);
     wiring::agenda::wire_agenda(&window, &state);
     wiring::plan::wire_plan(&window, &state);
+    wiring::itk::wire_itk(&window, &state);
     wiring::task_form::wire_task_form(&window, &state);
     wiring::task_types::wire_task_types(&window, &state);
 
