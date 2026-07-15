@@ -16,6 +16,7 @@ import { LocationsPage, LocationItem } from "locations.slint";
 import { TaskCalendarPage, TaskCalendarDay, TaskRow, TaskCategoryChip } from "task_calendar.slint";
 import { AgendaPage, AgendaRow } from "agenda.slint";
 import { PlanPage, PlanGridRow } from "plan.slint";
+import { NeedsPage, NeedsListRow } from "needs.slint";
 import { TaskFormPage } from "task_form.slint";
 import { TaskTypesPage, TaskTypeAdminItem } from "task_types.slint";
 import { FamiliesPage, FamilyAdminItem } from "families.slint";
@@ -366,6 +367,7 @@ export component MainWindow inherits Window {
     in property <string> plan-col-stagger;
     in property <string> plan-col-first-on;
     in property <string> plan-col-derived;
+    in property <string> plan-col-needs;
     in property <string> plan-col-draft;
     in property <string> plan-col-notes;
     in property <[string]> plan-variety-options;
@@ -382,6 +384,21 @@ export component MainWindow inherits Window {
     callback plan-duplicate-current();
     callback plan-generate(int);
     callback plan-add-line();
+
+    // ------- Needs list «Besoins» (Epic 2, story 2.7) -------
+    in property <string> nav-needs-text;
+    in property <string> needs-title-text;
+    in property <string> needs-hint-text;
+    in property <string> needs-empty-text;
+    in property <string> needs-col-variety;
+    in property <string> needs-col-quantity;
+    in property <string> needs-col-buy-by;
+    in property <string> needs-col-lines;
+    in property <string> needs-buy-by-none;
+    in property <[NeedsListRow]> needs-rows;
+    in property <string> needs-print-text;
+    in property <string> needs-print-disabled-tip;
+    callback navigate-needs();
 
     // ------- Agenda page (overdue / today / upcoming) -------
     in property <string> agenda-title-text;
@@ -969,6 +986,12 @@ export component MainWindow inherits Window {
                     clicked => { current-page = "plan"; navigate-plan(); }
                 }
                 NavButton {
+                    text: nav-needs-text;
+                    icon: Icons.plantings;
+                    selected: current-page == "needs";
+                    clicked => { current-page = "needs"; navigate-needs(); }
+                }
+                NavButton {
                     text: nav-tasks-text;
                     tip: TooltipCatalog.nav-tasks;
                     icon: Icons.tasks;
@@ -1541,6 +1564,7 @@ export component MainWindow inherits Window {
                 col-stagger: plan-col-stagger;
                 col-first-on: plan-col-first-on;
                 col-derived: plan-col-derived;
+                col-needs: plan-col-needs;
                 col-draft: plan-col-draft;
                 col-notes: plan-col-notes;
                 variety-options: plan-variety-options;
@@ -1556,6 +1580,21 @@ export component MainWindow inherits Window {
                 duplicate-current() => { plan-duplicate-current(); }
                 generate(i) => { plan-generate(i); }
                 add-line() => { plan-add-line(); }
+            }
+
+            // ------- Needs list «Besoins» (Epic 2, story 2.7) -------
+            if current-page == "needs": NeedsPage {
+                title-text: needs-title-text;
+                hint-text: needs-hint-text;
+                empty-text: needs-empty-text;
+                col-variety: needs-col-variety;
+                col-quantity: needs-col-quantity;
+                col-buy-by: needs-col-buy-by;
+                col-lines: needs-col-lines;
+                buy-by-none: needs-buy-by-none;
+                rows: needs-rows;
+                print-text: needs-print-text;
+                print-disabled-tip: needs-print-disabled-tip;
             }
 
             // ------- Task types catalog (create / edit / delete) -------

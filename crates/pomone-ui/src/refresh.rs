@@ -8,8 +8,8 @@ use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use pomone_app::{
     bed_usage_series, get_planting_detail, list_agenda, list_calendar_entries, list_crops,
     list_families_admin, list_family_options, list_location_kind_options, list_location_options,
-    list_locations_tree, list_parent_options, list_plan_rows, list_planting_tasks, list_plantings,
-    list_strata_options, list_strata_rows, list_task_category_options,
+    list_locations_tree, list_needs, list_parent_options, list_plan_rows, list_planting_tasks,
+    list_plantings, list_strata_options, list_strata_rows, list_task_category_options,
     list_treatments_for_planting, list_varieties_for_crop, list_variety_options,
     list_yearly_harvests_for_planting, planting_status_key, AgendaRow as AppAgendaRow, App,
     AppError, BedUsagePoint as AppBedUsagePoint, CalendarEntry as AppCalendarEntry,
@@ -26,11 +26,12 @@ use slint::{ModelRc, SharedString, VecModel};
 use crate::generated::{
     AgendaRow as SlintAgendaRow, CropRow as SlintCropRow, DetailLine as SlintDetailLine,
     FamilyAdminItem as SlintFamilyAdminItem, GanttBar as SlintGanttBar,
-    LocationItem as SlintLocationItem, MainWindow, PaletteColor as SlintPaletteColor,
-    PlanGridRow as SlintPlanGridRow, PlantingRow as SlintPlantingRow,
-    PlantingTaskRow as SlintPlantingTaskRow, StrataItem as SlintStrataItem,
-    TaskCalendarDay as SlintTaskCalendarDay, TaskCategoryChip as SlintTaskCategoryChip,
-    TaskRow as SlintTaskRow, TreatmentRow as SlintTreatmentRow, VarietyRow as SlintVarietyRow,
+    LocationItem as SlintLocationItem, MainWindow, NeedsListRow as SlintNeedsListRow,
+    PaletteColor as SlintPaletteColor, PlanGridRow as SlintPlanGridRow,
+    PlantingRow as SlintPlantingRow, PlantingTaskRow as SlintPlantingTaskRow,
+    StrataItem as SlintStrataItem, TaskCalendarDay as SlintTaskCalendarDay,
+    TaskCategoryChip as SlintTaskCategoryChip, TaskRow as SlintTaskRow,
+    TreatmentRow as SlintTreatmentRow, VarietyRow as SlintVarietyRow,
     YearlyHarvestRow as SlintYearlyHarvestRow,
 };
 
@@ -928,6 +929,7 @@ pub(crate) fn refresh_plan(window: &MainWindow, state: &mut UiState) -> Result<(
                 notes: SharedString::from(r.notes.clone()),
                 derived_dates: SharedString::from(r.derived_dates.clone()),
                 generated_count: SharedString::from(r.generated_count.clone()),
+                need_total: SharedString::from(r.need_total.clone()),
             }
         })
         .collect();
@@ -935,6 +937,27 @@ pub(crate) fn refresh_plan(window: &MainWindow, state: &mut UiState) -> Result<(
     // Re-focus the last-touched row on reopen (session resume, story 2.4).
     window.set_plan_focus_id(SharedString::from(state.plan_last_edited_id.clone()));
     state.plan_rows = rows;
+    Ok(())
+}
+
+/// Rebuild the needs list «Besoins» (story 2.7): per-variety aggregation of the
+/// non-draft plan lines. Read-only, so no state snapshot to keep.
+pub(crate) fn refresh_needs(window: &MainWindow, state: &mut UiState) -> Result<()> {
+    let rows = state
+        .runtime
+        .block_on(async { list_needs(state.app.repo(), state.app.i18n()).await })
+        .context("failed to load the needs list")?;
+
+    let mapped: Vec<SlintNeedsListRow> = rows
+        .iter()
+        .map(|r| SlintNeedsListRow {
+            variety_label: SharedString::from(r.variety_label.clone()),
+            quantity: SharedString::from(r.quantity_bed_meters.clone()),
+            buy_by: SharedString::from(r.buy_by.clone()),
+            line_count: SharedString::from(r.line_count.clone()),
+        })
+        .collect();
+    window.set_needs_rows(ModelRc::new(VecModel::from(mapped)));
     Ok(())
 }
 

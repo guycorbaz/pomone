@@ -176,6 +176,16 @@ async fn step_e2_plan_lines(app: &App) {
         app.repo().planned_planting_list_all().await.unwrap().len(),
         6,
     );
+
+    // The needs list (story 2.7) aggregates that one non-draft line: 6 × 15 m =
+    // 90 bed-meters for the single variety, buy-by = its first sow.
+    let needs = pomone_app::list_needs(app.repo(), app.i18n())
+        .await
+        .expect("needs list");
+    assert_eq!(needs.len(), 1, "one variety in the needs list");
+    assert_eq!(needs[0].quantity_bed_meters, "90");
+    assert_eq!(needs[0].buy_by, "2026-04-01");
+    assert!(needs[0].variety_label.ends_with("Batavia"));
 }
 
 fn step_e3_placement(_app: &App) {
@@ -282,6 +292,17 @@ async fn assert_reopens_clean(app: &App, created_id: &str, mode: FailureMode) {
         6,
         "{mode:?}: generated planned plantings did not survive the crash/reopen"
     );
+    // …and the needs list (story 2.7), derived from the same lines, still
+    // aggregates them after the reopen.
+    let needs = pomone_app::list_needs(app.repo(), app.i18n())
+        .await
+        .expect("needs list after restart");
+    assert_eq!(
+        needs.len(),
+        1,
+        "{mode:?}: needs list did not survive the crash/reopen"
+    );
+    assert_eq!(needs[0].quantity_bed_meters, "90");
 }
 
 /// One full paper loop for a single failure mode.

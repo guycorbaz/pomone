@@ -23,6 +23,7 @@ pub mod i18n;
 pub mod itk_view;
 pub mod locations_view;
 pub mod migration;
+pub mod needs_view;
 pub mod plan_view;
 pub mod planting_detail_view;
 pub mod plantings_view;
@@ -79,6 +80,7 @@ pub use locations_view::{
     LocationKindOption, LocationListItem, ParentLocationOption,
 };
 pub use migration::{copy_all, MigrationReport};
+pub use needs_view::{list_needs, NeedRow};
 pub use plan_view::{
     delete_plan_line, duplicate_plan_line, list_plan_rows, save_plan_line, PlanLineInput, PlanRow,
 };

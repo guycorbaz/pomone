@@ -27,6 +27,8 @@ export struct PlanGridRow {
     notes: string,
     derived-dates: string,
     generated-count: string,
+    // Derived needs figure (story 2.7): series × bed-meters, read-only.
+    need-total: string,
 }
 
 // A single editable grid row. Holds no state of its own beyond the widgets;
@@ -107,8 +109,20 @@ component GridRow inherits Rectangle {
         }
         // Derived, read-only, visually distinct (grey italic), non-focusable.
         Text {
-            width: 16%;
+            width: 11%;
             text: root.data.derived-dates == "" ? root.derived-placeholder : root.data.derived-dates;
+            color: Palette.text-muted;
+            font-italic: true;
+            font-size: Theme.font-size-label;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        // Derived needs figure (story 2.7): the line's total bed-meters,
+        // read-only, right-aligned like the other quantities.
+        Text {
+            width: 8%;
+            text: root.data.need-total;
+            horizontal-alignment: right;
             color: Palette.text-muted;
             font-italic: true;
             font-size: Theme.font-size-label;
@@ -207,6 +221,7 @@ export component PlanPage inherits Rectangle {
     in property <string> col-stagger;
     in property <string> col-first-on;
     in property <string> col-derived;
+    in property <string> col-needs;
     in property <string> col-draft;
     in property <string> col-notes;
     in property <[string]> variety-options;
@@ -271,7 +286,8 @@ export component PlanPage inherits Rectangle {
                     Text { width: 10%; text: root.col-bed-meters; horizontal-alignment: right; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
                     Text { width: 9%; text: root.col-stagger; horizontal-alignment: right; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
                     Text { width: 12%; text: root.col-first-on; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
-                    Text { width: 16%; text: root.col-derived; font-weight: Theme.font-weight-semibold; color: Palette.text-muted; font-size: Theme.font-size-label; }
+                    Text { width: 11%; text: root.col-derived; font-weight: Theme.font-weight-semibold; color: Palette.text-muted; font-size: Theme.font-size-label; }
+                    Text { width: 8%; text: root.col-needs; horizontal-alignment: right; font-weight: Theme.font-weight-semibold; color: Palette.text-muted; font-size: Theme.font-size-label; }
                     Text { width: 7%; text: root.col-draft; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
                     Text { horizontal-stretch: 1; text: root.col-notes; font-weight: Theme.font-weight-semibold; color: Palette.text-secondary; font-size: Theme.font-size-label; }
                     Rectangle { width: 124px; }

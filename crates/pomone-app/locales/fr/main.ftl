@@ -376,6 +376,7 @@ plan-col-bed-meters = m/série
 plan-col-stagger = Échelon. (j)
 plan-col-first-on = 1re date
 plan-col-derived = Dates (calculées)
+plan-col-needs = Besoin (m)
 plan-col-draft = Brouillon
 plan-col-notes = Notes
 plan-draft-badge = Brouillon
@@ -384,6 +385,18 @@ plan-generate-label = Générer
 plan-generated = { $count } plantation(s) générée(s).
 plan-generate-draft = Impossible de générer une ligne brouillon — promeus-la d'abord.
 plan-generate-no-date = Renseigne une 1re date avant de générer.
+# Liste des besoins «Besoins» (story 2.7)
+nav-needs = Besoins
+title-needs = Liste des besoins
+needs-hint = Totaux par variété agrégés depuis toutes les lignes de plan non-brouillon, placées ou non. «À acheter avant» est la première date de semis — commande la graine ou les plants avant.
+needs-empty = Rien à commander pour l'instant. Ajoute des lignes de plan non-brouillon datées.
+needs-col-variety = Variété
+needs-col-quantity = Quantité (m)
+needs-col-buy-by = À acheter avant
+needs-col-lines = Lignes
+needs-buy-by-none = sans date
+needs-print = Imprimer
+needs-print-disabled = L'impression arrive dans une version ultérieure (documents).
 # Row ⋯ settle menu (story 1.5)
 agenda-menu-done = Marquer fait
 agenda-menu-skip = Abandonner…

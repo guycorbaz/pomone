@@ -45,6 +45,10 @@ pub struct PlanRow {
     /// so after editing `series` it lags until the grower re-generates — the
     /// count means "generated so far", not "will generate".
     pub generated_count: String,
+    /// Derived, read-only (story 2.7): this line's total quantity in bed-meters,
+    /// `series × bed_meters`, exact. The grid's "needs" figure — it feeds the
+    /// per-variety aggregation in the «Besoins» view.
+    pub need_total: String,
 }
 
 /// List every plan line as a grid row, newest-anchored first then by id for a
@@ -228,6 +232,9 @@ fn plan_row(
         notes: line.notes.clone().unwrap_or_default(),
         derived_dates: format_derived_dates(&line.succession_dates()),
         generated_count: generated_count.to_string(),
+        need_total: (Decimal::from(line.series) * line.bed_meters)
+            .normalize()
+            .to_string(),
     }
 }
 
@@ -342,6 +349,8 @@ mod tests {
         assert!(row.variety_label.ends_with("Batavia"));
         // 3 successions × 14 days from 2026-04-01 → last 2026-04-29.
         assert_eq!(row.derived_dates, "2026-04-01 → 2026-04-29");
+        // Needs figure (story 2.7): 3 series × 15.5 m = 46.5 bed-meters, exact.
+        assert_eq!(row.need_total, "46.5");
 
         // Update: promote from draft, clear the date → no derived dates.
         save_plan_line(
