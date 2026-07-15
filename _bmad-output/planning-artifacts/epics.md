@@ -343,7 +343,7 @@ So that invariants are machine-checked and the dogfooding base survives schema c
 
 ## Epic 2: Planifier les cultures — lignes de plan et ITK
 
-Winter plan enters spreadsheet-style; ITKs on crops; staggered plantings; needs on screen. (Migration 0008.)
+Winter plan enters spreadsheet-style; ITKs on crops; staggered plantings; needs on screen. (Migrations 0008 crop-plan-line + 0009 itk — split from the planned single "0008_planning" because migrations are immutable once applied, so each table lands with its own domain: crop-plan-line in 2.1, ITK in 2.2. Downstream geometry shifts to 0010.)
 
 ### Story 2.1: Plan-line persistence (migration 0008)
 
@@ -351,7 +351,7 @@ As the product owner,
 I want `CropPlanLine` (crop/variety, series × bed-meters, staggering, draft state, notes) persisted on both backends,
 So that the plan exists as durable data the grid and generation can build on.
 
-**Acceptance Criteria:** **Given** `0008_planning.sql` (plan + itk tables, additive) **When** cross-backend tests run **Then** CRUD round-trips both backends; `copy_all` covers the tables **And** constructors enforce positive series/meters, staggering ≥ 0, draft orthogonal to validity.
+**Acceptance Criteria:** **Given** `0008_crop_plan_line.sql` (additive, no CHECK; the ITK tables move to `0009_itk.sql` in story 2.2) **When** cross-backend tests run **Then** CRUD round-trips both backends; `copy_all` covers the table **And** constructors enforce positive series/meters, staggering ≥ 0, draft orthogonal to validity.
 
 ### Story 2.2: ITK templates on crops
 
@@ -361,7 +361,7 @@ So that generation reflects how I actually grow each crop.
 
 **Acceptance Criteria:**
 
-**Given** a crop
+**Given** a crop and `0009_itk.sql` (itk_template + itk_activity, additive, no CHECK — split from the planned "0008_planning"; see 2.1)
 **When** I define J-10 «préparation planche» and J+20 «désherbage»
 **Then** the ordered template persists and round-trips both backends, on the dormant FKs (no parallel columns)
 **And** an ITK-less crop keeps the shipped variety-profile autogen (clause 5 — fallback tested).

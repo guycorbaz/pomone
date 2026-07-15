@@ -37,6 +37,7 @@ pub struct MigrationReport {
     pub task_series: usize,
     pub tasks: usize,
     pub treatments: usize,
+    pub crop_plan_lines: usize,
     pub field_events: usize,
     /// Snapshot of the previous SQLite file taken by
     /// [`crate::App::swap_backend`] just before the swap; `None` when the
@@ -133,6 +134,12 @@ pub async fn copy_all(
         }
     }
 
+    // 3b. Crop-plan lines (story 2.1) — reference varieties, so after them.
+    for line in source.crop_plan_line_list().await? {
+        target.crop_plan_line_create(&line).await?;
+        report.crop_plan_lines += 1;
+    }
+
     // 4. Work history: recurring series first (tasks reference them), then
     //    the tasks themselves (issue #102 — these were silently dropped).
     for s in source.task_series_list().await? {
@@ -169,6 +176,7 @@ async fn target_has_data(target: &dyn Repository) -> AppResult<bool> {
         || !target.variety_list().await?.is_empty()
         || !target.planting_list().await?.is_empty()
         || !target.task_list().await?.is_empty()
+        || !target.crop_plan_line_list().await?.is_empty()
         || !target.field_event_list_all().await?.is_empty())
 }
 
@@ -434,6 +442,36 @@ mod tests {
         assert_eq!(
             source.task_type_list().await.unwrap(),
             target.task_type_list().await.unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn copy_all_carries_crop_plan_lines_over() {
+        use pomone_db::CropPlanLineRepo;
+        use pomone_domain::CropPlanLine;
+
+        let source = seeded_repo().await;
+        seed_test_data(&source).await.unwrap();
+        let variety = source.variety_list().await.unwrap()[0].id;
+        // Two lines (one a draft) so the copy exercises more than a single row.
+        let line1 =
+            CropPlanLine::new(variety, 6, dec!(15), 14, true, Some("batavia".into())).unwrap();
+        let line2 = CropPlanLine::new(variety, 3, dec!(20), 0, false, None).unwrap();
+        source.crop_plan_line_create(&line1).await.unwrap();
+        source.crop_plan_line_create(&line2).await.unwrap();
+
+        let target = SqliteRepository::in_memory().await.unwrap();
+        let report = copy_all(&source, &target).await.unwrap();
+
+        assert_eq!(report.crop_plan_lines, 2);
+        assert_eq!(
+            target.crop_plan_line_get(line1.id).await.unwrap(),
+            Some(line1),
+            "the plan line must migrate intact"
+        );
+        assert_eq!(
+            target.crop_plan_line_get(line2.id).await.unwrap(),
+            Some(line2)
         );
     }
 

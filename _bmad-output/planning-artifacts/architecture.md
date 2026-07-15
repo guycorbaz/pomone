@@ -215,8 +215,9 @@ crates/
 ├── pomone-db/
 │   ├── migrations/{sqlite,mariadb}/
 │   │   ├── 0007_field_event.sql          NEW  P4 — field_event + task skip columns (numbered by merge order: E1 first)
-│   │   ├── 0008_planning.sql             NEW  P1 — crop_plan_line, itk_template, itk_activity
-│   │   ├── 0009_geometry.sql             NEW  P2 — occupation_kind discriminant
+│   │   ├── 0008_crop_plan_line.sql       NEW  story 2.1 — crop_plan_line (split from planning: migrations are immutable, so ITK lands with its own domain in 2.2)
+│   │   ├── 0009_itk.sql                   NEW  story 2.2 — itk_template, itk_activity (was bundled in the planned "0008_planning")
+│   │   ├── 0010_geometry.sql             NEW  P2 — occupation_kind discriminant (shifted +1 by the 0008/0009 split)
 │   │   └── (per-slice additive pairs — never CHECK)
 │   ├── src/codec.rs                      MOD  FactKind, SkipReason, plan-line states
 │   ├── src/repository.rs                 MOD  + CropPlanRepo, ItkRepo, FieldEventRepo sub-traits

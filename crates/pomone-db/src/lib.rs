@@ -17,9 +17,10 @@ mod cross_backend_tests;
 pub use error::{DbError, DbResult};
 pub use mariadb::MariaDbRepository;
 pub use repository::{
-    CropRepo, FactOutcome, FactsRepo, FamilyRepo, FieldEventRepo, LocationKindRepo, LocationRepo,
-    PlantingRepo, Repository, StrataRepo, TaskImplementRepo, TaskMethodRepo, TaskProjection,
-    TaskRepo, TaskSeriesRepo, TaskTypeRepo, TreatmentRepo, VarietyRepo, YearlyHarvestRepo,
+    CropPlanLineRepo, CropRepo, FactOutcome, FactsRepo, FamilyRepo, FieldEventRepo,
+    LocationKindRepo, LocationRepo, PlantingRepo, Repository, StrataRepo, TaskImplementRepo,
+    TaskMethodRepo, TaskProjection, TaskRepo, TaskSeriesRepo, TaskTypeRepo, TreatmentRepo,
+    VarietyRepo, YearlyHarvestRepo,
 };
 pub use seed::seed_defaults;
 pub use sqlite::SqliteRepository;

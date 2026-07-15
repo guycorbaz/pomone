@@ -121,6 +121,11 @@ define_id!(
     FieldEventId,
     "Identifier for an append-only field-journal event."
 );
+define_id!(
+    CropPlanLineId,
+    "Identifier for a crop-plan line (a planned variety × series × bed-meters, \
+     staggered, that later generates plantings)."
+);
 
 #[cfg(test)]
 mod tests {
