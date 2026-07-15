@@ -38,6 +38,8 @@ pub struct MigrationReport {
     pub tasks: usize,
     pub treatments: usize,
     pub crop_plan_lines: usize,
+    pub itk_templates: usize,
+    pub itk_activities: usize,
     pub field_events: usize,
     /// Snapshot of the previous SQLite file taken by
     /// [`crate::App::swap_backend`] just before the swap; `None` when the
@@ -140,6 +142,19 @@ pub async fn copy_all(
         report.crop_plan_lines += 1;
     }
 
+    // 3c. ITK templates + activities (story 2.2) — templates reference crops,
+    //     activities reference their template + task lookups (all copied above).
+    for crop in source.crop_list().await? {
+        if let Some(template) = source.itk_template_get_for_crop(crop.id).await? {
+            target.itk_template_create(&template).await?;
+            report.itk_templates += 1;
+            for activity in source.itk_activity_list_for_template(template.id).await? {
+                target.itk_activity_create(&activity).await?;
+                report.itk_activities += 1;
+            }
+        }
+    }
+
     // 4. Work history: recurring series first (tasks reference them), then
     //    the tasks themselves (issue #102 — these were silently dropped).
     for s in source.task_series_list().await? {
@@ -177,7 +192,19 @@ async fn target_has_data(target: &dyn Repository) -> AppResult<bool> {
         || !target.planting_list().await?.is_empty()
         || !target.task_list().await?.is_empty()
         || !target.crop_plan_line_list().await?.is_empty()
+        || target_has_itk(target).await?
         || !target.field_event_list_all().await?.is_empty())
+}
+
+/// True if any crop in `target` already carries an ITK template. Separate helper
+/// because ITK is only reachable per-crop (no flat list).
+async fn target_has_itk(target: &dyn Repository) -> AppResult<bool> {
+    for crop in target.crop_list().await? {
+        if target.itk_template_get_for_crop(crop.id).await?.is_some() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn push_with_ancestors(
@@ -472,6 +499,50 @@ mod tests {
         assert_eq!(
             target.crop_plan_line_get(line2.id).await.unwrap(),
             Some(line2)
+        );
+    }
+
+    #[tokio::test]
+    async fn copy_all_carries_itk_templates_and_activities_over() {
+        use pomone_db::{CropRepo, ItkRepo, TaskTypeRepo};
+        use pomone_domain::{ItkActivity, ItkTemplate};
+
+        let source = seeded_repo().await;
+        seed_test_data(&source).await.unwrap();
+        let crop = source.crop_list().await.unwrap()[0].id;
+        let tt = source.task_type_list().await.unwrap()[0].id;
+        let template = ItkTemplate::new(crop);
+        source.itk_template_create(&template).await.unwrap();
+        let a0 = ItkActivity::new(
+            template.id,
+            tt,
+            -10,
+            None,
+            None,
+            Some("prépa".into()),
+            0,
+            None,
+        );
+        let a1 = ItkActivity::new(template.id, tt, 20, None, None, None, 1, None);
+        source.itk_activity_create(&a0).await.unwrap();
+        source.itk_activity_create(&a1).await.unwrap();
+
+        let target = SqliteRepository::in_memory().await.unwrap();
+        let report = copy_all(&source, &target).await.unwrap();
+
+        assert_eq!(report.itk_templates, 1);
+        assert_eq!(report.itk_activities, 2);
+        assert_eq!(
+            target.itk_template_get_for_crop(crop).await.unwrap(),
+            Some(template.clone())
+        );
+        assert_eq!(
+            target
+                .itk_activity_list_for_template(template.id)
+                .await
+                .unwrap(),
+            vec![a0, a1],
+            "activities migrate intact and stay position-ordered"
         );
     }
 

@@ -28,6 +28,7 @@ pub mod field_event;
 pub mod harvest;
 pub mod holidays;
 pub mod ids;
+pub mod itk;
 pub mod location;
 pub mod location_kind;
 pub mod planting;
@@ -49,10 +50,11 @@ pub use field_event::{skip_payload, FactKind, FieldEvent, SkipReason};
 pub use harvest::YearlyHarvest;
 pub use holidays::{holiday_on, holidays_in_year, Holiday, HolidayRegion};
 pub use ids::{
-    CropId, CropPlanLineId, FamilyId, FieldEventId, LocationId, LocationKindId, PlantingId,
-    StrataId, TaskId, TaskImplementId, TaskMethodId, TaskSeriesId, TaskTypeId, TreatmentId,
-    VarietyId,
+    CropId, CropPlanLineId, FamilyId, FieldEventId, ItkActivityId, ItkTemplateId, LocationId,
+    LocationKindId, PlantingId, StrataId, TaskId, TaskImplementId, TaskMethodId, TaskSeriesId,
+    TaskTypeId, TreatmentId, VarietyId,
 };
+pub use itk::{check_positions_unique, ItkActivity, ItkTemplate};
 pub use location::Location;
 pub use location_kind::LocationKind;
 pub use planting::{Planting, PlantingSchedule, PlantingStatus};

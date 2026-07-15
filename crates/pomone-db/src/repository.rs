@@ -10,9 +10,10 @@ use async_trait::async_trait;
 use chrono::NaiveDate;
 use pomone_domain::{
     Crop, CropId, CropPlanLine, CropPlanLineId, Family, FamilyId, FieldEvent, FieldEventId,
-    Location, LocationId, LocationKind, LocationKindId, Planting, PlantingId, SkipReason, Strata,
-    StrataId, Task, TaskId, TaskImplement, TaskImplementId, TaskMethod, TaskMethodId, TaskSeries,
-    TaskSeriesId, TaskType, TaskTypeId, Treatment, TreatmentId, Variety, VarietyId, YearlyHarvest,
+    ItkActivity, ItkActivityId, ItkTemplate, ItkTemplateId, Location, LocationId, LocationKind,
+    LocationKindId, Planting, PlantingId, SkipReason, Strata, StrataId, Task, TaskId,
+    TaskImplement, TaskImplementId, TaskMethod, TaskMethodId, TaskSeries, TaskSeriesId, TaskType,
+    TaskTypeId, Treatment, TreatmentId, Variety, VarietyId, YearlyHarvest,
 };
 use uuid::Uuid;
 
@@ -217,6 +218,26 @@ pub trait CropPlanLineRepo: Send + Sync {
     async fn crop_plan_line_delete(&self, id: CropPlanLineId) -> DbResult<()>;
 }
 
+/// Crop ITK templates and their ordered activities (Epic 2, story 2.2). A
+/// template is one-per-crop; deleting it cascades to its activities.
+#[async_trait]
+pub trait ItkRepo: Send + Sync {
+    async fn itk_template_get(&self, id: ItkTemplateId) -> DbResult<Option<ItkTemplate>>;
+    /// The crop's ITK, if it has one (unique per crop).
+    async fn itk_template_get_for_crop(&self, crop_id: CropId) -> DbResult<Option<ItkTemplate>>;
+    async fn itk_template_create(&self, template: &ItkTemplate) -> DbResult<()>;
+    /// Delete a template; its activities cascade away.
+    async fn itk_template_delete(&self, id: ItkTemplateId) -> DbResult<()>;
+    /// A template's activities, ordered by `position` (ascending).
+    async fn itk_activity_list_for_template(
+        &self,
+        template_id: ItkTemplateId,
+    ) -> DbResult<Vec<ItkActivity>>;
+    async fn itk_activity_create(&self, activity: &ItkActivity) -> DbResult<()>;
+    async fn itk_activity_update(&self, activity: &ItkActivity) -> DbResult<()>;
+    async fn itk_activity_delete(&self, id: ItkActivityId) -> DbResult<()>;
+}
+
 /// The append-only field-event journal (story 1.1). There is deliberately no
 /// update or delete: corrections are new events, and the client-generated id
 /// makes `field_event_create` idempotent (a replayed insert is a no-op).
@@ -269,6 +290,7 @@ pub trait Repository:
     + TaskRepo
     + TreatmentRepo
     + CropPlanLineRepo
+    + ItkRepo
     + FieldEventRepo
     + FactsRepo
     + Send
