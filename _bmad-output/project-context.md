@@ -51,6 +51,7 @@ Pomone is a **Rust rewrite of Qrop** (https://qrop.readthedocs.io/), the C++/Qt 
 - Use the `date_calc` helpers (`add_days`, `date_from_doy`, …) which return `DomainError` on overflow / invalid day-of-year. **Never `.unwrap()` chrono arithmetic** — year boundaries and leap years (day 366) are real inputs.
 - Agronomic dates are `chrono::NaiveDate` — **no timezones**.
 - Quantities (`area_m2`, `*_yield_kg`, `labor_hours`) are **`rust_decimal::Decimal`, never `f64`.**
+- **Read-path defensive posture (Epic 2 lesson):** any `Decimal` product/sum or derived allocation computed from an **unbounded domain input** (`series`/count as `u32`, SQLite decimals stored as free TEXT) must **saturate or cap** in read/aggregation paths, never panic. Domain constructors bound *some* inputs but not magnitude; a list/aggregate view must not crash on a pathological-but-persisted row. Precedents: `CropPlanLine::succession_dates` caps at `MAX_SUCCESSIONS`; `needs_view` / `plan_view` use `saturating_mul`/`saturating_add`. **Review-checklist item:** on any read-path arithmetic over persisted quantities, ask "what if this row is absurd?" and prove it saturates, not panics.
 
 ### Dual-Backend & Migrations
 

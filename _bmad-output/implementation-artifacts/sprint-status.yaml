@@ -1,5 +1,5 @@
 # generated: 2026-07-12
-# last_updated: 2026-07-12
+# last_updated: 2026-07-15
 # project: pomone
 # project_key: NOKEY
 # tracking_system: file-system
@@ -68,7 +68,7 @@ development_status:
   epic-1-retrospective: done
 
   # Epic 2: Planifier les cultures — lignes de plan et ITK
-  epic-2: in-progress
+  epic-2: done
   2-1-plan-line-persistence-migration-0008: done
   2-2-itk-templates-on-crops: done
   2-3-the-plan-grid-entry: done
@@ -76,7 +76,7 @@ development_status:
   2-5-the-itk-editor-screen: done
   2-6-generation-plan-line-to-staggered-plantings: done
   2-7-the-needs-list-on-screen: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   # Epic 3: Placer — géométrie et capacité
   epic-3: backlog
