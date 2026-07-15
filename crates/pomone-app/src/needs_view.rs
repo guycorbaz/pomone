@@ -53,11 +53,17 @@ pub async fn list_needs(repo: &dyn Repository, _i18n: &I18n) -> AppResult<Vec<Ne
     let crop_by_id: HashMap<_, _> = crops.iter().map(|c| (c.id, c)).collect();
 
     // Fold the non-draft lines into a per-variety accumulator. `Decimal` sums
-    // stay exact; `buy_by` keeps the running minimum date.
+    // stay exact; `buy_by` keeps the running minimum date. The multiply/add
+    // saturate rather than panic: `series` is an unbounded `u32` and SQLite
+    // stores `bed_meters` as free TEXT, so a pathological line could otherwise
+    // overflow `Decimal::MAX` in this read path — same defensive posture as
+    // `CropPlanLine::succession_dates`' cap.
     let mut acc: HashMap<VarietyId, Accumulator> = HashMap::new();
     for line in lines.iter().filter(|l| !l.draft) {
         let entry = acc.entry(line.variety_id).or_default();
-        entry.quantity += Decimal::from(line.series) * line.bed_meters;
+        entry.quantity = entry
+            .quantity
+            .saturating_add(Decimal::from(line.series).saturating_mul(line.bed_meters));
         entry.line_count += 1;
         if let Some(date) = line.first_on {
             entry.buy_by = Some(entry.buy_by.map_or(date, |cur| cur.min(date)));
@@ -233,5 +239,25 @@ mod tests {
         let repo = SqliteRepository::in_memory().await.unwrap();
         seed_defaults(&repo).await.unwrap();
         assert!(list_needs(&repo, &i18n()).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn pathological_magnitude_saturates_instead_of_panicking() {
+        // `series` (u32) is unbounded and SQLite stores `bed_meters` as free
+        // TEXT, so `series × bed_meters` could exceed `Decimal::MAX`. The read
+        // path must saturate, not panic.
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let v = variety(&repo, "Laitue", "Batavia").await;
+        let huge = Decimal::MAX; // ~7.9e28
+        let l = CropPlanLine::new(v, u32::MAX, huge, 7, None, false, None).unwrap();
+        repo.crop_plan_line_create(&l).await.unwrap();
+
+        let rows = list_needs(&repo, &i18n()).await.unwrap(); // must not panic
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].quantity_bed_meters,
+            Decimal::MAX.normalize().to_string()
+        );
     }
 }

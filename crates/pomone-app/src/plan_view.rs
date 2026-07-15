@@ -232,7 +232,11 @@ fn plan_row(
         notes: line.notes.clone().unwrap_or_default(),
         derived_dates: format_derived_dates(&line.succession_dates()),
         generated_count: generated_count.to_string(),
-        need_total: (Decimal::from(line.series) * line.bed_meters)
+        // Saturating (not `*`): `series` is an unbounded `u32` and SQLite stores
+        // `bed_meters` as free TEXT, so the product could overflow `Decimal::MAX`
+        // and panic this read path — mirror `succession_dates`' defensive cap.
+        need_total: Decimal::from(line.series)
+            .saturating_mul(line.bed_meters)
             .normalize()
             .to_string(),
     }
