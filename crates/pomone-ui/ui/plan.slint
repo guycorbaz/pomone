@@ -44,12 +44,21 @@ component GridRow inherits Rectangle {
     callback duplicate(int);
 
     height: Theme.control-height + 2 * Theme.space-xs;
-    // Draft rows are visibly marked (subtle tint); the resumed line gets a focus
-    // ring so the eye lands where it left off.
-    background: root.data.draft ? Palette.surface-alt : (index.mod(2) == 0 ? Palette.surface : Palette.surface-alt);
+    // Zebra striping; the resumed line gets a focus ring so the eye lands where
+    // it left off.
+    background: index.mod(2) == 0 ? Palette.surface : Palette.surface-alt;
     border-width: root.highlighted ? Theme.focus-ring-width : 0;
     border-color: Palette.focus-ring;
     border-radius: Theme.radius-sm;
+
+    // Draft rows carry an amber left accent bar — visible on every row (a
+    // background tint would collide with the zebra stripe) and paired with the
+    // «Brouillon» chip (story 2.4 "visibly marked").
+    if root.data.draft: Rectangle {
+        width: 3px;
+        x: 0;
+        background: Palette.warning;
+    }
 
     function fire() {
         root.commit(
