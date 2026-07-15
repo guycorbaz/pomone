@@ -5,19 +5,25 @@
 //! and [`support::Model`] is the oracle for what a valid gesture walk must
 //! produce. The properties checked here:
 //!
-//! - **I1 — done stays done (absorbing except explicit correction):** a task in
-//!   `Done` can only leave it via a `Correct` gesture; the model encodes that
-//!   and the projection mirrors the model.
-//! - **I2 — skipped never resurrects nor counts as done:** a `Skipped` task is
-//!   never observed as done (never both columns set; `completed_on` stays
-//!   `None`); and, separately, task auto-generation never regenerates a settled
-//!   phase (`series_survives`… covers the series case; the autogen guard is
-//!   unit-tested in `task_autogen`).
+//! - **I1 — done stays done (absorbing except explicit correction):** verified
+//!   at two layers. The *persistence* layer is deliberately last-write-wins and
+//!   mutually exclusive (`record_fact…mutually_exclusive…`), so "absorbing" is
+//!   a **UI-gating** invariant — the agenda ⋯ menu only offers `Correct` on a
+//!   settled task (stories 1.5/1.6), modeled by [`support::Model`]; the walk
+//!   proptest checks the projection mirrors that gated model.
+//! - **I2 — skipped never resurrects nor counts as done:** the "never counts as
+//!   done" half is checked structurally (a skipped task is never observed as
+//!   done, never both columns — proven reachable by the adversarial test). The
+//!   "never resurrects" half (autogen never regenerates a settled phase after a
+//!   replan) is covered by the `task_autogen` unit tests (`settled_task_is_not_
+//!   resurrected_after_replan`, story 1.3); the series case is `i3` below.
 //! - **I3 — series survive occurrence-skip:** skipping one materialized
 //!   occurrence never deletes the series or its sibling occurrences.
-//! - **Crash = exact prefix:** applying a prefix, dropping the pool mid-life,
-//!   and reopening the same file yields exactly the prefix's projection — no
-//!   fact lost or duplicated (NFR6).
+//! - **Prefix-replay yields prefix state:** applying a prefix, dropping the pool
+//!   (a clean crash between transactions), and reopening the same file yields
+//!   exactly the prefix's projection with the journal holding exactly the facts
+//!   recorded — none lost, none duplicated. (True torn-write `SIGKILL`
+//!   injection is deferred; see the test's scope note.)
 
 mod support;
 
@@ -73,12 +79,23 @@ proptest! {
         })?;
     }
 
-    /// Crash = exact prefix (NFR6): apply a prefix, "crash" by dropping the pool
-    /// mid-life, reopen the same file — the projection equals the model's prefix
-    /// state, and the append-only journal holds exactly the facts recorded
-    /// (none lost, none duplicated).
+    /// Prefix-replay yields prefix state: apply a *prefix* of length `cut` on a
+    /// file-backed DB, drop the pool (a clean crash *between* transactions —
+    /// `record_fact` commits each fact with `synchronous=FULL`, so a dropped
+    /// pool loses nothing already committed), reopen the same file, and assert
+    /// the projection equals the model's state after exactly that prefix, and
+    /// the append-only journal holds exactly the facts recorded (none lost, none
+    /// duplicated). `cut` varies the prefix length so different-sized histories
+    /// are replayed.
+    ///
+    /// Scope note: this exercises **durability + prefix consistency**, the
+    /// AC's "prefix-replay yields prefix state". True *torn-write* injection
+    /// (a `SIGKILL` mid-transaction) is deferred — same posture as the
+    /// paper-loop harness (story 0.7); per-transaction atomicity of the
+    /// event+projection write is asserted separately in `sqlite/facts.rs` /
+    /// `cross_backend_tests`.
     #[test]
-    fn kill_injection_yields_exact_prefix(
+    fn prefix_replay_yields_prefix_state(
         steps in gesture_walk(NUM_TASKS, MAX_LEN),
         cut in 0usize..=MAX_LEN,
     ) {
@@ -102,7 +119,7 @@ proptest! {
             // Reopen the same file: state must equal the model's prefix state.
             let repo = SqliteRepository::connect(&url).await.unwrap();
             let observed = observe(&repo, &ids).await;
-            prop_assert_eq!(&observed, &model.states, "crash reopen != prefix replay");
+            prop_assert_eq!(&observed, &model.states, "reopen != prefix replay");
 
             // No fact lost or duplicated: the journal has exactly what we wrote.
             let events = repo.field_event_list_all().await.unwrap();
@@ -139,6 +156,66 @@ async fn i1_done_is_absorbing_except_explicit_correction() {
         .unwrap();
     let task = repo.task_get(id).await.unwrap().unwrap();
     assert!(task.completed_on.is_none() && task.skipped_on.is_none());
+}
+
+/// Adversarial persistence check — the half the model-gated walk can't reach.
+///
+/// The generated walks only ever submit *state-valid* gestures (the agenda ⋯
+/// menu never offers Skip on a done task), so they never challenge `record_fact`
+/// with a conflicting settle. This test does, going straight to the write path:
+/// it pins the persistence-layer contract as **mutually exclusive + last-write
+/// -wins** — every projection NULLs its sibling column, so a task is *never*
+/// both done and skipped, whatever the sequence. This is what makes I1's
+/// "absorbing" a genuine **UI-gating** invariant (enforced by the button set,
+/// stories 1.5/1.6) rather than a persistence one — recorded here explicitly so
+/// the layering isn't mistaken.
+#[tokio::test]
+async fn record_fact_projections_are_mutually_exclusive_and_last_write_wins() {
+    let repo = SqliteRepository::in_memory().await.unwrap();
+    seed_defaults(&repo).await.unwrap();
+    let id = seed_tasks(&repo, 1).await[0];
+    let on = base_date();
+    let mut secs = 0i64;
+    let mut at = || {
+        secs += 1;
+        on.and_hms_opt(0, 0, 0).unwrap() + chrono::Duration::seconds(secs)
+    };
+
+    let done = || Fact::Done { task_id: id, on };
+    let skip = || Fact::Skipped {
+        task_id: id,
+        on,
+        reason: SkipReason::Weather,
+        note: None,
+    };
+
+    // A deliberately "illegal" walk the UI would never offer: done → skip →
+    // done → reopen. After each fact the projection must reflect exactly that
+    // last fact, and never both settled columns at once.
+    record_fact(&repo, done(), at()).await.unwrap();
+    let t = repo.task_get(id).await.unwrap().unwrap();
+    assert!(t.completed_on.is_some() && t.skipped_on.is_none());
+
+    // Skip an already-done task (illegal for the UI) — last write wins, and the
+    // done column is cleared, so it is Skipped, never both.
+    record_fact(&repo, skip(), at()).await.unwrap();
+    let t = repo.task_get(id).await.unwrap().unwrap();
+    assert!(
+        t.skipped_on.is_some() && t.completed_on.is_none(),
+        "skip must clear completed_on — never both settled columns"
+    );
+
+    // Done again — back to done-only (skip column cleared).
+    record_fact(&repo, done(), at()).await.unwrap();
+    let t = repo.task_get(id).await.unwrap().unwrap();
+    assert!(t.completed_on.is_some() && t.skipped_on.is_none());
+
+    // Reopen clears everything.
+    record_fact(&repo, Fact::Reopened { task_id: id, on }, at())
+        .await
+        .unwrap();
+    let t = repo.task_get(id).await.unwrap().unwrap();
+    assert!(t.completed_on.is_none() && t.skipped_on.is_none());
 }
 
 /// I3: skipping one materialized occurrence of a recurring series never deletes
