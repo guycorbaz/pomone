@@ -687,6 +687,77 @@ async fn scenario_itk(repo: &dyn Repository) {
     ));
 }
 
+/// Planned plantings (story 2.6): CRUD round-trip on both backends, the
+/// `(line, series_index)` UNIQUE, and the `crop_plan_line` CASCADE.
+async fn scenario_planned_planting(repo: &dyn Repository) {
+    use pomone_domain::{CropPlanLine, PlannedPlanting};
+
+    let family = Family::new("Asteraceae", None, None).unwrap();
+    repo.family_create(&family).await.unwrap();
+    let crop = Crop::new(
+        family.id,
+        "Laitue",
+        None,
+        Lifespan::Annual,
+        PruningSeason::None,
+    )
+    .unwrap();
+    repo.crop_create(&crop).await.unwrap();
+    let variety = Variety::new(
+        crop.id,
+        Lifespan::Annual,
+        "Batavia",
+        None,
+        VarietyProfile::Annual(AnnualProfile::new(Some(20), 45, 30).unwrap()),
+    )
+    .unwrap();
+    repo.variety_create(&variety).await.unwrap();
+    let linev = CropPlanLine::new(
+        variety.id,
+        3,
+        dec!(15),
+        14,
+        Some(d(2026, 4, 1)),
+        false,
+        None,
+    )
+    .unwrap();
+    repo.crop_plan_line_create(&linev).await.unwrap();
+
+    let pp0 = PlannedPlanting::new(linev.id, variety.id, 0, d(2026, 4, 1), dec!(15.5)).unwrap();
+    let pp1 = PlannedPlanting::new(linev.id, variety.id, 1, d(2026, 4, 15), dec!(15.5)).unwrap();
+    repo.planned_planting_create(&pp0).await.unwrap();
+    repo.planned_planting_create(&pp1).await.unwrap();
+
+    let got = repo.planned_planting_list_for_line(linev.id).await.unwrap();
+    assert_eq!(
+        got,
+        vec![pp0.clone(), pp1.clone()],
+        "ordered by series_index"
+    );
+
+    // UNIQUE (line, series_index): a second row at index 0 is refused.
+    let dup = PlannedPlanting::new(linev.id, variety.id, 0, d(2026, 5, 1), dec!(1)).unwrap();
+    assert!(repo.planned_planting_create(&dup).await.is_err());
+
+    // Update in place (regeneration path).
+    let mut edited = pp1.clone();
+    edited.planned_on = d(2026, 4, 20);
+    edited.bed_meters = dec!(20);
+    repo.planned_planting_update(&edited).await.unwrap();
+    let got = repo.planned_planting_list_for_line(linev.id).await.unwrap();
+    assert_eq!(got[1].planned_on, d(2026, 4, 20));
+    assert_eq!(got[1].bed_meters, dec!(20));
+
+    // Deleting the line cascades to its planned plantings.
+    repo.crop_plan_line_delete(linev.id).await.unwrap();
+    assert!(repo
+        .planned_planting_list_for_line(linev.id)
+        .await
+        .unwrap()
+        .is_empty());
+}
+
 // ============================================================
 // SQLite test entry points (always run)
 // ============================================================
@@ -752,6 +823,11 @@ mod sqlite_backend {
     #[tokio::test]
     async fn itk() {
         scenario_itk(&fresh().await).await;
+    }
+
+    #[tokio::test]
+    async fn planned_planting() {
+        scenario_planned_planting(&fresh().await).await;
     }
 }
 
@@ -827,5 +903,11 @@ mod mariadb_backend {
     #[ignore = "requires Docker for MariaDB testcontainer"]
     async fn itk() {
         scenario_itk(&fresh_repo().await).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires Docker for MariaDB testcontainer"]
+    async fn planned_planting() {
+        scenario_planned_planting(&fresh_repo().await).await;
     }
 }

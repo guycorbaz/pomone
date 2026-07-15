@@ -11,9 +11,9 @@ use chrono::NaiveDate;
 use pomone_domain::{
     Crop, CropId, CropPlanLine, CropPlanLineId, Family, FamilyId, FieldEvent, FieldEventId,
     ItkActivity, ItkActivityId, ItkTemplate, ItkTemplateId, Location, LocationId, LocationKind,
-    LocationKindId, Planting, PlantingId, SkipReason, Strata, StrataId, Task, TaskId,
-    TaskImplement, TaskImplementId, TaskMethod, TaskMethodId, TaskSeries, TaskSeriesId, TaskType,
-    TaskTypeId, Treatment, TreatmentId, Variety, VarietyId, YearlyHarvest,
+    LocationKindId, PlannedPlanting, PlannedPlantingId, Planting, PlantingId, SkipReason, Strata,
+    StrataId, Task, TaskId, TaskImplement, TaskImplementId, TaskMethod, TaskMethodId, TaskSeries,
+    TaskSeriesId, TaskType, TaskTypeId, Treatment, TreatmentId, Variety, VarietyId, YearlyHarvest,
 };
 use uuid::Uuid;
 
@@ -218,6 +218,23 @@ pub trait CropPlanLineRepo: Send + Sync {
     async fn crop_plan_line_delete(&self, id: CropPlanLineId) -> DbResult<()>;
 }
 
+/// Planned (generated, not-yet-placed) plantings (Epic 2, story 2.6).
+/// Regeneration updates rows in place (keyed on `(line, series_index)` at the
+/// schema level), so the service upserts + trims rather than delete-recreating.
+#[async_trait]
+pub trait PlannedPlantingRepo: Send + Sync {
+    /// A line's planned plantings, ordered by `series_index`.
+    async fn planned_planting_list_for_line(
+        &self,
+        line_id: CropPlanLineId,
+    ) -> DbResult<Vec<PlannedPlanting>>;
+    /// Every planned planting (needs aggregation, backend migration).
+    async fn planned_planting_list_all(&self) -> DbResult<Vec<PlannedPlanting>>;
+    async fn planned_planting_create(&self, pp: &PlannedPlanting) -> DbResult<()>;
+    async fn planned_planting_update(&self, pp: &PlannedPlanting) -> DbResult<()>;
+    async fn planned_planting_delete(&self, id: PlannedPlantingId) -> DbResult<()>;
+}
+
 /// Crop ITK templates and their ordered activities (Epic 2, story 2.2). A
 /// template is one-per-crop; deleting it cascades to its activities.
 #[async_trait]
@@ -291,6 +308,7 @@ pub trait Repository:
     + TreatmentRepo
     + CropPlanLineRepo
     + ItkRepo
+    + PlannedPlantingRepo
     + FieldEventRepo
     + FactsRepo
     + Send

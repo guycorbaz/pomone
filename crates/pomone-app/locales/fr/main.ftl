@@ -380,6 +380,10 @@ plan-col-draft = Brouillon
 plan-col-notes = Notes
 plan-draft-badge = Brouillon
 plan-no-variety = Ajoute d'abord une variété (Cultures) avant de créer une ligne de plan.
+plan-generate-label = Générer
+plan-generated = { $count } plantation(s) générée(s).
+plan-generate-draft = Impossible de générer une ligne brouillon — promeus-la d'abord.
+plan-generate-no-date = Renseigne une 1re date avant de générer.
 # Row ⋯ settle menu (story 1.5)
 agenda-menu-done = Marquer fait
 agenda-menu-skip = Abandonner…

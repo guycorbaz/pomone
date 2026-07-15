@@ -17,6 +17,7 @@ pub mod demo;
 pub mod error;
 pub mod facts;
 pub mod families_view;
+pub mod generation;
 pub mod harvest_view;
 pub mod i18n;
 pub mod itk_view;
@@ -64,6 +65,7 @@ pub use families_view::{
     create_family, delete_family, get_family_for_edit, list_families_admin, update_family,
     FamilyAdminRow, FamilyEditForm,
 };
+pub use generation::generate_from_plan_line;
 pub use harvest_view::{list_yearly_harvests_for_planting, YearlyHarvestRow};
 pub use i18n::{I18n, Lang};
 pub use itk_view::{

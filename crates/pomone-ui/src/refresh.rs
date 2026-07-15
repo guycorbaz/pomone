@@ -927,6 +927,7 @@ pub(crate) fn refresh_plan(window: &MainWindow, state: &mut UiState) -> Result<(
                 draft: r.draft,
                 notes: SharedString::from(r.notes.clone()),
                 derived_dates: SharedString::from(r.derived_dates.clone()),
+                generated_count: SharedString::from(r.generated_count.clone()),
             }
         })
         .collect();
