@@ -126,6 +126,33 @@ pub async fn delete_plan_line(repo: &dyn Repository, id_str: &str) -> AppResult<
     Ok(())
 }
 
+/// Duplicate a plan line (story 2.4): a faithful copy with a fresh id, so the
+/// grower edits the copy («duplicates last month's lettuce line and edits the
+/// variety and dates») instead of re-filling a blank. Returns the new line's id.
+pub async fn duplicate_plan_line(repo: &dyn Repository, id_str: &str) -> AppResult<String> {
+    let id: CropPlanLineId = parse_id(id_str)?;
+    let source = repo
+        .crop_plan_line_get(id)
+        .await?
+        .ok_or_else(|| AppError::NotFound {
+            kind: "crop_plan_line",
+            id: id_str.to_owned(),
+        })?;
+    // A brand-new id via `new`, every other field copied verbatim.
+    let copy = CropPlanLine::new(
+        source.variety_id,
+        source.series,
+        source.bed_meters,
+        source.stagger_days,
+        source.first_on,
+        source.draft,
+        source.notes.clone(),
+    )?;
+    let new_id = copy.id.to_string();
+    repo.crop_plan_line_create(&copy).await?;
+    Ok(new_id)
+}
+
 // --- cell-level parsing (also used by the wiring for on-exit validation) ---
 
 /// Parse a non-negative count (`series`, `stagger_days`) — a plain base-10
@@ -323,6 +350,39 @@ mod tests {
 
         delete_plan_line(&repo, &id).await.unwrap();
         assert!(list_plan_rows(&repo, &i18n()).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn duplicate_makes_a_faithful_copy_with_a_new_id() {
+        let (repo, vid) = repo_with_variety().await;
+        let id = save_plan_line(
+            &repo,
+            &PlanLineInput {
+                variety_id: vid,
+                series: "6".into(),
+                bed_meters: "15".into(),
+                stagger_days: "14".into(),
+                first_on: "2026-04-01".into(),
+                draft: false,
+                notes: "batavia".into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let new_id = duplicate_plan_line(&repo, &id).await.unwrap();
+        assert_ne!(new_id, id, "the copy gets a fresh id");
+        let rows = list_plan_rows(&repo, &i18n()).await.unwrap();
+        assert_eq!(rows.len(), 2);
+        // The two rows are identical except for their id.
+        let a = rows.iter().find(|r| r.id == id).unwrap();
+        let b = rows.iter().find(|r| r.id == new_id).unwrap();
+        assert_eq!(a.series, b.series);
+        assert_eq!(a.bed_meters, b.bed_meters);
+        assert_eq!(a.first_on, b.first_on);
+        assert_eq!(a.notes, b.notes);
+        assert_eq!(a.variety_id, b.variety_id);
     }
 
     #[tokio::test]

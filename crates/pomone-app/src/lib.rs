@@ -71,7 +71,9 @@ pub use locations_view::{
     LocationKindOption, LocationListItem, ParentLocationOption,
 };
 pub use migration::{copy_all, MigrationReport};
-pub use plan_view::{delete_plan_line, list_plan_rows, save_plan_line, PlanLineInput, PlanRow};
+pub use plan_view::{
+    delete_plan_line, duplicate_plan_line, list_plan_rows, save_plan_line, PlanLineInput, PlanRow,
+};
 pub use planting_detail_view::{
     get_planting_detail, list_planting_tasks, DetailLine, PlantingDetail, PlantingTaskRow,
 };

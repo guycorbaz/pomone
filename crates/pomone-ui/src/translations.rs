@@ -293,6 +293,7 @@ pub(crate) fn apply_translations(window: &MainWindow, app: &App) {
     window.set_plan_col_derived(SharedString::from(i18n.t("plan-col-derived")));
     window.set_plan_col_draft(SharedString::from(i18n.t("plan-col-draft")));
     window.set_plan_col_notes(SharedString::from(i18n.t("plan-col-notes")));
+    window.set_plan_draft_badge(SharedString::from(i18n.t("plan-draft-badge")));
 
     window.set_agenda_overdue_label(SharedString::from(i18n.t("agenda-overdue-title")));
     window.set_agenda_today_label(SharedString::from(i18n.t("agenda-today-title")));
