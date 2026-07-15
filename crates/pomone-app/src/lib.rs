@@ -19,6 +19,7 @@ pub mod facts;
 pub mod families_view;
 pub mod harvest_view;
 pub mod i18n;
+pub mod itk_view;
 pub mod locations_view;
 pub mod migration;
 pub mod plan_view;
@@ -65,6 +66,11 @@ pub use families_view::{
 };
 pub use harvest_view::{list_yearly_harvests_for_planting, YearlyHarvestRow};
 pub use i18n::{I18n, Lang};
+pub use itk_view::{
+    count_generated_tasks_for_activity, delete_itk_activity, itk_implement_options,
+    itk_method_options, list_itk_activities, move_itk_activity, save_itk_activity,
+    ItkActivityInput, ItkActivityRow, ItkOption,
+};
 pub use locations_view::{
     create_location, delete_location, get_location_for_edit, list_location_kind_options,
     list_locations_tree, list_parent_options, update_location, LocationEditForm, LocationInput,
