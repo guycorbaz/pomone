@@ -65,6 +65,10 @@ pub(crate) fn wire_cultures(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
             if let Err(e) = refresh_varieties_of_selected_crop(&window, &mut s) {
                 tracing::error!(error = %e, "failed to refresh varieties");
             }
+            // The ITK editor follows the selected crop (story 2.5).
+            if let Err(e) = crate::wiring::itk::refresh_itk(&window, &mut s) {
+                tracing::error!(error = %e, "failed to refresh ITK editor");
+            }
         });
     }
 

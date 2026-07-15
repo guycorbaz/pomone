@@ -67,12 +67,11 @@ pub struct ItkActivityInput {
 /// Format a signed offset as the editor's `J±N` label.
 #[must_use]
 pub fn format_offset(days: i32) -> String {
-    if days == 0 {
-        "J".to_owned()
-    } else if days > 0 {
-        format!("J+{days}")
-    } else {
-        format!("J{days}") // the minus sign is already part of the number
+    match days.cmp(&0) {
+        std::cmp::Ordering::Equal => "J".to_owned(),
+        std::cmp::Ordering::Greater => format!("J+{days}"),
+        // The minus sign is already part of the number.
+        std::cmp::Ordering::Less => format!("J{days}"),
     }
 }
 

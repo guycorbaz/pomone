@@ -1,0 +1,238 @@
+// Pomone — ITK editor section (Epic 2, story 2.5).
+//
+// Lives on the crop detail (Cultures master-detail). Lists the crop's ordered
+// activities («J-10 / J+20» + task type, optional method/implement, label),
+// each with move-up/down, edit and delete affordances, plus an add/edit form
+// below. Method/implement pickers appear only when the catalog has entries.
+// Persistence + ordering live in Rust (`itk_view`); this is pure presentation.
+
+import { Palette, Theme, Card, SecondaryButton, PrimaryButton } from "theme.slint";
+import { ScrollView, LineEdit, ComboBox } from "std-widgets.slint";
+
+export struct ItkActivityRow {
+    id: string,
+    offset-label: string,
+    task-type-name: string,
+    method-name: string,
+    implement-name: string,
+    label: string,
+}
+
+component ActivityRowView inherits Rectangle {
+    in property <ItkActivityRow> data;
+    in property <int> index;
+    in property <bool> is-first;
+    in property <bool> is-last;
+    in property <string> edit-tip;
+    in property <string> delete-tip;
+    callback move(string, bool);
+    callback edit(string);
+    callback remove(string);
+
+    height: Theme.control-height;
+    background: index.mod(2) == 0 ? Palette.surface : Palette.surface-alt;
+    border-radius: Theme.radius-sm;
+
+    HorizontalLayout {
+        padding-left: Theme.space-sm;
+        padding-right: Theme.space-sm;
+        spacing: Theme.space-sm;
+
+        Text {
+            width: 56px;
+            text: root.data.offset-label;
+            color: Palette.primary;
+            font-weight: Theme.font-weight-semibold;
+            font-size: Theme.font-size-label;
+            vertical-alignment: center;
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: root.data.label != "" ? root.data.task-type-name + " · " + root.data.label : root.data.task-type-name;
+            color: Palette.text-primary;
+            font-size: Theme.font-size-body;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            width: 30%;
+            text: root.data.method-name != "" || root.data.implement-name != ""
+                ? root.data.method-name + (root.data.implement-name != "" ? " / " + root.data.implement-name : "")
+                : "";
+            color: Palette.text-muted;
+            font-size: Theme.font-size-label;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        // Reorder + edit + delete.
+        for btn in [
+            { glyph: "▲", up: true, kind: "up" },
+            { glyph: "▼", up: false, kind: "down" },
+        ] : Rectangle {
+            width: 24px;
+            property <bool> disabled: (btn.kind == "up" && root.is-first) || (btn.kind == "down" && root.is-last);
+            touch := TouchArea {
+                mouse-cursor: parent.disabled ? default : pointer;
+                clicked => { if (!parent.disabled) { root.move(root.data.id, btn.up); } }
+            }
+            Text {
+                text: btn.glyph;
+                color: parent.disabled ? Palette.border : (touch.has-hover ? Palette.primary : Palette.text-secondary);
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle {
+            width: 24px;
+            e-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.edit(root.data.id); }
+            }
+            Text {
+                text: "✎";
+                color: e-touch.has-hover ? Palette.primary : Palette.text-secondary;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Rectangle {
+            width: 24px;
+            d-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.remove(root.data.id); }
+            }
+            Text {
+                text: "✕";
+                color: d-touch.has-hover ? Palette.danger : Palette.text-secondary;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+export component ItkEditor inherits Card {
+    in property <string> title;
+    in property <string> empty-text;
+    in property <bool> enabled;
+    in property <[ItkActivityRow]> activities;
+
+    // Pickers. Index 0 of method/implement models is the "— none —" entry.
+    in property <[string]> type-options;
+    in property <[string]> method-options;
+    in property <[string]> implement-options;
+    in property <bool> has-methods;
+    in property <bool> has-implements;
+
+    // Form state — two-way bound to the widgets. Rust sets these when «edit» is
+    // pressed (and resets them for «add»), and reads them back on save (so the
+    // save callback carries no payload).
+    in property <string> form-editing-id;
+    in-out property <int> form-type-index;
+    in-out property <string> form-offset;
+    in-out property <int> form-method-index;
+    in-out property <int> form-implement-index;
+    in-out property <string> form-label;
+
+    // Labels.
+    in property <string> offset-placeholder;
+    in property <string> label-placeholder;
+    in property <string> add-label;
+    in property <string> save-label;
+    in property <string> cancel-label;
+    in property <string> method-label;
+    in property <string> implement-label;
+    in property <string> edit-tip;
+    in property <string> delete-tip;
+
+    // Rust reads the form-* state; the callback is a plain trigger.
+    callback save();
+    callback move(string, bool);
+    callback edit(string);
+    callback remove(string);
+    callback cancel-edit();
+
+    VerticalLayout {
+        padding: Theme.space-lg;
+        spacing: Theme.space-md;
+
+        Text {
+            text: root.title;
+            color: Palette.primary;
+            font-size: Theme.font-size-h2;
+            font-weight: Theme.font-weight-bold;
+        }
+
+        if root.activities.length == 0: Text {
+            text: root.empty-text;
+            color: Palette.text-muted;
+            font-size: Theme.font-size-body;
+        }
+
+        if root.activities.length > 0: ScrollView {
+            max-height: 220px;
+            VerticalLayout {
+                spacing: 2px;
+                for a[i] in root.activities: ActivityRowView {
+                    data: a;
+                    index: i;
+                    is-first: i == 0;
+                    is-last: i == root.activities.length - 1;
+                    edit-tip: root.edit-tip;
+                    delete-tip: root.delete-tip;
+                    move(id, up) => { root.move(id, up); }
+                    edit(id) => { root.edit(id); }
+                    remove(id) => { root.remove(id); }
+                }
+            }
+        }
+
+        // Add / edit form.
+        HorizontalLayout {
+            spacing: Theme.space-sm;
+            ComboBox {
+                width: 28%;
+                enabled: root.enabled;
+                model: root.type-options;
+                current-index <=> root.form-type-index;
+            }
+            LineEdit {
+                width: 14%;
+                enabled: root.enabled;
+                placeholder-text: root.offset-placeholder;
+                text <=> root.form-offset;
+            }
+            if root.has-methods: ComboBox {
+                width: 20%;
+                enabled: root.enabled;
+                model: root.method-options;
+                current-index <=> root.form-method-index;
+            }
+            if root.has-implements: ComboBox {
+                width: 20%;
+                enabled: root.enabled;
+                model: root.implement-options;
+                current-index <=> root.form-implement-index;
+            }
+            LineEdit {
+                horizontal-stretch: 1;
+                enabled: root.enabled;
+                placeholder-text: root.label-placeholder;
+                text <=> root.form-label;
+            }
+        }
+        HorizontalLayout {
+            spacing: Theme.space-sm;
+            alignment: end;
+            if root.form-editing-id != "": SecondaryButton {
+                text: root.cancel-label;
+                clicked => { root.cancel-edit(); }
+            }
+            PrimaryButton {
+                text: root.form-editing-id != "" ? root.save-label : root.add-label;
+                enabled: root.enabled;
+                clicked => { root.save(); }
+            }
+        }
+    }
+}
