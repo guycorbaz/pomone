@@ -151,7 +151,7 @@ FR8, FR16, FR17, FR27, FR34, FR35, FR36, FR38, FR39, FR40, FR41, FR43, FR48 → 
 
 **Sequencing law (owner-ordered):** facts hold → plan → place → print → reconcile. Strictly sequential epics; every story leaves `main` releasable; every epic extends the paper-loop harness (data or step — stated in its DoD).
 
-**Transversal conventions (Definition of Done, every story from Epic 0):** fr+en Fluent keys for any user-facing string; 8-touchpoint checklist for persisted changes; migrations numbered by merge order (0007_field_event → E1, 0008_planning → E2, 0009_geometry → E3); field-state grammar + why-tooltips on new UI; «Saisi une fois, produit partout» as acceptance lens.
+**Transversal conventions (Definition of Done, every story from Epic 0):** fr+en Fluent keys for any user-facing string; 8-touchpoint checklist for persisted changes; migrations numbered by merge order (0007_field_event → E1, 0008–0011 planning → E2, 0012_geometry → E3); field-state grammar + why-tooltips on new UI; «Saisi une fois, produit partout» as acceptance lens.
 
 **Sign-off clauses (panel-negotiated, owner-ratified):**
 1. *(John)* Epic 1 ships a **rough weekly print ritual**: the virtual PrintDoc renders a rudimentary printable used by the owner weekly on existing tasks — dogfooding starts at E1, not E4.
@@ -343,7 +343,7 @@ So that invariants are machine-checked and the dogfooding base survives schema c
 
 ## Epic 2: Planifier les cultures — lignes de plan et ITK
 
-Winter plan enters spreadsheet-style; ITKs on crops; staggered plantings; needs on screen. (Migrations 0008 crop-plan-line + 0009 itk — split from the planned single "0008_planning" because migrations are immutable once applied, so each table lands with its own domain: crop-plan-line in 2.1, ITK in 2.2. Downstream geometry shifts to 0010.)
+Winter plan enters spreadsheet-style; ITKs on crops; staggered plantings; needs on screen. (Migrations 0008 crop-plan-line + 0009 itk — split from the planned single "0008_planning" because migrations are immutable once applied, so each table lands with its own domain: crop-plan-line in 2.1, ITK in 2.2. E2 ultimately landed 0008 crop-plan-line, 0009 itk, 0010 first_on (2.3), 0011 planned_planting (2.6); downstream geometry shifts to 0012.)
 
 ### Story 2.1: Plan-line persistence (migration 0008)
 
@@ -420,9 +420,9 @@ So that I can order in January before placing.
 
 ## Epic 3: Placer — géométrie et capacité
 
-Live cover-aware capacity at placement; ITK tasks at placement; retro-entry safe; perennial death frees ground. (Migration 0009.)
+Live cover-aware capacity at placement; ITK tasks at placement; retro-entry safe; perennial death frees ground. (Migration 0012 — renumbered from the planned 0009 after E2 landed 0008–0011.)
 
-### Story 3.1: The pure capacity engine (with migration 0009)
+### Story 3.1: The pure capacity engine (with migration 0012)
 
 As a contributor,
 I want `capacity.rs` — occupancy over `[start,end)`, covered/open split, recursive hierarchy aggregation, peak composition — as pure functions on `date_calc.rs`, with the `occupation_kind` additive column and the documented bed-meters rule,
@@ -430,7 +430,7 @@ So that capacity is exact, testable, UI-independent.
 
 **Acceptance Criteria:**
 
-**Given** `0009_geometry.sql` (additive; codec + cross-backend + copy_all covered) and placement inputs
+**Given** `0012_geometry.sql` (additive; codec + cross-backend + copy_all covered) and placement inputs
 **When** the algebraic proptests run
 **Then** superposition, commutativity, monotonicity, adjacent-non-overlap, horizon-extension stability, translation invariance, hierarchy coherence at sampled t, ±50-year retro-entry all hold
 **And** module coverage ≥ 95%; existing locations audited against the geometry rule.
