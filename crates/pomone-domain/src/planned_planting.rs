@@ -66,8 +66,9 @@ impl PlannedPlanting {
         })
     }
 
-    /// True while this succession has not been placed on a bed — i.e. it still
-    /// belongs on the placement screen's unplaced list.
+    /// True once this succession **has been placed** on a bed (it carries the
+    /// id of the real planting it became). Conversely, the placement screen's
+    /// unplaced list is exactly the successions where this is `false`.
     #[must_use]
     pub const fn is_placed(&self) -> bool {
         self.placed_planting_id.is_some()

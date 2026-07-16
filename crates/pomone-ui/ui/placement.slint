@@ -140,6 +140,31 @@ export component PlacementPage inherits Rectangle {
                         color: Palette.text-muted;
                         wrap: word-wrap;
                     }
+                    // Column headers (visible only when there are rows).
+                    if root.unplaced-rows.length > 0: HorizontalLayout {
+                        padding-left: Theme.space-sm;
+                        padding-right: Theme.space-sm;
+                        spacing: Theme.space-sm;
+                        Text {
+                            text: root.col-variety;
+                            font-size: Theme.font-size-label;
+                            font-weight: 600;
+                            color: Palette.text-secondary;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: root.col-date;
+                            font-size: Theme.font-size-label;
+                            font-weight: 600;
+                            color: Palette.text-secondary;
+                        }
+                        Text {
+                            text: root.col-bed-meters;
+                            font-size: Theme.font-size-label;
+                            font-weight: 600;
+                            color: Palette.text-secondary;
+                        }
+                    }
                     ScrollView {
                         VerticalLayout {
                             spacing: 2px;

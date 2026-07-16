@@ -109,13 +109,14 @@ pub async fn occupancy_curve(repo: &dyn Repository, season_year: i32) -> AppResu
     let placed = build_placed(repo).await?;
     let (leaves_covered, leaves_open) = leaf_capacities(repo).await?;
 
-    let (Some(season_start), horizon) = (
-        NaiveDate::from_ymd_opt(season_year, 1, 1),
-        NaiveDate::from_ymd_opt(season_year + 1, 1, 1),
-    ) else {
-        return Ok(empty_curve(leaves_covered, leaves_open));
-    };
-    let Some(horizon) = horizon else {
+    // `checked_add` so an extreme `season_year` (e.g. `i32::MAX`) can never
+    // overflow the `+ 1` before `from_ymd_opt` gets to reject it (the module's
+    // no-panic-on-out-of-range-year contract).
+    let horizon = season_year
+        .checked_add(1)
+        .and_then(|y| NaiveDate::from_ymd_opt(y, 1, 1));
+    let (Some(season_start), Some(horizon)) = (NaiveDate::from_ymd_opt(season_year, 1, 1), horizon)
+    else {
         return Ok(empty_curve(leaves_covered, leaves_open));
     };
 
@@ -177,16 +178,23 @@ pub struct CompositionRow {
 
 /// The placements active in `week` of `season_year` — the series composing that
 /// column of the curve (what the UI lists when a peak is clicked).
+///
+/// `cover_group` filters to one cover side so the list matches the peak the UI
+/// is explaining: `Some(true)` = sheltered only, `Some(false)` = open-field
+/// only, `None` = both. (The amber peak names a specific group, so the panel
+/// must compose that same group — see FR11.)
 pub async fn peak_composition(
     repo: &dyn Repository,
     season_year: i32,
     week: i32,
+    cover_group: Option<bool>,
 ) -> AppResult<Vec<CompositionRow>> {
     let placed = build_placed(repo).await?;
-    let (Some(season_start), Some(horizon)) = (
-        NaiveDate::from_ymd_opt(season_year, 1, 1),
-        NaiveDate::from_ymd_opt(season_year + 1, 1, 1),
-    ) else {
+    let horizon = season_year
+        .checked_add(1)
+        .and_then(|y| NaiveDate::from_ymd_opt(y, 1, 1));
+    let (Some(season_start), Some(horizon)) = (NaiveDate::from_ymd_opt(season_year, 1, 1), horizon)
+    else {
         return Ok(Vec::new());
     };
     let week_u = u32::try_from(week).unwrap_or(0);
@@ -196,6 +204,7 @@ pub async fn peak_composition(
     Ok(placed
         .iter()
         .filter(|p| p.placement.covers(day, horizon))
+        .filter(|p| cover_group.map_or(true, |c| p.placement.covered == c))
         .map(|p| CompositionRow {
             variety: p.variety.clone(),
             date: p.date.format("%Y-%m-%d").to_string(),
@@ -565,7 +574,7 @@ mod tests {
         // Capacities still reflect the beds (they don't depend on the year).
         assert!(curve.has_open);
         // Composition for an impossible year is empty, not a panic.
-        assert!(peak_composition(&repo, 300_000, 1)
+        assert!(peak_composition(&repo, 300_000, 1, None)
             .await
             .unwrap()
             .is_empty());
@@ -583,8 +592,25 @@ mod tests {
             .max_by(|a, b| a.open.partial_cmp(&b.open).unwrap())
             .unwrap()
             .week;
-        let comp = peak_composition(&repo, SEASON, peak_week).await.unwrap();
+        // Open-field group: the one open planting composes it.
+        let comp = peak_composition(&repo, SEASON, peak_week, Some(false))
+            .await
+            .unwrap();
         assert_eq!(comp.len(), 1);
         assert!(comp[0].variety.contains("Marmande"));
+        // No sheltered series exist → the covered group's composition is empty
+        // (the filter keeps the amber peak and its explanation on the same group).
+        assert!(peak_composition(&repo, SEASON, peak_week, Some(true))
+            .await
+            .unwrap()
+            .is_empty());
+        // `None` returns both sides.
+        assert_eq!(
+            peak_composition(&repo, SEASON, peak_week, None)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
     }
 }

@@ -245,8 +245,18 @@ claude-opus-4-8[1m] (Opus 4.8, 1M context) — dev-story workflow.
 - `crates/pomone-ui/src/wiring/mod.rs` — register `placement`.
 - `crates/pomone-ui/src/main.rs` — `wire_all_screens` (incl. `wire_placement`) + `UiState` init field.
 
+### Review fixes (focused 2-reviewer, AI-E2-1)
+
+Two independent adversarial reviews (persistence/read-path + wiring/spec lenses) — no High, one Medium, several Low. Applied:
+- **[Medium] Peak explanation named the wrong group/week on mixed covered+open farms.** `show_peak_composition` picked the cover group by mere *presence* (`has_covered`) while the amber peak line picked it by *ratio* — so clicking an open-field overflow could list the greenhouse's February series. Fixed: a shared `binding_group(curve)` (ratio-based) drives both; `peak_composition` gained a `cover_group: Option<bool>` filter so the panel composes exactly the peak's group. (Tested.)
+- **[Low] `occupancy_curve` / `peak_composition` could panic on `season_year == i32::MAX`** (`+ 1` overflow before `from_ymd_opt` rejects) — contradicted the module's no-panic contract. Fixed with `checked_add(1)`.
+- **[Low] `PlannedPlanting::is_placed` doc comment was inverted** (code correct). Corrected.
+- **[Low] Dead `col-*` wiring** (declared/forwarded/translated, never rendered) — now used: the unplaced list shows a column-header row.
+- *Accepted as-is:* non-transactional place two-step (consistent with the codebase's service style; guarded by `is_placed`) and ISO/raw unplaced-list strings (consistent with sibling views).
+
 ## Change Log
 
+- 2026-07-16 — Review fixes: binding-group consistency for the peak explanation (Medium), `checked_add` year guard, `is_placed` doc, column headers.
 - 2026-07-16 — Story 3.2 implemented: migration 0013 (`placed_planting_id`, reversible placement) +
   `capacity_view.rs` (live covered/open occupancy curve, peak, composition) + placement service
   (convert planned→Planting, undo) + the `placement.slint` screen with full 3-layer wiring + a measured

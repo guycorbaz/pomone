@@ -204,14 +204,20 @@ fn series_path(
     cmds
 }
 
-/// The localized peak line, for whichever group (open / covered) is the more
-/// constrained (higher peak/capacity ratio) — that's the one the amber flag is
-/// about.
-fn peak_line(state: &UiState, curve: &OccupancyCurve) -> String {
+/// Which cover group is the more constrained (higher peak/capacity ratio) —
+/// the one the amber flag and the peak line are about. `true` = sheltered.
+/// The peak text and the peak composition MUST agree on this, or clicking the
+/// amber peak would explain a different group/week (FR11).
+fn binding_group(curve: &OccupancyCurve) -> bool {
     let ratio = |peak: f32, cap: f32| if cap > f32::EPSILON { peak / cap } else { 0.0 };
-    let covered_binds = curve.has_covered
+    curve.has_covered
         && ratio(curve.peak_covered, curve.covered_capacity)
-            >= ratio(curve.peak_open, curve.open_capacity);
+            >= ratio(curve.peak_open, curve.open_capacity)
+}
+
+/// The localized peak line, for the binding cover group (see [`binding_group`]).
+fn peak_line(state: &UiState, curve: &OccupancyCurve) -> String {
+    let covered_binds = binding_group(curve);
     let (peak, cap, key) = if covered_binds {
         (
             curve.peak_covered,
@@ -312,8 +318,9 @@ fn show_peak_composition(window: &MainWindow, state: &mut UiState) {
     let season = season_year();
     let loaded: Result<_, AppError> = state.runtime.block_on(async {
         let curve = occupancy_curve(state.app.repo(), season).await?;
-        // The week where the binding group is highest.
-        let covered_binds = curve.has_covered;
+        // Same binding group the amber peak names, so the panel explains THAT
+        // peak — its week and its cover side (FR11).
+        let covered_binds = binding_group(&curve);
         let peak_week = curve
             .points
             .iter()
@@ -323,7 +330,8 @@ fn show_peak_composition(window: &MainWindow, state: &mut UiState) {
                 va.partial_cmp(&vb).unwrap_or(std::cmp::Ordering::Equal)
             })
             .map_or(1, |p| p.week);
-        let comp = peak_composition(state.app.repo(), season, peak_week).await?;
+        let comp =
+            peak_composition(state.app.repo(), season, peak_week, Some(covered_binds)).await?;
         Ok(comp)
     });
     let comp = match loaded {
