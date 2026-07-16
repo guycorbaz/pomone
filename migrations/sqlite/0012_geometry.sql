@@ -1,0 +1,11 @@
+-- Pomone — location geometry: add `occupation_kind` (Epic 3, story 3.1).
+--
+-- The discriminant the capacity engine reads to know how a location's growing
+-- capacity is measured. R1 has a single value, `bed-meters` (a placement's
+-- footprint on a leaf bed = the bed's `length_m`); the column exists so future
+-- polymorphism — tree rows, hectares — is an additive enum variant, not
+-- another migration. Additive, no CHECK (per the additive-only rule: SQLite
+-- CHECK can't gain values without a table rebuild), no trigger, no geometry
+-- maths in SQL (date/geometry logic lives in pomone-domain). Existing rows
+-- default to `bed-meters`.
+ALTER TABLE location ADD COLUMN occupation_kind TEXT NOT NULL DEFAULT 'bed-meters';

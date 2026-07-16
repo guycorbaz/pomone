@@ -1,5 +1,6 @@
 //! `LocationRepo` implementation for MariaDB.
 
+use crate::codec::{decode_occupation_kind, encode_occupation_kind};
 use crate::error::{DbError, DbResult};
 use crate::mariadb::MariaDbRepository;
 use crate::repository::LocationRepo;
@@ -9,7 +10,7 @@ use rust_decimal::Decimal;
 use sqlx::Row;
 use uuid::Uuid;
 
-const COLUMNS: &str = "id, parent_id, kind_id, name, length_m, width_m, notes";
+const COLUMNS: &str = "id, parent_id, kind_id, name, length_m, width_m, occupation_kind, notes";
 
 #[async_trait]
 impl LocationRepo for MariaDbRepository {
@@ -45,8 +46,9 @@ impl LocationRepo for MariaDbRepository {
 
     async fn location_create(&self, l: &Location) -> DbResult<()> {
         sqlx::query(
-            "INSERT INTO location (id, parent_id, kind_id, name, length_m, width_m, notes) \
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO location \
+             (id, parent_id, kind_id, name, length_m, width_m, occupation_kind, notes) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(l.id.as_uuid())
         .bind(l.parent_id.map(LocationId::as_uuid))
@@ -54,6 +56,7 @@ impl LocationRepo for MariaDbRepository {
         .bind(&l.name)
         .bind(l.length_m)
         .bind(l.width_m)
+        .bind(encode_occupation_kind(l.occupation_kind))
         .bind(l.notes.as_deref())
         .execute(&self.pool)
         .await?;
@@ -66,13 +69,14 @@ impl LocationRepo for MariaDbRepository {
         }
         let result = sqlx::query(
             "UPDATE location SET parent_id = ?, kind_id = ?, name = ?, \
-             length_m = ?, width_m = ?, notes = ? WHERE id = ?",
+             length_m = ?, width_m = ?, occupation_kind = ?, notes = ? WHERE id = ?",
         )
         .bind(l.parent_id.map(LocationId::as_uuid))
         .bind(l.kind_id.as_uuid())
         .bind(&l.name)
         .bind(l.length_m)
         .bind(l.width_m)
+        .bind(encode_occupation_kind(l.occupation_kind))
         .bind(l.notes.as_deref())
         .bind(l.id.as_uuid())
         .execute(&self.pool)
@@ -134,6 +138,7 @@ fn row_to_location(row: sqlx::mysql::MySqlRow) -> DbResult<Location> {
     let id: Uuid = row.try_get("id")?;
     let parent_id: Option<Uuid> = row.try_get("parent_id")?;
     let kind_id: Uuid = row.try_get("kind_id")?;
+    let occupation_kind_text: String = row.try_get("occupation_kind")?;
     Ok(Location {
         id: LocationId::from(id),
         parent_id: parent_id.map(LocationId::from),
@@ -141,6 +146,7 @@ fn row_to_location(row: sqlx::mysql::MySqlRow) -> DbResult<Location> {
         name: row.try_get("name")?,
         length_m: row.try_get::<Decimal, _>("length_m")?,
         width_m: row.try_get::<Decimal, _>("width_m")?,
+        occupation_kind: decode_occupation_kind(&occupation_kind_text)?,
         notes: row.try_get("notes")?,
     })
 }

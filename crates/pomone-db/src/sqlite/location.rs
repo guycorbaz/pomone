@@ -3,7 +3,9 @@
 //! Updates that would form a hierarchy cycle are detected by walking up from
 //! the proposed parent and rejecting if we hit the location being updated.
 
-use crate::codec::{decimal_from_text, decimal_to_text};
+use crate::codec::{
+    decimal_from_text, decimal_to_text, decode_occupation_kind, encode_occupation_kind,
+};
 use crate::error::{DbError, DbResult};
 use crate::repository::LocationRepo;
 use crate::sqlite::SqliteRepository;
@@ -16,7 +18,7 @@ use uuid::Uuid;
 impl LocationRepo for SqliteRepository {
     async fn location_get(&self, id: LocationId) -> DbResult<Option<Location>> {
         let row = sqlx::query(
-            "SELECT id, parent_id, kind_id, name, length_m, width_m, notes \
+            "SELECT id, parent_id, kind_id, name, length_m, width_m, occupation_kind, notes \
              FROM location WHERE id = ?1",
         )
         .bind(id.as_uuid())
@@ -27,7 +29,7 @@ impl LocationRepo for SqliteRepository {
 
     async fn location_list(&self) -> DbResult<Vec<Location>> {
         let rows = sqlx::query(
-            "SELECT id, parent_id, kind_id, name, length_m, width_m, notes \
+            "SELECT id, parent_id, kind_id, name, length_m, width_m, occupation_kind, notes \
              FROM location ORDER BY name COLLATE NOCASE",
         )
         .fetch_all(&self.pool)
@@ -37,7 +39,7 @@ impl LocationRepo for SqliteRepository {
 
     async fn location_list_roots(&self) -> DbResult<Vec<Location>> {
         let rows = sqlx::query(
-            "SELECT id, parent_id, kind_id, name, length_m, width_m, notes \
+            "SELECT id, parent_id, kind_id, name, length_m, width_m, occupation_kind, notes \
              FROM location WHERE parent_id IS NULL ORDER BY name COLLATE NOCASE",
         )
         .fetch_all(&self.pool)
@@ -47,7 +49,7 @@ impl LocationRepo for SqliteRepository {
 
     async fn location_list_children(&self, parent_id: LocationId) -> DbResult<Vec<Location>> {
         let rows = sqlx::query(
-            "SELECT id, parent_id, kind_id, name, length_m, width_m, notes \
+            "SELECT id, parent_id, kind_id, name, length_m, width_m, occupation_kind, notes \
              FROM location WHERE parent_id = ?1 ORDER BY name COLLATE NOCASE",
         )
         .bind(parent_id.as_uuid())
@@ -58,8 +60,9 @@ impl LocationRepo for SqliteRepository {
 
     async fn location_create(&self, l: &Location) -> DbResult<()> {
         sqlx::query(
-            "INSERT INTO location (id, parent_id, kind_id, name, length_m, width_m, notes) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO location \
+             (id, parent_id, kind_id, name, length_m, width_m, occupation_kind, notes) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         )
         .bind(l.id.as_uuid())
         .bind(l.parent_id.map(LocationId::as_uuid))
@@ -67,6 +70,7 @@ impl LocationRepo for SqliteRepository {
         .bind(&l.name)
         .bind(decimal_to_text(l.length_m))
         .bind(decimal_to_text(l.width_m))
+        .bind(encode_occupation_kind(l.occupation_kind))
         .bind(l.notes.as_deref())
         .execute(&self.pool)
         .await?;
@@ -80,7 +84,7 @@ impl LocationRepo for SqliteRepository {
         }
         let result = sqlx::query(
             "UPDATE location SET parent_id = ?2, kind_id = ?3, name = ?4, \
-             length_m = ?5, width_m = ?6, notes = ?7 WHERE id = ?1",
+             length_m = ?5, width_m = ?6, occupation_kind = ?7, notes = ?8 WHERE id = ?1",
         )
         .bind(l.id.as_uuid())
         .bind(l.parent_id.map(LocationId::as_uuid))
@@ -88,6 +92,7 @@ impl LocationRepo for SqliteRepository {
         .bind(&l.name)
         .bind(decimal_to_text(l.length_m))
         .bind(decimal_to_text(l.width_m))
+        .bind(encode_occupation_kind(l.occupation_kind))
         .bind(l.notes.as_deref())
         .execute(&self.pool)
         .await?;
@@ -153,6 +158,7 @@ fn row_to_location(row: sqlx::sqlite::SqliteRow) -> DbResult<Location> {
     let kind_id: Uuid = row.try_get("kind_id")?;
     let length_text: String = row.try_get("length_m")?;
     let width_text: String = row.try_get("width_m")?;
+    let occupation_kind_text: String = row.try_get("occupation_kind")?;
     Ok(Location {
         id: LocationId::from(id),
         parent_id: parent_id.map(LocationId::from),
@@ -160,6 +166,7 @@ fn row_to_location(row: sqlx::sqlite::SqliteRow) -> DbResult<Location> {
         name: row.try_get("name")?,
         length_m: decimal_from_text(&length_text)?,
         width_m: decimal_from_text(&width_text)?,
+        occupation_kind: decode_occupation_kind(&occupation_kind_text)?,
         notes: row.try_get("notes")?,
     })
 }

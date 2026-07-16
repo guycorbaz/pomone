@@ -19,6 +19,7 @@
 
 #![cfg_attr(not(test), warn(clippy::print_stdout, clippy::print_stderr))]
 
+pub mod capacity;
 pub mod crop;
 pub mod crop_plan;
 pub mod date_calc;
@@ -43,6 +44,7 @@ pub mod variety;
 mod validation;
 
 // Re-export the most commonly used types at the crate root for ergonomics.
+pub use capacity::{occupancy_at, occupancy_window, peak, CoverSplit, PeakPoint, Placement};
 pub use crop::{Crop, Lifespan, ProductivePattern, PruningSeason};
 pub use crop_plan::CropPlanLine;
 pub use error::{DomainError, DomainResult};
@@ -56,7 +58,7 @@ pub use ids::{
     TaskSeriesId, TaskTypeId, TreatmentId, VarietyId,
 };
 pub use itk::{ItkActivity, ItkTemplate};
-pub use location::Location;
+pub use location::{is_sheltered, Location, OccupationKind};
 pub use location_kind::LocationKind;
 pub use planned_planting::PlannedPlanting;
 pub use planting::{Planting, PlantingSchedule, PlantingStatus};
