@@ -17,6 +17,7 @@ import { TaskCalendarPage, TaskCalendarDay, TaskRow, TaskCategoryChip } from "ta
 import { AgendaPage, AgendaRow } from "agenda.slint";
 import { PlanPage, PlanGridRow } from "plan.slint";
 import { NeedsPage, NeedsListRow } from "needs.slint";
+import { PlacementPage, PlacementUnplacedRow, PlacementBedRow, PlacementCompositionRow } from "placement.slint";
 import { TaskFormPage } from "task_form.slint";
 import { TaskTypesPage, TaskTypeAdminItem } from "task_types.slint";
 import { FamiliesPage, FamilyAdminItem } from "families.slint";
@@ -29,7 +30,7 @@ import { TooltipLayer, TooltipCatalog } from "components/tooltip.slint";
 // Re-export so the generated Rust types are visible to `main.rs`.
 // `TooltipCatalog` is a global: Rust fills the localized tooltip texts once
 // per language via `window.global::<TooltipCatalog>()` (apply_translations).
-export { PlantingRow, CropRow, VarietyRow, LocationItem, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, TreatmentRow, StrataItem, GanttBar, TaskTypeAdminItem, FamilyAdminItem, PaletteColor, CropMapLaneItem, CropMapBarItem, CropMapLocationOption, TooltipCatalog }
+export { PlantingRow, CropRow, VarietyRow, LocationItem, TaskCalendarDay, TaskRow, TaskCategoryChip, DetailLine, YearlyHarvestRow, TreatmentRow, StrataItem, GanttBar, TaskTypeAdminItem, FamilyAdminItem, PaletteColor, CropMapLaneItem, CropMapBarItem, CropMapLocationOption, TooltipCatalog, PlacementUnplacedRow, PlacementBedRow, PlacementCompositionRow }
 
 export component MainWindow inherits Window {
     title: "Pomone";
@@ -399,6 +400,49 @@ export component MainWindow inherits Window {
     in property <string> needs-print-text;
     in property <string> needs-print-disabled-tip;
     callback navigate-needs();
+
+    // ------- Placement + capacity curve (Epic 3, story 3.2) -------
+    in property <string> nav-placement-text;
+    in property <string> placement-title-text;
+    in property <string> placement-hint-text;
+    in property <string> placement-unplaced-title;
+    in property <string> placement-beds-title;
+    in property <string> placement-curve-title;
+    in property <string> placement-empty-unplaced;
+    in property <string> placement-empty-beds;
+    in property <string> placement-col-variety;
+    in property <string> placement-col-date;
+    in property <string> placement-col-bed-meters;
+    in property <string> placement-strata-label;
+    in property <string> placement-plants-label;
+    in property <string> placement-place-text;
+    in property <string> placement-unplace-text;
+    in property <string> placement-peak-text;
+    in property <string> placement-legend-open;
+    in property <string> placement-legend-covered;
+    in property <string> placement-composition-title;
+    in property <string> placement-composition-empty;
+    in property <[PlacementUnplacedRow]> placement-unplaced-rows;
+    in property <[PlacementBedRow]> placement-bed-rows;
+    in property <[string]> placement-strata-options;
+    in property <[PlacementCompositionRow]> placement-composition-rows;
+    in property <string> placement-open-path;
+    in property <string> placement-covered-path;
+    in property <bool> placement-has-open;
+    in property <bool> placement-has-covered;
+    in property <bool> placement-over-capacity;
+    in property <string> placement-status-text;
+    in property <bool> placement-status-is-error;
+    in-out property <string> placement-selected-unplaced-id;
+    in-out property <string> placement-selected-bed-id;
+    in-out property <string> placement-plants-count-text;
+    in-out property <int> placement-strata-index;
+    callback navigate-placement();
+    callback placement-select-unplaced(string);
+    callback placement-select-bed(string);
+    callback placement-place();
+    callback placement-unplace-last();
+    callback placement-peak-clicked();
 
     // ------- Agenda page (overdue / today / upcoming) -------
     in property <string> agenda-title-text;
@@ -844,6 +888,11 @@ export component MainWindow inherits Window {
                     root.navigate-crop-map();
                     return accept;
                 }
+                if (event.text == "0") {
+                    root.current-page = "placement";
+                    root.navigate-placement();
+                    return accept;
+                }
             }
             // Help shortcut: F1 is the conventional "open the manual"
             // key on every desktop OS — kept as the sole binding now that
@@ -990,6 +1039,12 @@ export component MainWindow inherits Window {
                     icon: Icons.plantings;
                     selected: current-page == "needs";
                     clicked => { current-page = "needs"; navigate-needs(); }
+                }
+                NavButton {
+                    text: nav-placement-text;
+                    icon: Icons.plantings;
+                    selected: current-page == "placement";
+                    clicked => { current-page = "placement"; navigate-placement(); }
                 }
                 NavButton {
                     text: nav-tasks-text;
@@ -1595,6 +1650,49 @@ export component MainWindow inherits Window {
                 rows: needs-rows;
                 print-text: needs-print-text;
                 print-disabled-tip: needs-print-disabled-tip;
+            }
+
+            // ------- Placement + capacity curve (Epic 3, story 3.2) -------
+            if current-page == "placement": PlacementPage {
+                title-text: placement-title-text;
+                hint-text: placement-hint-text;
+                unplaced-title: placement-unplaced-title;
+                beds-title: placement-beds-title;
+                curve-title: placement-curve-title;
+                empty-unplaced: placement-empty-unplaced;
+                empty-beds: placement-empty-beds;
+                col-variety: placement-col-variety;
+                col-date: placement-col-date;
+                col-bed-meters: placement-col-bed-meters;
+                strata-label: placement-strata-label;
+                plants-label: placement-plants-label;
+                place-text: placement-place-text;
+                unplace-text: placement-unplace-text;
+                peak-text: placement-peak-text;
+                legend-open: placement-legend-open;
+                legend-covered: placement-legend-covered;
+                composition-title: placement-composition-title;
+                composition-empty: placement-composition-empty;
+                unplaced-rows: placement-unplaced-rows;
+                bed-rows: placement-bed-rows;
+                strata-options: placement-strata-options;
+                composition-rows: placement-composition-rows;
+                open-path: placement-open-path;
+                covered-path: placement-covered-path;
+                has-open: placement-has-open;
+                has-covered: placement-has-covered;
+                over-capacity: placement-over-capacity;
+                status-text: placement-status-text;
+                status-is-error: placement-status-is-error;
+                selected-unplaced-id <=> placement-selected-unplaced-id;
+                selected-bed-id <=> placement-selected-bed-id;
+                plants-count-text <=> placement-plants-count-text;
+                strata-index <=> placement-strata-index;
+                select-unplaced(id) => { placement-select-unplaced(id); }
+                select-bed(id) => { placement-select-bed(id); }
+                place() => { placement-place(); }
+                unplace-last() => { placement-unplace-last(); }
+                peak-clicked() => { placement-peak-clicked(); }
             }
 
             // ------- Task types catalog (create / edit / delete) -------

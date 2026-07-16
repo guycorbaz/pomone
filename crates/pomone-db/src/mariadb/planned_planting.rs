@@ -4,12 +4,13 @@ use crate::error::{DbError, DbResult};
 use crate::mariadb::MariaDbRepository;
 use crate::repository::PlannedPlantingRepo;
 use async_trait::async_trait;
-use pomone_domain::{CropPlanLineId, PlannedPlanting, PlannedPlantingId, VarietyId};
+use pomone_domain::{CropPlanLineId, PlannedPlanting, PlannedPlantingId, PlantingId, VarietyId};
 use rust_decimal::Decimal;
 use sqlx::Row;
 use uuid::Uuid;
 
-const COLUMNS: &str = "id, crop_plan_line_id, variety_id, series_index, planned_on, bed_meters";
+const COLUMNS: &str =
+    "id, crop_plan_line_id, variety_id, series_index, planned_on, bed_meters, placed_planting_id";
 
 #[async_trait]
 impl PlannedPlantingRepo for MariaDbRepository {
@@ -38,7 +39,7 @@ impl PlannedPlantingRepo for MariaDbRepository {
 
     async fn planned_planting_create(&self, pp: &PlannedPlanting) -> DbResult<()> {
         sqlx::query(&format!(
-            "INSERT INTO planned_planting ({COLUMNS}) VALUES (?, ?, ?, ?, ?, ?)"
+            "INSERT INTO planned_planting ({COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)"
         ))
         .bind(pp.id.as_uuid())
         .bind(pp.crop_plan_line_id.as_uuid())
@@ -46,6 +47,7 @@ impl PlannedPlantingRepo for MariaDbRepository {
         .bind(i64::from(pp.series_index))
         .bind(pp.planned_on)
         .bind(pp.bed_meters)
+        .bind(pp.placed_planting_id.map(PlantingId::as_uuid))
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -54,13 +56,15 @@ impl PlannedPlantingRepo for MariaDbRepository {
     async fn planned_planting_update(&self, pp: &PlannedPlanting) -> DbResult<()> {
         let result = sqlx::query(
             "UPDATE planned_planting SET crop_plan_line_id = ?, variety_id = ?, \
-             series_index = ?, planned_on = ?, bed_meters = ? WHERE id = ?",
+             series_index = ?, planned_on = ?, bed_meters = ?, placed_planting_id = ? \
+             WHERE id = ?",
         )
         .bind(pp.crop_plan_line_id.as_uuid())
         .bind(pp.variety_id.as_uuid())
         .bind(i64::from(pp.series_index))
         .bind(pp.planned_on)
         .bind(pp.bed_meters)
+        .bind(pp.placed_planting_id.map(PlantingId::as_uuid))
         .bind(pp.id.as_uuid())
         .execute(&self.pool)
         .await?;
@@ -93,6 +97,7 @@ fn row_to_planned(row: sqlx::mysql::MySqlRow) -> DbResult<PlannedPlanting> {
     let line_id: Uuid = row.try_get("crop_plan_line_id")?;
     let variety_id: Uuid = row.try_get("variety_id")?;
     let series_index: i64 = row.try_get("series_index")?;
+    let placed_planting_id: Option<Uuid> = row.try_get("placed_planting_id")?;
     Ok(PlannedPlanting {
         id: PlannedPlantingId::from(id),
         crop_plan_line_id: CropPlanLineId::from(line_id),
@@ -102,5 +107,6 @@ fn row_to_planned(row: sqlx::mysql::MySqlRow) -> DbResult<PlannedPlanting> {
         })?,
         planned_on: row.try_get("planned_on")?,
         bed_meters: row.try_get::<Decimal, _>("bed_meters")?,
+        placed_planting_id: placed_planting_id.map(PlantingId::from),
     })
 }

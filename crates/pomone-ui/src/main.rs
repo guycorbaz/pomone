@@ -117,6 +117,7 @@ fn main() -> Result<()> {
         show_milestones: true,
         task_form_recurrence_unit_keys: Vec::new(),
         crop_map_location_ids: Vec::new(),
+        placement_last_placed: String::new(),
     }));
 
     let window = MainWindow::new().context("failed to create MainWindow")?;
@@ -145,23 +146,7 @@ fn main() -> Result<()> {
     }
 
     // --- Per-screen wiring (one call per screen — see wiring/mod.rs) ---
-    wiring::settings::wire_settings(&window, &state);
-    wiring::cultures::wire_cultures(&window, &state);
-    wiring::locations::wire_locations(&window, &state);
-    wiring::strata::wire_strata(&window, &state);
-    wiring::families::wire_families(&window, &state);
-    wiring::plantings::wire_plantings(&window, &state);
-    wiring::crop_map::wire_crop_map(&window, &state);
-    wiring::planting_detail::wire_planting_detail(&window, &state);
-    wiring::home::wire_home(&window, &state);
-    wiring::confirm::wire_confirm(&window, &state);
-    wiring::task_calendar::wire_task_calendar(&window, &state);
-    wiring::agenda::wire_agenda(&window, &state);
-    wiring::plan::wire_plan(&window, &state);
-    wiring::needs::wire_needs(&window, &state);
-    wiring::itk::wire_itk(&window, &state);
-    wiring::task_form::wire_task_form(&window, &state);
-    wiring::task_types::wire_task_types(&window, &state);
+    wire_all_screens(&window, &state);
 
     // Restore the last window size (falls back to the .slint default on first
     // launch); persist it again when the event loop exits.
@@ -169,6 +154,28 @@ fn main() -> Result<()> {
     window.run().context("Slint event loop failed")?;
     save_window_geometry(&window);
     Ok(())
+}
+
+/// Register every screen's callbacks. One call per screen — see `wiring/mod.rs`.
+fn wire_all_screens(window: &MainWindow, state: &Rc<RefCell<UiState>>) {
+    wiring::settings::wire_settings(window, state);
+    wiring::cultures::wire_cultures(window, state);
+    wiring::locations::wire_locations(window, state);
+    wiring::strata::wire_strata(window, state);
+    wiring::families::wire_families(window, state);
+    wiring::plantings::wire_plantings(window, state);
+    wiring::crop_map::wire_crop_map(window, state);
+    wiring::planting_detail::wire_planting_detail(window, state);
+    wiring::home::wire_home(window, state);
+    wiring::confirm::wire_confirm(window, state);
+    wiring::task_calendar::wire_task_calendar(window, state);
+    wiring::agenda::wire_agenda(window, state);
+    wiring::plan::wire_plan(window, state);
+    wiring::needs::wire_needs(window, state);
+    wiring::placement::wire_placement(window, state);
+    wiring::itk::wire_itk(window, state);
+    wiring::task_form::wire_task_form(window, state);
+    wiring::task_types::wire_task_types(window, state);
 }
 
 /// Resize the window to the last saved geometry, if any. Clamps to the minimum

@@ -13,7 +13,7 @@
 //! links to a planned planting survives a re-generate (non-destructive).
 
 use crate::error::{DomainError, DomainResult};
-use crate::ids::{CropPlanLineId, PlannedPlantingId, VarietyId};
+use crate::ids::{CropPlanLineId, PlannedPlantingId, PlantingId, VarietyId};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -32,6 +32,11 @@ pub struct PlannedPlanting {
     pub planned_on: NaiveDate,
     /// Bed-meters this succession needs (snapshotted from the line). > 0.
     pub bed_meters: Decimal,
+    /// Set once this succession is **placed** on a bed (Epic 3, story 3.2): the
+    /// id of the real [`crate::Planting`] it became. `None` while unplaced. The
+    /// placement screen lists exactly the rows where this is `None`; un-placing
+    /// clears it (and deletes the planting), returning the row to that list.
+    pub placed_planting_id: Option<PlantingId>,
 }
 
 impl PlannedPlanting {
@@ -57,7 +62,16 @@ impl PlannedPlanting {
             series_index,
             planned_on,
             bed_meters,
+            placed_planting_id: None,
         })
+    }
+
+    /// True once this succession **has been placed** on a bed (it carries the
+    /// id of the real planting it became). Conversely, the placement screen's
+    /// unplaced list is exactly the successions where this is `false`.
+    #[must_use]
+    pub const fn is_placed(&self) -> bool {
+        self.placed_planting_id.is_some()
     }
 }
 
@@ -82,6 +96,9 @@ mod tests {
         .unwrap();
         assert_eq!(ok.series_index, 0);
         assert_eq!(ok.bed_meters, dec!(15));
+        // A freshly generated succession is unplaced.
+        assert_eq!(ok.placed_planting_id, None);
+        assert!(!ok.is_placed());
 
         assert!(matches!(
             PlannedPlanting::new(

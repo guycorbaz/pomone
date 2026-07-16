@@ -7,8 +7,9 @@ use crate::error::{AppError, AppResult};
 use chrono::NaiveDate;
 use pomone_db::Repository;
 use pomone_domain::{
-    date_calc, LocationId, Planting, PlantingId, PlantingSchedule, PlantingStatus, StrataId,
-    Treatment, VarietyId, VarietyProfile, YearlyHarvest,
+    date_calc, LocationId, PlannedPlanting, PlannedPlantingId, Planting, PlantingId,
+    PlantingSchedule, PlantingStatus, StrataId, Treatment, VarietyId, VarietyProfile,
+    YearlyHarvest,
 };
 use rust_decimal::Decimal;
 
@@ -383,6 +384,151 @@ pub async fn set_planting_status(
     Ok(())
 }
 
+// ============================================================
+// Placement (story 3.2): planned succession → real Planting
+// ============================================================
+
+/// Request to **place** an unplaced planned succession onto a bed, turning it
+/// into a real [`Planting`].
+///
+/// The plan line only carries bed-metres, so placement supplies the two pieces
+/// a `Planting` also needs: the vegetation `strata_id` and `plants_count`. The
+/// `area_m2` is *derived* — `bed_meters × bed width` — so the capacity engine
+/// recovers the original running metres exactly (`area ÷ width = bed_meters`).
+#[derive(Debug, Clone, Copy)]
+pub struct PlacementRequest {
+    pub planned_planting_id: PlannedPlantingId,
+    /// The leaf bed to place onto.
+    pub location_id: LocationId,
+    /// The vegetation stratum, chosen at placement.
+    pub strata_id: StrataId,
+    /// Plants on this succession (`> 0`), entered at placement.
+    pub plants_count: u32,
+}
+
+impl PlacementRequest {
+    #[must_use]
+    pub const fn new(
+        planned_planting_id: PlannedPlantingId,
+        location_id: LocationId,
+        strata_id: StrataId,
+        plants_count: u32,
+    ) -> Self {
+        Self {
+            planned_planting_id,
+            location_id,
+            strata_id,
+            plants_count,
+        }
+    }
+}
+
+/// Fetch a planned planting by id (the repo exposes list, not get).
+async fn planned_planting_by_id(
+    repo: &dyn Repository,
+    id: PlannedPlantingId,
+) -> AppResult<PlannedPlanting> {
+    repo.planned_planting_list_all()
+        .await?
+        .into_iter()
+        .find(|pp| pp.id == id)
+        .ok_or_else(|| AppError::NotFound {
+            kind: "planned_planting",
+            id: id.to_string(),
+        })
+}
+
+/// Place a planned succession: create the real [`Planting`] on the chosen bed
+/// and record the link on the planned row (so it leaves the unplaced list).
+///
+/// Annual varieties become a `Cycle` planting via [`create_annual_planting`];
+/// perennials become a `Perennial` planting via [`create_perennial_planting`].
+/// Refuses a succession that is already placed.
+pub async fn place_planned_planting(
+    repo: &dyn Repository,
+    request: PlacementRequest,
+) -> AppResult<Planting> {
+    let mut pp = planned_planting_by_id(repo, request.planned_planting_id).await?;
+    if pp.is_placed() {
+        return Err(AppError::Inconsistent(
+            "planned succession is already placed".into(),
+        ));
+    }
+    let bed = repo
+        .location_get(request.location_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound {
+            kind: "location",
+            id: request.location_id.to_string(),
+        })?;
+    // Derived area = running bed-metres × bed width. Saturating: `bed_meters` is
+    // a persisted (unbounded) TEXT decimal, so a pathological row must not panic.
+    let area_m2 = pp.bed_meters.saturating_mul(bed.width_m);
+
+    let variety = repo
+        .variety_get(pp.variety_id)
+        .await?
+        .ok_or_else(|| AppError::NotFound {
+            kind: "variety",
+            id: pp.variety_id.to_string(),
+        })?;
+
+    let planting = match variety.profile {
+        VarietyProfile::Annual(_) => {
+            create_annual_planting(
+                repo,
+                AnnualPlantingRequest::from_sowing(
+                    pp.variety_id,
+                    request.location_id,
+                    request.strata_id,
+                    pp.planned_on,
+                    area_m2,
+                    request.plants_count,
+                ),
+            )
+            .await?
+        }
+        VarietyProfile::Pluriannual(_) => {
+            create_perennial_planting(
+                repo,
+                PerennialPlantingRequest::new(
+                    pp.variety_id,
+                    request.location_id,
+                    request.strata_id,
+                    pp.planned_on,
+                    area_m2,
+                    request.plants_count,
+                ),
+            )
+            .await?
+        }
+    };
+
+    pp.placed_planting_id = Some(planting.id);
+    repo.planned_planting_update(&pp).await?;
+    Ok(planting)
+}
+
+/// Undo a placement: delete the placed [`Planting`] and return the succession to
+/// the unplaced list. Allowed only while the planting carries **no recorded
+/// activity** (a done task or logged labour) — same guard as [`delete_planting`],
+/// which surfaces [`AppError::PlantingHasActivity`] otherwise. The FK
+/// `ON DELETE SET NULL` clears `placed_planting_id` when the planting goes.
+pub async fn unplace_planned_planting(
+    repo: &dyn Repository,
+    planned_planting_id: PlannedPlantingId,
+) -> AppResult<()> {
+    let pp = planned_planting_by_id(repo, planned_planting_id).await?;
+    let Some(planting_id) = pp.placed_planting_id else {
+        return Err(AppError::Inconsistent(
+            "planned succession is not placed".into(),
+        ));
+    };
+    // Guards activity and cascades ON DELETE SET NULL onto the planned row.
+    delete_planting(repo, planting_id).await?;
+    Ok(())
+}
+
 /// Request for [`record_yearly_harvest`]. Build with
 /// [`YearlyHarvestRequest::new`] (planting + year), then attach the optional
 /// yields and notes via the `with_*` setters.
@@ -537,14 +683,30 @@ pub async fn record_treatment(
 mod tests {
     use super::*;
     use pomone_db::{
-        seed_defaults, CropRepo, FamilyRepo, LocationKindRepo, LocationRepo, PlantingRepo,
-        SqliteRepository, StrataRepo, TaskRepo, TaskTypeRepo, VarietyRepo, YearlyHarvestRepo,
+        seed_defaults, CropRepo, FamilyRepo, LocationKindRepo, LocationRepo, PlannedPlantingRepo,
+        PlantingRepo, SqliteRepository, StrataRepo, TaskRepo, TaskTypeRepo, VarietyRepo,
+        YearlyHarvestRepo,
     };
     use pomone_domain::{
-        AnnualProfile, Crop, Family, Lifespan, Location, LocationKind, PluriannualProfile,
-        PruningSeason, Strata, Task, TaskCategory, Variety,
+        AnnualProfile, Crop, CropPlanLine, Family, Lifespan, Location, LocationKind,
+        PluriannualProfile, PruningSeason, Strata, Task, TaskCategory, Variety,
     };
     use rust_decimal_macros::dec;
+
+    /// Create an unplaced planned succession of `variety_id` and return its id.
+    async fn make_planned(
+        repo: &dyn Repository,
+        variety_id: VarietyId,
+        bed_meters: Decimal,
+        planned_on: NaiveDate,
+    ) -> PlannedPlantingId {
+        let line = CropPlanLine::new(variety_id, 1, bed_meters, 14, Some(planned_on), false, None)
+            .unwrap();
+        repo.crop_plan_line_create(&line).await.unwrap();
+        let pp = PlannedPlanting::new(line.id, variety_id, 0, planned_on, bed_meters).unwrap();
+        repo.planned_planting_create(&pp).await.unwrap();
+        pp.id
+    }
 
     /// Build a fully populated test repo with a single annual variety
     /// (Tomate Marmande) ready for planting.
@@ -602,6 +764,101 @@ mod tests {
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, day).unwrap()
+    }
+
+    // ---- placement (story 3.2) ---------------------------------------------
+
+    #[tokio::test]
+    async fn place_annual_converts_and_links() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        let pp_id = make_planned(&repo, vid, dec!(15), d(2026, 4, 1)).await;
+
+        let planting = place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 80))
+            .await
+            .unwrap();
+
+        // A real annual Cycle planting now exists on the bed.
+        assert_eq!(planting.location_id, lid);
+        assert!(matches!(planting.schedule, PlantingSchedule::Cycle { .. }));
+        // Derived area = bed_meters (15) × bed width (0.8) = 12 m².
+        assert_eq!(planting.area_m2, dec!(12.0));
+        assert_eq!(planting.plants_count, 80);
+
+        // The planned row is now linked and off the unplaced list.
+        let pp = repo.planned_planting_list_all().await.unwrap()[0].clone();
+        assert_eq!(pp.placed_planting_id, Some(planting.id));
+        assert!(pp.is_placed());
+    }
+
+    #[tokio::test]
+    async fn place_perennial_converts() {
+        let (repo, vid, lid, sid) = setup_perennial().await;
+        let pp_id = make_planned(&repo, vid, dec!(10), d(2026, 3, 15)).await;
+
+        let planting = place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 5))
+            .await
+            .unwrap();
+        assert!(matches!(
+            planting.schedule,
+            PlantingSchedule::Perennial { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn place_twice_is_refused() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        let pp_id = make_planned(&repo, vid, dec!(15), d(2026, 4, 1)).await;
+        place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 80))
+            .await
+            .unwrap();
+        let err = place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 80))
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(_)));
+    }
+
+    #[tokio::test]
+    async fn unplace_restores_the_unplaced_row() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        let pp_id = make_planned(&repo, vid, dec!(15), d(2026, 4, 1)).await;
+        let planting = place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 80))
+            .await
+            .unwrap();
+
+        unplace_planned_planting(&repo, pp_id).await.unwrap();
+
+        // Planting gone; the planned row is back to unplaced (ON DELETE SET NULL).
+        assert!(repo.planting_get(planting.id).await.unwrap().is_none());
+        let pp = repo.planned_planting_list_all().await.unwrap()[0].clone();
+        assert_eq!(pp.placed_planting_id, None);
+        assert!(!pp.is_placed());
+    }
+
+    #[tokio::test]
+    async fn unplace_not_placed_is_refused() {
+        let (repo, vid, _lid, _sid) = setup_annual().await;
+        let pp_id = make_planned(&repo, vid, dec!(15), d(2026, 4, 1)).await;
+        let err = unplace_planned_planting(&repo, pp_id).await.unwrap_err();
+        assert!(matches!(err, AppError::Inconsistent(_)));
+    }
+
+    #[tokio::test]
+    async fn unplace_blocked_when_planting_has_activity() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap(); // task types for autogen
+        let pp_id = make_planned(&repo, vid, dec!(15), d(2026, 4, 1)).await;
+        let planting = place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 80))
+            .await
+            .unwrap();
+
+        // Log labour on an auto-generated task → real activity.
+        let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
+        if let Some(mut t) = tasks.into_iter().next() {
+            t.labor_hours = Some(dec!(2));
+            repo.task_update(&t).await.unwrap();
+            let err = unplace_planned_planting(&repo, pp_id).await.unwrap_err();
+            assert!(matches!(err, AppError::PlantingHasActivity));
+        }
     }
 
     #[tokio::test]

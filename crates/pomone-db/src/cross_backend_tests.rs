@@ -758,6 +758,52 @@ async fn scenario_planned_planting(repo: &dyn Repository) {
     assert_eq!(got[1].planned_on, d(2026, 4, 20));
     assert_eq!(got[1].bed_meters, dec!(20));
 
+    // Placement link (migration 0013): placing pp0 records the real planting's
+    // id; it round-trips identically on every backend, and `ON DELETE SET NULL`
+    // clears it (returning the row to the unplaced list) when the planting goes.
+    let strata = Strata::new("Herbacée", None, None, None, 40).unwrap();
+    repo.strata_create(&strata).await.unwrap();
+    let kind = LocationKind::new("Planche", None).unwrap();
+    repo.location_kind_create(&kind).await.unwrap();
+    let bed = Location::new(kind.id, "Planche X", dec!(25), dec!(0.8), None, None).unwrap();
+    repo.location_create(&bed).await.unwrap();
+    let planting = Planting::new(
+        variety.id,
+        bed.id,
+        strata.id,
+        Lifespan::Annual,
+        dec!(20),
+        100,
+        PlantingSchedule::cycle(Some(d(2026, 4, 1)), None, d(2026, 6, 1), d(2026, 7, 1)).unwrap(),
+        None,
+        None,
+    )
+    .unwrap();
+    repo.planting_create(&planting).await.unwrap();
+
+    let mut placed = pp0.clone();
+    placed.placed_planting_id = Some(planting.id);
+    repo.planned_planting_update(&placed).await.unwrap();
+    let got = repo.planned_planting_list_for_line(linev.id).await.unwrap();
+    assert_eq!(
+        got[0].placed_planting_id,
+        Some(planting.id),
+        "placed link persisted"
+    );
+    assert!(got[0].is_placed());
+    assert_eq!(
+        got[1].placed_planting_id, None,
+        "the other row stays unplaced"
+    );
+
+    // Un-placing via planting deletion (ON DELETE SET NULL) frees the row.
+    repo.planting_delete(planting.id).await.unwrap();
+    let got = repo.planned_planting_list_for_line(linev.id).await.unwrap();
+    assert_eq!(
+        got[0].placed_planting_id, None,
+        "SET NULL returned it to unplaced"
+    );
+
     // Deleting the line cascades to its planned plantings.
     repo.crop_plan_line_delete(linev.id).await.unwrap();
     assert!(repo

@@ -1,0 +1,425 @@
+// Pomone — the placement screen with the live capacity curve (Epic 3, story 3.2).
+//
+// Three columns: the unplaced planned successions (left), the bed tree + a
+// small placement form (middle), and the live occupancy curve — sheltered vs
+// open-field — with its peak and overflow flag (right). Selecting an unplaced
+// row + a bed, then a strata and a plant count, places the succession as a real
+// planting and the curve reacts. A placed succession is freely un-placeable
+// while nothing has been recorded against it.
+
+import { Palette, Theme, Card, PrimaryButton, SecondaryButton, ThemedLineEdit, ThemedComboBox } from "theme.slint";
+import { ScrollView } from "std-widgets.slint";
+
+// One unplaced planned succession (mirror of app `UnplacedRow`, strings only).
+export struct PlacementUnplacedRow {
+    id: string,
+    variety: string,
+    date: string,
+    bed-meters: string,
+}
+
+// One bed in the location tree, flattened to pre-order with a depth (mirror of
+// the locations tree shape).
+export struct PlacementBedRow {
+    id: string,
+    name: string,
+    depth: int,
+    dimensions: string,
+}
+
+// One series composing the clicked peak (mirror of app `CompositionRow`).
+export struct PlacementCompositionRow {
+    variety: string,
+    date: string,
+    bed-meters: string,
+}
+
+export component PlacementPage inherits Rectangle {
+    // Labels
+    in property <string> title-text;
+    in property <string> hint-text;
+    in property <string> unplaced-title;
+    in property <string> beds-title;
+    in property <string> curve-title;
+    in property <string> empty-unplaced;
+    in property <string> empty-beds;
+    in property <string> col-variety;
+    in property <string> col-date;
+    in property <string> col-bed-meters;
+    in property <string> strata-label;
+    in property <string> plants-label;
+    in property <string> place-text;
+    in property <string> unplace-text;
+    in property <string> peak-text;
+    in property <string> legend-open;
+    in property <string> legend-covered;
+    in property <string> composition-title;
+    in property <string> composition-empty;
+
+    // Data
+    in property <[PlacementUnplacedRow]> unplaced-rows;
+    in property <[PlacementBedRow]> bed-rows;
+    in property <[string]> strata-options;
+    in property <[PlacementCompositionRow]> composition-rows;
+
+    // Curve (SVG path command strings built in Rust; 0..100% of each group's capacity)
+    in property <string> open-path;
+    in property <string> covered-path;
+    in property <bool> has-open;
+    in property <bool> has-covered;
+    in property <bool> over-capacity;
+
+    // Status
+    in property <string> status-text;
+    in property <bool> status-is-error;
+
+    // Selection / form state
+    in-out property <string> selected-unplaced-id;
+    in-out property <string> selected-bed-id;
+    in-out property <string> plants-count-text;
+    in-out property <int> strata-index;
+
+    // Callbacks
+    callback select-unplaced(string);
+    callback select-bed(string);
+    callback place();
+    callback unplace-last();
+    callback peak-clicked();
+
+    property <length> plot-height: 160px;
+    property <length> plot-width: 320px;
+
+    background: Palette.background;
+
+    VerticalLayout {
+        padding: Theme.space-xl;
+        spacing: Theme.space-lg;
+
+        // Header
+        VerticalLayout {
+            spacing: Theme.space-xs;
+            Text {
+                text: root.title-text;
+                font-size: Theme.font-size-h1;
+                font-weight: 700;
+                color: Palette.text-primary;
+            }
+            Text {
+                text: root.hint-text;
+                font-size: Theme.font-size-body;
+                color: Palette.text-secondary;
+                wrap: word-wrap;
+            }
+        }
+
+        // Status line
+        if root.status-text != "": Text {
+            text: root.status-text;
+            font-size: Theme.font-size-body;
+            color: root.status-is-error ? Palette.danger : Palette.text-secondary;
+        }
+
+        HorizontalLayout {
+            spacing: Theme.space-lg;
+
+            // ---- Left: unplaced list ----
+            Card {
+                width: 30%;
+                VerticalLayout {
+                    padding: Theme.space-md;
+                    spacing: Theme.space-sm;
+                    Text {
+                        text: root.unplaced-title;
+                        font-size: Theme.font-size-h2;
+                        font-weight: 600;
+                        color: Palette.text-primary;
+                    }
+                    if root.unplaced-rows.length == 0: Text {
+                        text: root.empty-unplaced;
+                        font-size: Theme.font-size-body;
+                        color: Palette.text-muted;
+                        wrap: word-wrap;
+                    }
+                    // Column headers (visible only when there are rows).
+                    if root.unplaced-rows.length > 0: HorizontalLayout {
+                        padding-left: Theme.space-sm;
+                        padding-right: Theme.space-sm;
+                        spacing: Theme.space-sm;
+                        Text {
+                            text: root.col-variety;
+                            font-size: Theme.font-size-label;
+                            font-weight: 600;
+                            color: Palette.text-secondary;
+                            horizontal-stretch: 1;
+                        }
+                        Text {
+                            text: root.col-date;
+                            font-size: Theme.font-size-label;
+                            font-weight: 600;
+                            color: Palette.text-secondary;
+                        }
+                        Text {
+                            text: root.col-bed-meters;
+                            font-size: Theme.font-size-label;
+                            font-weight: 600;
+                            color: Palette.text-secondary;
+                        }
+                    }
+                    ScrollView {
+                        VerticalLayout {
+                            spacing: 2px;
+                            for row[i] in root.unplaced-rows: Rectangle {
+                                height: Theme.control-height + Theme.space-xs;
+                                border-radius: Theme.radius-sm;
+                                background: row.id == root.selected-unplaced-id
+                                    ? Palette.primary-hover
+                                    : (i.mod(2) == 0 ? Palette.surface : Palette.surface-alt);
+                                HorizontalLayout {
+                                    padding-left: Theme.space-sm;
+                                    padding-right: Theme.space-sm;
+                                    spacing: Theme.space-sm;
+                                    Text {
+                                        text: row.variety;
+                                        font-size: Theme.font-size-body;
+                                        color: Palette.text-primary;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: row.date;
+                                        font-size: Theme.font-size-label;
+                                        color: Palette.text-secondary;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: row.bed-meters + " m";
+                                        font-size: Theme.font-size-label;
+                                        color: Palette.text-secondary;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                TouchArea {
+                                    clicked => { root.select-unplaced(row.id); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ---- Middle: bed tree + form ----
+            Card {
+                width: 33%;
+                VerticalLayout {
+                    padding: Theme.space-md;
+                    spacing: Theme.space-sm;
+                    Text {
+                        text: root.beds-title;
+                        font-size: Theme.font-size-h2;
+                        font-weight: 600;
+                        color: Palette.text-primary;
+                    }
+                    if root.bed-rows.length == 0: Text {
+                        text: root.empty-beds;
+                        font-size: Theme.font-size-body;
+                        color: Palette.text-muted;
+                        wrap: word-wrap;
+                    }
+                    ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            spacing: 2px;
+                            for bed[i] in root.bed-rows: Rectangle {
+                                height: Theme.control-height;
+                                border-radius: Theme.radius-sm;
+                                background: bed.id == root.selected-bed-id
+                                    ? Palette.primary-hover
+                                    : (i.mod(2) == 0 ? Palette.surface : Palette.surface-alt);
+                                HorizontalLayout {
+                                    padding-right: Theme.space-sm;
+                                    // Indent by depth.
+                                    Rectangle { width: bed.depth * 20px; }
+                                    Text {
+                                        text: bed.name;
+                                        font-size: Theme.font-size-body;
+                                        color: Palette.text-primary;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: bed.dimensions;
+                                        font-size: Theme.font-size-label;
+                                        color: Palette.text-muted;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                                TouchArea {
+                                    clicked => { root.select-bed(bed.id); }
+                                }
+                            }
+                        }
+                    }
+
+                    // Placement form
+                    HorizontalLayout {
+                        spacing: Theme.space-sm;
+                        VerticalLayout {
+                            spacing: 2px;
+                            horizontal-stretch: 1;
+                            Text { text: root.strata-label; font-size: Theme.font-size-label; color: Palette.text-secondary; }
+                            ThemedComboBox {
+                                model: root.strata-options;
+                                current-index <=> root.strata-index;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: 2px;
+                            Text { text: root.plants-label; font-size: Theme.font-size-label; color: Palette.text-secondary; }
+                            ThemedLineEdit {
+                                width: 90px;
+                                text <=> root.plants-count-text;
+                                input-type: number;
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: Theme.space-sm;
+                        PrimaryButton {
+                            text: root.place-text;
+                            enabled: root.selected-unplaced-id != "" && root.selected-bed-id != "";
+                            clicked => { root.place(); }
+                        }
+                        SecondaryButton {
+                            text: root.unplace-text;
+                            clicked => { root.unplace-last(); }
+                        }
+                    }
+                }
+            }
+
+            // ---- Right: curve + peak + composition ----
+            Card {
+                width: 37%;
+                VerticalLayout {
+                    padding: Theme.space-md;
+                    spacing: Theme.space-sm;
+                    Text {
+                        text: root.curve-title;
+                        font-size: Theme.font-size-h2;
+                        font-weight: 600;
+                        color: Palette.text-primary;
+                    }
+
+                    // Plot
+                    plot := Rectangle {
+                        height: root.plot-height;
+                        background: Palette.surface-alt;
+                        border-radius: Theme.radius-sm;
+                        // Gridlines at 0/50/100%.
+                        for frac in [0.0, 0.5, 1.0]: Rectangle {
+                            y: frac * parent.height;
+                            height: 1px;
+                            background: Palette.border;
+                        }
+                        if root.has-open: Path {
+                            width: 100%;
+                            height: 100%;
+                            viewbox-width: root.plot-width / 1px;
+                            viewbox-height: root.plot-height / 1px;
+                            commands: root.open-path;
+                            stroke: Palette.primary;
+                            stroke-width: 2px;
+                            fill: transparent;
+                        }
+                        if root.has-covered: Path {
+                            width: 100%;
+                            height: 100%;
+                            viewbox-width: root.plot-width / 1px;
+                            viewbox-height: root.plot-height / 1px;
+                            commands: root.covered-path;
+                            stroke: Palette.accent;
+                            stroke-width: 2px;
+                            fill: transparent;
+                        }
+                    }
+
+                    // Legend
+                    HorizontalLayout {
+                        spacing: Theme.space-md;
+                        HorizontalLayout {
+                            spacing: Theme.space-xs;
+                            Rectangle { width: 18px; height: 3px; background: Palette.primary; y: parent.height / 2 - 1px; }
+                            Text { text: root.legend-open; font-size: Theme.font-size-label; color: Palette.text-secondary; }
+                        }
+                        HorizontalLayout {
+                            spacing: Theme.space-xs;
+                            Rectangle { width: 18px; height: 3px; background: Palette.accent; y: parent.height / 2 - 1px; }
+                            Text { text: root.legend-covered; font-size: Theme.font-size-label; color: Palette.text-secondary; }
+                        }
+                    }
+
+                    // Peak (amber when over capacity) — clickable to explain.
+                    peak := Rectangle {
+                        height: Theme.control-height;
+                        border-radius: Theme.radius-sm;
+                        background: root.over-capacity ? Palette.warning : Palette.surface-alt;
+                        HorizontalLayout {
+                            padding-left: Theme.space-sm;
+                            padding-right: Theme.space-sm;
+                            Text {
+                                text: root.peak-text;
+                                font-size: Theme.font-size-body;
+                                color: root.over-capacity ? Palette.text-on-primary : Palette.text-primary;
+                                vertical-alignment: center;
+                            }
+                        }
+                        TouchArea {
+                            clicked => { root.peak-clicked(); }
+                        }
+                    }
+
+                    // Composition of the peak (basic, FR11).
+                    Text {
+                        text: root.composition-title;
+                        font-size: Theme.font-size-label;
+                        font-weight: 600;
+                        color: Palette.text-secondary;
+                    }
+                    if root.composition-rows.length == 0: Text {
+                        text: root.composition-empty;
+                        font-size: Theme.font-size-label;
+                        color: Palette.text-muted;
+                    }
+                    ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            spacing: 2px;
+                            for row in root.composition-rows: HorizontalLayout {
+                                spacing: Theme.space-sm;
+                                Text {
+                                    text: row.variety;
+                                    font-size: Theme.font-size-label;
+                                    color: Palette.text-primary;
+                                    horizontal-stretch: 1;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: row.date;
+                                    font-size: Theme.font-size-label;
+                                    color: Palette.text-secondary;
+                                }
+                                Text {
+                                    text: row.bed-meters + " m";
+                                    font-size: Theme.font-size-label;
+                                    color: Palette.text-secondary;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
