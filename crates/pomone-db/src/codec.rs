@@ -513,7 +513,10 @@ mod tests {
     fn occupation_kind_roundtrip() {
         // R1 has a single variant; add cases here when a new one lands.
         let k = OccupationKind::BedMeters;
-        assert_eq!(decode_occupation_kind(encode_occupation_kind(k)).unwrap(), k);
+        assert_eq!(
+            decode_occupation_kind(encode_occupation_kind(k)).unwrap(),
+            k
+        );
     }
 
     #[test]
