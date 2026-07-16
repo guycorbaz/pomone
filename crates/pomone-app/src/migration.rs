@@ -274,10 +274,14 @@ mod tests {
             source.family_list().await.unwrap(),
             target.family_list().await.unwrap()
         );
-        assert_eq!(
-            source.location_list().await.unwrap(),
-            target.location_list().await.unwrap()
-        );
+        let target_locations = target.location_list().await.unwrap();
+        assert_eq!(source.location_list().await.unwrap(), target_locations);
+        // Geometry column (migration 0012) survives a backend swap: every copied
+        // location keeps its `occupation_kind`.
+        assert!(!target_locations.is_empty());
+        assert!(target_locations
+            .iter()
+            .all(|l| l.occupation_kind == pomone_domain::OccupationKind::BedMeters));
         assert_eq!(
             source.variety_list().await.unwrap(),
             target.variety_list().await.unwrap()

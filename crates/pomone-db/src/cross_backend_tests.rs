@@ -86,6 +86,15 @@ async fn scenario_full_perennial_chain(repo: &dyn Repository) {
     let location = Location::new(kind.id, "Verger nord", dec!(50), dec!(40), None, None).unwrap();
     repo.location_create(&location).await.unwrap();
 
+    // Geometry column (migration 0012) round-trips identically on every backend:
+    // the full struct — including `occupation_kind` — survives a create→get.
+    let got_location = repo.location_get(location.id).await.unwrap().unwrap();
+    assert_eq!(got_location, location);
+    assert_eq!(
+        got_location.occupation_kind,
+        pomone_domain::OccupationKind::BedMeters
+    );
+
     let planting = Planting::new(
         variety.id,
         location.id,

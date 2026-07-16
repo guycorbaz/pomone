@@ -37,7 +37,7 @@
 #   Strictly sequential epics; every story leaves `main` releasable.
 
 generated: 2026-07-12
-last_updated: 2026-07-13
+last_updated: 2026-07-16
 project: pomone
 project_key: NOKEY
 tracking_system: file-system
@@ -79,8 +79,8 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: Placer — géométrie et capacité
-  epic-3: backlog
-  3-1-the-pure-capacity-engine-with-migration-0009: backlog
+  epic-3: in-progress
+  3-1-the-pure-capacity-engine-with-migration-0009: review
   3-2-the-placement-screen-with-the-live-curve: backlog
   3-3-tasks-generate-at-placement: backlog
   3-4-retro-entry-and-perennial-lifecycle: backlog

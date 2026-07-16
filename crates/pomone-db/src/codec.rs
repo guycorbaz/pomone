@@ -11,8 +11,8 @@
 use crate::error::{DbError, DbResult};
 use chrono::NaiveDate;
 use pomone_domain::{
-    AnnualProfile, FactKind, Lifespan, PlantingSchedule, PlantingStatus, PluriannualProfile,
-    ProductivePattern, PruningSeason, SkipReason, VarietyProfile,
+    AnnualProfile, FactKind, Lifespan, OccupationKind, PlantingSchedule, PlantingStatus,
+    PluriannualProfile, ProductivePattern, PruningSeason, SkipReason, VarietyProfile,
 };
 use rust_decimal::Decimal;
 
@@ -391,6 +391,27 @@ pub(crate) fn decode_planting_status(s: &str) -> DbResult<PlantingStatus> {
 }
 
 // ============================================================
+// OccupationKind
+// ============================================================
+
+/// `OccupationKind` ↔ DB string. The literal MUST match the migration default
+/// (`'bed-meters'`) and be identical on both backends. R1 has one variant; a
+/// future variant means a new arm in BOTH functions (a missed decode arm fails
+/// at runtime with `DbError::Malformed`, never at compile time).
+pub(crate) fn encode_occupation_kind(kind: OccupationKind) -> &'static str {
+    match kind {
+        OccupationKind::BedMeters => "bed-meters",
+    }
+}
+
+pub(crate) fn decode_occupation_kind(s: &str) -> DbResult<OccupationKind> {
+    Ok(match s {
+        "bed-meters" => OccupationKind::BedMeters,
+        other => return Err(DbError::Malformed(format!("occupation_kind={other}"))),
+    })
+}
+
+// ============================================================
 // Decimal <-> TEXT (sqlx-sqlite has no native Decimal support)
 // ============================================================
 
@@ -484,6 +505,33 @@ mod tests {
     fn skip_reason_decode_invalid() {
         assert!(matches!(
             decode_skip_reason("because"),
+            Err(DbError::Malformed(_))
+        ));
+    }
+
+    #[test]
+    fn occupation_kind_roundtrip() {
+        // R1 has a single variant; add cases here when a new one lands.
+        let k = OccupationKind::BedMeters;
+        assert_eq!(
+            decode_occupation_kind(encode_occupation_kind(k)).unwrap(),
+            k
+        );
+    }
+
+    #[test]
+    fn occupation_kind_literal_matches_migration_default() {
+        // The migration default is 'bed-meters'; the codec MUST agree.
+        assert_eq!(
+            encode_occupation_kind(OccupationKind::BedMeters),
+            "bed-meters"
+        );
+    }
+
+    #[test]
+    fn occupation_kind_decode_invalid() {
+        assert!(matches!(
+            decode_occupation_kind("hectares"),
             Err(DbError::Malformed(_))
         ));
     }
