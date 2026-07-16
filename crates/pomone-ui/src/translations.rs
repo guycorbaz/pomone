@@ -310,6 +310,29 @@ pub(crate) fn apply_translations(window: &MainWindow, app: &App) {
     window.set_needs_print_text(SharedString::from(i18n.t("needs-print")));
     window.set_needs_print_disabled_tip(SharedString::from(i18n.t("needs-print-disabled")));
 
+    // Placement + capacity curve (story 3.2).
+    window.set_nav_placement_text(SharedString::from(i18n.t("nav-placement")));
+    window.set_placement_title_text(SharedString::from(i18n.t("title-placement")));
+    window.set_placement_hint_text(SharedString::from(i18n.t("placement-hint")));
+    window.set_placement_unplaced_title(SharedString::from(i18n.t("placement-unplaced-title")));
+    window.set_placement_beds_title(SharedString::from(i18n.t("placement-beds-title")));
+    window.set_placement_curve_title(SharedString::from(i18n.t("placement-curve-title")));
+    window.set_placement_empty_unplaced(SharedString::from(i18n.t("placement-empty-unplaced")));
+    window.set_placement_empty_beds(SharedString::from(i18n.t("placement-empty-beds")));
+    window.set_placement_col_variety(SharedString::from(i18n.t("placement-col-variety")));
+    window.set_placement_col_date(SharedString::from(i18n.t("placement-col-date")));
+    window.set_placement_col_bed_meters(SharedString::from(i18n.t("placement-col-bed-meters")));
+    window.set_placement_strata_label(SharedString::from(i18n.t("placement-strata-label")));
+    window.set_placement_plants_label(SharedString::from(i18n.t("placement-plants-label")));
+    window.set_placement_place_text(SharedString::from(i18n.t("placement-place")));
+    window.set_placement_unplace_text(SharedString::from(i18n.t("placement-unplace")));
+    window.set_placement_legend_open(SharedString::from(i18n.t("placement-legend-open")));
+    window.set_placement_legend_covered(SharedString::from(i18n.t("placement-legend-covered")));
+    window
+        .set_placement_composition_title(SharedString::from(i18n.t("placement-composition-title")));
+    window
+        .set_placement_composition_empty(SharedString::from(i18n.t("placement-composition-empty")));
+
     window.set_agenda_overdue_label(SharedString::from(i18n.t("agenda-overdue-title")));
     window.set_agenda_today_label(SharedString::from(i18n.t("agenda-today-title")));
     // Settle menu + skipped badge (story 1.5).

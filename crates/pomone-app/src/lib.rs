@@ -10,6 +10,7 @@ pub mod app;
 pub mod backup;
 pub mod bed_usage_view;
 pub mod calendar_view;
+pub mod capacity_view;
 pub mod config;
 pub mod crop_map_view;
 pub mod cultures_view;
@@ -48,6 +49,10 @@ pub use backup::{
 };
 pub use bed_usage_view::{bed_usage_series, BedUsage, BedUsagePoint};
 pub use calendar_view::{list_events_in_range, CalendarEvent, CalendarEventKind};
+pub use capacity_view::{
+    occupancy_curve, peak_composition, unplaced_list, CompositionRow, OccupancyCurve,
+    OccupancyPoint, UnplacedRow,
+};
 pub use config::{default_config_path, AppConfig, BackendConfig, WindowGeometry};
 pub use crop_map_view::{
     list_crop_map_lanes, move_planting_to_location, split_planting, CropMapBar, CropMapLane,

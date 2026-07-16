@@ -146,4 +146,8 @@ pub(crate) struct UiState {
     /// Stringified `LocationId`s parallel to the Crop Map's move-picker
     /// list AND the split-form ComboBoxes (same underlying ordering).
     pub(crate) crop_map_location_ids: Vec<String>,
+    /// Placement screen (story 3.2): the last succession placed this session,
+    /// so «Annuler le placement» (undo) knows which planned row to un-place.
+    /// Empty when nothing has been placed yet or the last was already undone.
+    pub(crate) placement_last_placed: String,
 }

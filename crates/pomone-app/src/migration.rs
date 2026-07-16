@@ -540,14 +540,50 @@ mod tests {
         .unwrap();
         generate_from_plan_line(&source, &line_id).await.unwrap();
 
+        // Place one succession so a planned_planting carries a placed_planting_id
+        // FK. copy_all must copy the planting BEFORE this row or the FK rejects —
+        // this asserts that ordering and that the link survives the swap.
+        let bed = source
+            .location_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.parent_id.is_some())
+            .unwrap();
+        let strata = source.strata_list().await.unwrap()[0].id;
+        let variety_id = source.variety_list().await.unwrap()[0].id;
+        let planting = create_annual_planting(
+            &source,
+            AnnualPlantingRequest::from_sowing(
+                variety_id,
+                bed.id,
+                strata,
+                NaiveDate::from_ymd_opt(2026, 4, 1).unwrap(),
+                dec!(12),
+                80,
+            ),
+        )
+        .await
+        .unwrap();
+        let mut pp = source.planned_planting_list_all().await.unwrap()[0].clone();
+        pp.placed_planting_id = Some(planting.id);
+        source.planned_planting_update(&pp).await.unwrap();
+
         let target = SqliteRepository::in_memory().await.unwrap();
         let report = copy_all(&source, &target).await.unwrap();
 
         assert_eq!(report.planned_plantings, 3);
+        let target_pps = target.planned_planting_list_all().await.unwrap();
         assert_eq!(
-            target.planned_planting_list_all().await.unwrap(),
+            target_pps,
             source.planned_planting_list_all().await.unwrap(),
-            "planned plantings migrate intact"
+            "planned plantings migrate intact (incl. placed_planting_id)"
+        );
+        assert!(
+            target_pps
+                .iter()
+                .any(|p| p.placed_planting_id == Some(planting.id)),
+            "the placement link survived the swap"
         );
     }
 

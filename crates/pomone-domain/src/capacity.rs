@@ -108,6 +108,15 @@ impl Placement {
     fn under(&self, location: LocationId) -> bool {
         self.path.contains(&location)
     }
+
+    /// Public predicate: is this placement occupying ground at instant `t`?
+    /// Half-open `[start, end)`, with `None` end resolved against `horizon`.
+    /// Lets read-path callers (e.g. `capacity_view`) compose peaks without
+    /// re-deriving the interval logic the engine owns.
+    #[must_use]
+    pub fn covers(&self, t: NaiveDate, horizon: NaiveDate) -> bool {
+        self.active_at(t, horizon)
+    }
 }
 
 /// Occupied bed-metres at `location` and instant `t`, split covered/open.
