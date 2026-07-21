@@ -436,6 +436,7 @@ mod tests {
                 area_m2,
                 plants,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -553,6 +554,7 @@ mod tests {
                 dec!(12),
                 60,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();

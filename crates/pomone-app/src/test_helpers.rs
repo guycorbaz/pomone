@@ -97,3 +97,16 @@ async fn find_kind_by_name(repo: &dyn Repository, name: &str) -> AppResult<Optio
     let kinds = repo.location_kind_list().await?;
     Ok(kinds.into_iter().find(|k| k.name == name))
 }
+
+/// A reference "today" early enough that **nothing** is ever suppressed as a
+/// past-dated task (story 3.4 / FR14 applies the cutoff to perennials only,
+/// and only for dates strictly before `today`).
+///
+/// Tests that predate the retro-entry cutoff — and any test that simply does
+/// not care about it — pass this so their expectations stay exactly what they
+/// were. A test that *does* exercise retro-entry passes its own realistic date
+/// instead; using this helper there would silently disable the behaviour under
+/// test.
+pub(crate) fn no_cutoff_today() -> chrono::NaiveDate {
+    chrono::NaiveDate::from_ymd_opt(1970, 1, 1).expect("valid constant date")
+}

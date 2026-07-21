@@ -970,6 +970,7 @@ mod tests {
                 Decimal::from(10),
                 10,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1006,6 +1007,7 @@ mod tests {
                 rust_decimal_macros::dec!(10),
                 10,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();

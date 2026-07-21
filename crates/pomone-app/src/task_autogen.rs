@@ -37,9 +37,15 @@ use pomone_domain::{
 /// `establishment + offset_days`, incl. J-negative preparation). A crop without
 /// an ITK keeps the shipped variety-profile auto-gen (Sow / Transplant / Plant
 /// / Harvest) — the fallback below, unchanged.
+///
+/// **Retro-entry (story 3.4):** `today` is the caller-injected reference date
+/// (no clock below the UI/CLI layer, AR12). A **perennial** established in the
+/// past generates no task dated before `today` — see [`suppresses_past_tasks`]
+/// — so retro-entering a 1996 orchard never floods the agenda (FR14).
 pub async fn generate_tasks_for_planting(
     repo: &dyn Repository,
     planting: &Planting,
+    today: NaiveDate,
 ) -> AppResult<Vec<Task>> {
     let planting_tasks = repo.task_list_for_planting(planting.id).await?;
     // Idempotency guard (issue #69): a (type, date) pair the planting already
@@ -51,10 +57,40 @@ pub async fn generate_tasks_for_planting(
 
     // ITK path if the crop has a template with activities.
     if let Some(activities) = itk_activities(repo, planting).await? {
-        return generate_from_itk(repo, planting, &activities, &planting_tasks, &existing).await;
+        return generate_from_itk(
+            repo,
+            planting,
+            &activities,
+            &planting_tasks,
+            &existing,
+            today,
+        )
+        .await;
     }
     // Fallback: variety-profile auto-gen (unchanged from before story 3.3).
-    generate_from_profile(repo, planting, &planting_tasks, &existing).await
+    generate_from_profile(repo, planting, &planting_tasks, &existing, today).await
+}
+
+/// Does this planting suppress tasks dated before `today` (story 3.4, FR14)?
+///
+/// **Perennials only.** Retro-entering a pre-existing perennial (the 1996 apple
+/// row) must not materialize thirty years of phantom prunings — that is the
+/// journey-3 failure mode the PRD names explicitly.
+///
+/// A **cycle is deliberately exempt**: placing an annual succession whose sowing
+/// date has just passed is ordinary January-planning behaviour, and the grower
+/// needs that task on the sheet to mark it done or skipped. Suppressing it would
+/// silently delete work from the weekly print and regress story 3.3, whose
+/// J-negative bed-preparation tasks are *intentionally* pre-establishment.
+///
+/// Both generation paths route through this one predicate so they cannot drift.
+fn suppresses_past_tasks(planting: &Planting) -> bool {
+    matches!(planting.schedule, PlantingSchedule::Perennial { .. })
+}
+
+/// Is this candidate task date suppressed as "past" for this planting?
+fn is_suppressed_past(planting: &Planting, date: NaiveDate, today: NaiveDate) -> bool {
+    suppresses_past_tasks(planting) && date < today
 }
 
 /// The crop's ITK activities, if it has a non-empty template — else `None`
@@ -121,6 +157,7 @@ async fn generate_from_itk(
     activities: &[ItkActivity],
     planting_tasks: &[Task],
     existing: &std::collections::HashSet<(TaskTypeId, NaiveDate)>,
+    today: NaiveDate,
 ) -> AppResult<Vec<Task>> {
     let anchor = establishment_anchor(planting);
     let settled_types: std::collections::HashSet<TaskTypeId> = planting_tasks
@@ -148,6 +185,13 @@ async fn generate_from_itk(
                 continue;
             }
         };
+        if is_suppressed_past(planting, date, today) {
+            tracing::debug!(
+                planting_id = %planting.id, %date,
+                "retro-entered perennial: ITK activity lands in the past — skipping (FR14)",
+            );
+            continue;
+        }
         if existing.contains(&(activity.task_type_id, date))
             || settled_types.contains(&activity.task_type_id)
         {
@@ -184,6 +228,7 @@ async fn generate_from_profile(
     planting: &Planting,
     planting_tasks: &[Task],
     existing: &std::collections::HashSet<(TaskTypeId, NaiveDate)>,
+    today: NaiveDate,
 ) -> AppResult<Vec<Task>> {
     // One DB round-trip to list types; index them by category for O(1) lookups.
     let types = repo.task_type_list().await?;
@@ -207,6 +252,13 @@ async fn generate_from_profile(
     let triggers = phase_dates(planting);
     let mut created = Vec::with_capacity(triggers.len());
     for (trigger, date) in triggers {
+        if is_suppressed_past(planting, date, today) {
+            tracing::debug!(
+                ?trigger, planting_id = %planting.id, %date,
+                "retro-entered perennial: phase lands in the past — skipping (FR14)",
+            );
+            continue;
+        }
         match resolve_type(&types, trigger) {
             Some(tt)
                 if existing.contains(&(tt.id, date))
@@ -458,6 +510,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -497,6 +550,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -505,7 +559,10 @@ mod tests {
         assert!(!before.is_empty());
 
         // Second run must be a no-op (issue #69).
-        let created = generate_tasks_for_planting(&repo, &planting).await.unwrap();
+        let created =
+            generate_tasks_for_planting(&repo, &planting, crate::test_helpers::no_cutoff_today())
+                .await
+                .unwrap();
         assert!(created.is_empty(), "second run must not create tasks");
         let after = repo.task_list_for_planting(planting.id).await.unwrap();
         assert_eq!(after.len(), before.len());
@@ -544,6 +601,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -577,7 +635,7 @@ mod tests {
             .unwrap(),
             ..planting
         };
-        generate_tasks_for_planting(&repo, &replanned)
+        generate_tasks_for_planting(&repo, &replanned, crate::test_helpers::no_cutoff_today())
             .await
             .unwrap();
 
@@ -628,6 +686,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -665,7 +724,7 @@ mod tests {
             .unwrap(),
             ..planting
         };
-        generate_tasks_for_planting(&repo, &replanned)
+        generate_tasks_for_planting(&repo, &replanned, crate::test_helpers::no_cutoff_today())
             .await
             .unwrap();
 
@@ -768,6 +827,7 @@ mod tests {
         let planting = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(15), 50),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -835,6 +895,7 @@ mod tests {
         let planting = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(15), 50),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -857,6 +918,7 @@ mod tests {
         let planting = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(15), 50),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -893,7 +955,7 @@ mod tests {
             .unwrap(),
             ..planting
         };
-        generate_tasks_for_planting(&repo, &replanned)
+        generate_tasks_for_planting(&repo, &replanned, crate::test_helpers::no_cutoff_today())
             .await
             .unwrap();
 
@@ -915,6 +977,7 @@ mod tests {
         let planting = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(15), 50),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -922,7 +985,10 @@ mod tests {
 
         // Re-run generation with the schedule untouched: the (type, date) guard
         // must recognize every activity as already materialized.
-        let created = generate_tasks_for_planting(&repo, &planting).await.unwrap();
+        let created =
+            generate_tasks_for_planting(&repo, &planting, crate::test_helpers::no_cutoff_today())
+                .await
+                .unwrap();
         assert!(created.is_empty(), "a second run creates nothing new");
         assert_eq!(
             repo.task_list_for_planting(planting.id)
@@ -945,6 +1011,7 @@ mod tests {
         let planting = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(15), 50),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -979,7 +1046,7 @@ mod tests {
             .unwrap(),
             ..planting
         };
-        generate_tasks_for_planting(&repo, &replanned)
+        generate_tasks_for_planting(&repo, &replanned, crate::test_helpers::no_cutoff_today())
             .await
             .unwrap();
 
@@ -1014,6 +1081,7 @@ mod tests {
         let planting = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(15), 50),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1040,13 +1108,198 @@ mod tests {
         let pp = PlannedPlanting::new(line.id, vid, 0, d(2026, 4, 1), dec!(15)).unwrap();
         repo.planned_planting_create(&pp).await.unwrap();
 
-        let planting = place_planned_planting(&repo, PlacementRequest::new(pp.id, lid, sid, 60))
-            .await
-            .unwrap();
+        let planting = place_planned_planting(
+            &repo,
+            PlacementRequest::new(pp.id, lid, sid, 60),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
 
         // Placement generated the crop's ITK tasks.
         let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
         assert!(tasks.iter().any(|t| t.task_type_id == t_prep));
         assert!(tasks.iter().any(|t| t.task_type_id == t_care));
+    }
+
+    // ---- Retro-entry: zero past tasks (story 3.4, FR14) --------------------
+
+    /// Seed a catalogue + a **perennial** crop (apple) whose ITK has one
+    /// activity at J+30. Returns the pieces a perennial planting needs.
+    async fn repo_with_perennial_itk() -> (
+        pomone_db::SqliteRepository,
+        VarietyId,
+        LocationId,
+        StrataId,
+        pomone_domain::ids::TaskTypeId,
+    ) {
+        use pomone_db::{
+            seed_defaults, CropRepo, FamilyRepo, ItkRepo, LocationKindRepo, LocationRepo,
+            SqliteRepository, StrataRepo, TaskTypeRepo, VarietyRepo,
+        };
+        use pomone_domain::{
+            Crop, Family, ItkActivity, ItkTemplate, Location, LocationKind, PluriannualProfile,
+            PruningSeason, Strata, Variety, VarietyProfile,
+        };
+
+        let repo = SqliteRepository::in_memory().await.unwrap();
+        seed_defaults(&repo).await.unwrap();
+        let t_care = repo.task_type_list().await.unwrap()[0].id;
+
+        let fam = Family::new("Rosaceae", None, None).unwrap();
+        repo.family_create(&fam).await.unwrap();
+        let strata = Strata::new("Arboré", None, None, None, 400).unwrap();
+        repo.strata_create(&strata).await.unwrap();
+        let kind = LocationKind::new("Rang", None).unwrap();
+        repo.location_kind_create(&kind).await.unwrap();
+        let bed = Location::new(kind.id, "Rang Est", dec!(60), dec!(4), None, None).unwrap();
+        repo.location_create(&bed).await.unwrap();
+        let lifespan = Lifespan::perennial(30, 4).unwrap();
+        let crop = Crop::new(fam.id, "Pommier", None, lifespan, PruningSeason::Winter).unwrap();
+        repo.crop_create(&crop).await.unwrap();
+        let variety = Variety::new(
+            crop.id,
+            lifespan,
+            "Reinette",
+            None,
+            VarietyProfile::Pluriannual(
+                PluriannualProfile::new(Some(100), Some(120), 250, 280, None).unwrap(),
+            ),
+        )
+        .unwrap();
+        repo.variety_create(&variety).await.unwrap();
+
+        let tpl = ItkTemplate::new(crop.id);
+        repo.itk_template_create(&tpl).await.unwrap();
+        repo.itk_activity_create(&ItkActivity::new(
+            tpl.id,
+            t_care,
+            30,
+            None,
+            None,
+            Some("taille de formation".into()),
+            0,
+            None,
+        ))
+        .await
+        .unwrap();
+
+        (repo, variety.id, bed.id, strata.id, t_care)
+    }
+
+    /// FR14, the headline guarantee: the 1996 apple row enters `active` and
+    /// generates **zero** tasks — no thirty-year avalanche. ITK path.
+    #[tokio::test]
+    async fn retro_entered_perennial_with_itk_generates_zero_past_tasks() {
+        use crate::services::{create_perennial_planting, PerennialPlantingRequest};
+        use pomone_db::TaskRepo;
+        use pomone_domain::PlantingStatus;
+
+        let (repo, vid, lid, sid, _t_care) = repo_with_perennial_itk().await;
+        let today = d(2026, 7, 21);
+        let planting = create_perennial_planting(
+            &repo,
+            PerennialPlantingRequest::new(vid, lid, sid, d(1996, 4, 15), dec!(240), 12),
+            today,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            planting.status,
+            PlantingStatus::Active,
+            "a retro-entered perennial enters active"
+        );
+        let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
+        assert!(
+            tasks.is_empty(),
+            "a 1996 establishment must generate no past task, got {:?}",
+            tasks.iter().map(|t| t.planned_on).collect::<Vec<_>>()
+        );
+    }
+
+    /// Same guarantee on the ITK-less fallback path — the profile generator
+    /// would otherwise emit a 1996 "Plantation" task.
+    #[tokio::test]
+    async fn retro_entered_perennial_without_itk_generates_zero_past_tasks() {
+        use crate::services::{create_perennial_planting, PerennialPlantingRequest};
+        use pomone_db::{ItkRepo, TaskRepo, VarietyRepo};
+
+        let (repo, vid, lid, sid, _t_care) = repo_with_perennial_itk().await;
+        // Drop the ITK template so generation falls back to the variety profile.
+        let crop_id = repo.variety_get(vid).await.unwrap().unwrap().crop_id;
+        let tpl = repo
+            .itk_template_get_for_crop(crop_id)
+            .await
+            .unwrap()
+            .unwrap();
+        repo.itk_template_delete(tpl.id).await.unwrap();
+
+        let planting = create_perennial_planting(
+            &repo,
+            PerennialPlantingRequest::new(vid, lid, sid, d(1996, 4, 15), dec!(240), 12),
+            d(2026, 7, 21),
+        )
+        .await
+        .unwrap();
+
+        let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
+        assert!(
+            tasks.is_empty(),
+            "the profile fallback must not emit a 1996 Plantation task"
+        );
+    }
+
+    /// The cutoff is `date < today`, not "perennials never generate": a
+    /// perennial established today (or later) keeps its tasks.
+    #[tokio::test]
+    async fn perennial_established_today_still_generates_its_tasks() {
+        use crate::services::{create_perennial_planting, PerennialPlantingRequest};
+        use pomone_db::TaskRepo;
+
+        let (repo, vid, lid, sid, t_care) = repo_with_perennial_itk().await;
+        let today = d(2026, 7, 21);
+        let planting = create_perennial_planting(
+            &repo,
+            PerennialPlantingRequest::new(vid, lid, sid, today, dec!(240), 12),
+            today,
+        )
+        .await
+        .unwrap();
+
+        let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
+        assert_eq!(tasks.len(), 1, "the J+30 activity is in the future — kept");
+        assert_eq!(tasks[0].task_type_id, t_care);
+        assert_eq!(tasks[0].planned_on, d(2026, 8, 20));
+    }
+
+    /// **Anti-regression for story 3.3.** A cycle is exempt from the cutoff: an
+    /// annual placed with a past sowing date keeps its past tasks, because the
+    /// grower needs them on the sheet to mark done or skipped. Suppressing them
+    /// would silently delete work from the weekly print.
+    #[tokio::test]
+    async fn annual_with_a_past_sowing_date_keeps_its_past_tasks() {
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
+        use pomone_db::TaskRepo;
+
+        let (repo, vid, lid, sid, t_prep, _t_care) = repo_with_itk().await;
+        // Sown in March, entered in July: the J-14 prep is long past.
+        let planting = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(15), 50),
+            d(2026, 7, 21),
+        )
+        .await
+        .unwrap();
+
+        let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
+        let prep = tasks
+            .iter()
+            .find(|t| t.task_type_id == t_prep)
+            .expect("the past J-14 bed-prep task must still be generated for a cycle");
+        assert!(
+            prep.planned_on < d(2026, 7, 21),
+            "precondition: the prep task really is in the past"
+        );
     }
 }

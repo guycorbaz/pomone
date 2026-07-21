@@ -306,6 +306,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -379,6 +380,7 @@ mod tests {
                 dec!(100),
                 10,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -422,6 +424,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -562,6 +565,7 @@ mod tests {
                 dec!(12),
                 80,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();

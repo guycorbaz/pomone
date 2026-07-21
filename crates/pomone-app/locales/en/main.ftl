@@ -302,6 +302,12 @@ strata = Stratum
 variety = Variety
 yearly-harvest = Yearly harvest
 
+## Planting retro-entry (story 3.4)
+# Shown after creating a perennial whose establishment date is in the past.
+# { $tasks } is an already-formatted, comma-separated list of upcoming tasks.
+planting-retro-entry-notice = Established in { $year } — no past task will be created; next tasks: { $tasks }
+planting-retro-entry-notice-none = Established in { $year } — no past task will be created; no upcoming task for now
+
 ## Planting life-cycle status (issue #63)
 planting-status-active = Active
 planting-status-completed = Completed

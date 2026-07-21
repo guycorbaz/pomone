@@ -268,6 +268,7 @@ fn place(window: &MainWindow, state: &mut UiState) {
         place_planned_planting(
             state.app.repo(),
             PlacementRequest::new(pp_id, loc_id, strata_id, plants_count),
+            Local::now().date_naive(),
         )
         .await
     });
