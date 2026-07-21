@@ -20,7 +20,7 @@ use crate::generated::{
 use crate::{localize_app_error, UiState};
 use pomone_app::capacity_view::{occupancy_curve, peak_composition, unplaced_list, OccupancyCurve};
 use pomone_app::locations_view::list_locations_tree;
-use pomone_app::plantings_view::parse_id;
+use pomone_app::plantings_view::{parse_id, retro_entry_notice};
 use pomone_app::services::{place_planned_planting, unplace_planned_planting, PlacementRequest};
 use pomone_app::{list_strata_options, AppError};
 
@@ -264,20 +264,39 @@ fn place(window: &MainWindow, state: &mut UiState) {
         return;
     };
 
+    let today = Local::now().date_naive();
     let result = state.runtime.block_on(async {
-        place_planned_planting(
+        let planting = place_planned_planting(
             state.app.repo(),
             PlacementRequest::new(pp_id, loc_id, strata_id, plants_count),
-            Local::now().date_naive(),
+            today,
         )
-        .await
+        .await?;
+        // Placing a past-dated perennial suppresses its past tasks exactly like
+        // the create-planting form does, so it owes the grower the same
+        // explanation. A failure building the notice is not a placement
+        // failure: the planting is committed.
+        let notice = retro_entry_notice(state.app.repo(), state.app.i18n(), &planting, today)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(error = %e, planting_id = %planting.id,
+                        "could not build the retro-entry notice; the planting was placed");
+                None
+            });
+        Ok::<_, pomone_app::AppError>(notice)
     });
     match result {
-        Ok(_) => {
+        Ok(notice) => {
             state.placement_last_placed = unplaced_id;
             window.set_placement_selected_unplaced_id(SharedString::from(""));
             refresh_placement(window, state);
-            set_status(window, state, "placement-placed", false);
+            match notice {
+                Some(text) => {
+                    window.set_placement_status_text(SharedString::from(text));
+                    window.set_placement_status_is_error(false);
+                }
+                None => set_status(window, state, "placement-placed", false),
+            }
         }
         Err(e) => {
             let msg = localize_app_error(state.app.i18n(), &e);

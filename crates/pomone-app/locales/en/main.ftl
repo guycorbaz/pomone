@@ -306,6 +306,7 @@ yearly-harvest = Yearly harvest
 # Shown after creating a perennial whose establishment date is in the past.
 # { $tasks } is an already-formatted, comma-separated list of upcoming tasks.
 planting-retro-entry-notice = Established in { $year } — no past task will be created; next tasks: { $tasks }
+planting-retro-entry-notice-more = (and { $count } more)
 planting-retro-entry-notice-none = Established in { $year } — no past task will be created; no upcoming task for now
 
 ## Planting life-cycle status (issue #63)
@@ -577,6 +578,8 @@ crop-map-split-cancel = Cancel
 error-no-planting-selected = No planting selected.
 error-location-required = Destination location is required.
 error-planting-has-activity = This planting has recorded activity (completed tasks or logged hours) and cannot be deleted. Mark it completed, failed, or abandoned instead.
+error-not-a-terminal-status = To revive a planting, set it back to «Active» — that is not an ending.
+error-terminated-before-start = The end date cannot precede the start of occupancy ({ $min }).
 error-termination-date-required = Enter the end date: it is what frees the ground on the capacity curve.
 
 ## Bed-usage curve (home)

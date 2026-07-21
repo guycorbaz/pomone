@@ -939,5 +939,58 @@ mod tests {
                 );
             }
         }
+
+        /// The **no-op clause** of AC 5, driven through the real
+        /// `occupancy_window` rather than the private helper: terminating at or
+        /// after a schedule's own end must leave the window untouched. This is
+        /// what stops a late termination from *extending* occupancy — the
+        /// failure mode a naive "terminated_on wins" would introduce.
+        #[test]
+        fn prop_late_termination_through_occupancy_window_is_a_no_op(
+            sow_off in -20_000i64..20_000,
+            grow in 1i64..2_000,
+            harvest in 0i64..400,
+            extra in 0i64..10_000,
+        ) {
+            let sown = day(sow_off);
+            let first_harvest = day(sow_off + grow);
+            let last_harvest = day(sow_off + grow + harvest);
+            let schedule = PlantingSchedule::cycle(
+                Some(sown), None, first_harvest, last_harvest,
+            ).unwrap();
+
+            let (start, end) = occupancy_window(&schedule, None).unwrap();
+            let scheduled_end = end.expect("a cycle always has an end");
+            // Terminate at, or after, the scheduled end.
+            let late = day(off(scheduled_end) + extra);
+            let (start_t, end_t) = occupancy_window(&schedule, Some(late)).unwrap();
+
+            prop_assert_eq!(start_t, start, "termination never moves the start");
+            prop_assert_eq!(
+                end_t, Some(scheduled_end),
+                "terminating at/after the scheduled end must not extend occupancy"
+            );
+        }
+
+        /// The complementary half, also through `occupancy_window`: an *early*
+        /// termination always shortens an open-ended perennial to exactly that
+        /// date — the case `Option::min` would silently get wrong.
+        #[test]
+        fn prop_early_termination_through_occupancy_window_shortens(
+            est_off in -20_000i64..20_000,
+            after in 0i64..20_000,
+        ) {
+            let established = day(est_off);
+            let schedule = PlantingSchedule::perennial(established, None).unwrap();
+            prop_assert_eq!(occupancy_window(&schedule, None).unwrap().1, None);
+
+            let terminated = day(est_off + after);
+            let (start, end) = occupancy_window(&schedule, Some(terminated)).unwrap();
+            prop_assert_eq!(start, established);
+            prop_assert_eq!(
+                end, Some(terminated),
+                "an open-ended perennial must adopt its termination date"
+            );
+        }
     }
 }

@@ -12,6 +12,7 @@ use pomone_db::Repository;
 use pomone_domain::{Location, LocationId, PlantingStatus};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -126,7 +127,7 @@ pub async fn retro_entry_notice(
     if upcoming.is_empty() {
         return Ok(Some(i18n.t_args("planting-retro-entry-notice-none", &args)));
     }
-    let listed = upcoming
+    let mut listed = upcoming
         .iter()
         .take(RETRO_NOTICE_TASKS)
         .map(|t| {
@@ -137,6 +138,21 @@ pub async fn retro_entry_notice(
         })
         .collect::<Vec<_>>()
         .join(", ");
+    // Say so when the list is cut. Without this the line reads as exhaustive
+    // while silently dropping tasks — and a grower comparing it against the
+    // agenda would find more than the notice promised. Honesty about what the
+    // notice does NOT show is the whole point of this message.
+    if let Some(hidden) = upcoming.len().checked_sub(RETRO_NOTICE_TASKS) {
+        if hidden > 0 {
+            let mut more = fluent::FluentArgs::new();
+            more.set("count", hidden);
+            let _ = write!(
+                listed,
+                " {}",
+                i18n.t_args("planting-retro-entry-notice-more", &more)
+            );
+        }
+    }
     args.set("tasks", listed);
     Ok(Some(i18n.t_args("planting-retro-entry-notice", &args)))
 }

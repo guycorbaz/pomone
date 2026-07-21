@@ -308,6 +308,7 @@ yearly-harvest = Récolte annuelle
 # Shown after creating a perennial whose establishment date is in the past.
 # { $tasks } is an already-formatted, comma-separated list of upcoming tasks.
 planting-retro-entry-notice = Établi en { $year } — aucune tâche passée ne sera créée ; prochaines tâches : { $tasks }
+planting-retro-entry-notice-more = (et { $count } autre(s))
 planting-retro-entry-notice-none = Établi en { $year } — aucune tâche passée ne sera créée ; aucune tâche à venir pour l'instant
 
 ## Planting life-cycle status (issue #63)
@@ -579,6 +580,8 @@ crop-map-split-cancel = Annuler
 error-no-planting-selected = Aucune plantation sélectionnée.
 error-location-required = Le lieu de destination est requis.
 error-planting-has-activity = Cette plantation a une activité enregistrée (tâches faites ou heures saisies) ; elle ne peut pas être supprimée. Marquez-la plutôt comme terminée, échouée ou abandonnée.
+error-not-a-terminal-status = Pour rouvrir une plantation, remettez-la « En cours » — ce n'est pas une fin.
+error-terminated-before-start = La date de fin ne peut pas précéder le début de l'occupation ({ $min }).
 error-termination-date-required = Indiquez la date de fin : c'est elle qui libère la place sur la courbe de charge.
 
 ## Bed-usage curve (home)

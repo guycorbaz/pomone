@@ -39,9 +39,11 @@ use pomone_domain::{
 /// / Harvest) — the fallback below, unchanged.
 ///
 /// **Retro-entry (story 3.4):** `today` is the caller-injected reference date
-/// (no clock below the UI/CLI layer, AR12). A **perennial** established in the
-/// past generates no task dated before `today` — see [`suppresses_past_tasks`]
-/// — so retro-entering a 1996 orchard never floods the agenda (FR14).
+/// (no clock below the UI/CLI layer, AR12). A perennial **established before
+/// `today`** — a retro-entry, see [`is_retro_entry`] — generates no task dated
+/// before `today`, so recording a 1996 orchard never floods the agenda (FR14).
+/// A perennial planted today or later keeps everything, J-negative preparation
+/// included.
 pub async fn generate_tasks_for_planting(
     repo: &dyn Repository,
     planting: &Planting,
@@ -71,26 +73,34 @@ pub async fn generate_tasks_for_planting(
     generate_from_profile(repo, planting, &planting_tasks, &existing, today).await
 }
 
-/// Does this planting suppress tasks dated before `today` (story 3.4, FR14)?
+/// Is this planting a **retro-entry** — a pre-existing perennial being recorded
+/// after the fact (story 3.4, FR14)?
 ///
-/// **Perennials only.** Retro-entering a pre-existing perennial (the 1996 apple
-/// row) must not materialize thirty years of phantom prunings — that is the
-/// journey-3 failure mode the PRD names explicitly.
+/// Two conditions, both necessary:
 ///
-/// A **cycle is deliberately exempt**: placing an annual succession whose sowing
-/// date has just passed is ordinary January-planning behaviour, and the grower
-/// needs that task on the sheet to mark it done or skipped. Suppressing it would
-/// silently delete work from the weekly print and regress story 3.3, whose
-/// J-negative bed-preparation tasks are *intentionally* pre-establishment.
-///
-/// Both generation paths route through this one predicate so they cannot drift.
-fn suppresses_past_tasks(planting: &Planting) -> bool {
-    matches!(planting.schedule, PlantingSchedule::Perennial { .. })
+/// * **Perennial.** A cycle is never a retro-entry here: placing an annual
+///   succession whose sowing date has just passed is ordinary January-planning
+///   behaviour, and the grower needs that task on the sheet to mark it done or
+///   skipped. Suppressing it would silently delete work from the weekly print.
+/// * **Established before `today`.** This is what "retro" means. A perennial
+///   planted *today* or later is ordinary forward planning, and its J-negative
+///   ITK preparation activities (story 3.3) are *intentionally* dated before
+///   establishment — suppressing those would delete the "prepare the row" task
+///   from a row the grower is about to plant, with nothing to regenerate it and
+///   no notice to explain the absence.
+fn is_retro_entry(planting: &Planting, today: NaiveDate) -> bool {
+    match planting.schedule {
+        PlantingSchedule::Perennial { established_on, .. } => established_on < today,
+        PlantingSchedule::Cycle { .. } => false,
+    }
 }
 
-/// Is this candidate task date suppressed as "past" for this planting?
+/// Is this candidate task date suppressed as "past"?
+///
+/// Only a retro-entry suppresses anything, and only strictly before `today`.
+/// Both generation paths route through this one predicate so they cannot drift.
 fn is_suppressed_past(planting: &Planting, date: NaiveDate, today: NaiveDate) -> bool {
-    suppresses_past_tasks(planting) && date < today
+    is_retro_entry(planting, today) && date < today
 }
 
 /// The crop's ITK activities, if it has a non-empty template — else `None`
@@ -1132,6 +1142,7 @@ mod tests {
         LocationId,
         StrataId,
         pomone_domain::ids::TaskTypeId,
+        pomone_domain::ids::TaskTypeId,
     ) {
         use pomone_db::{
             seed_defaults, CropRepo, FamilyRepo, ItkRepo, LocationKindRepo, LocationRepo,
@@ -1144,7 +1155,8 @@ mod tests {
 
         let repo = SqliteRepository::in_memory().await.unwrap();
         seed_defaults(&repo).await.unwrap();
-        let t_care = repo.task_type_list().await.unwrap()[0].id;
+        let types = repo.task_type_list().await.unwrap();
+        let (t_care, t_prep) = (types[0].id, types[1].id);
 
         let fam = Family::new("Rosaceae", None, None).unwrap();
         repo.family_create(&fam).await.unwrap();
@@ -1184,7 +1196,22 @@ mod tests {
         .await
         .unwrap();
 
-        (repo, variety.id, bed.id, strata.id, t_care)
+        // A J-negative preparation activity, like story 3.3's bed prep: it must
+        // survive for a perennial planted today, and vanish for a retro-entry.
+        repo.itk_activity_create(&ItkActivity::new(
+            tpl.id,
+            t_prep,
+            -14,
+            None,
+            None,
+            Some("préparation du rang".into()),
+            1,
+            None,
+        ))
+        .await
+        .unwrap();
+
+        (repo, variety.id, bed.id, strata.id, t_care, t_prep)
     }
 
     /// FR14, the headline guarantee: the 1996 apple row enters `active` and
@@ -1195,7 +1222,7 @@ mod tests {
         use pomone_db::TaskRepo;
         use pomone_domain::PlantingStatus;
 
-        let (repo, vid, lid, sid, _t_care) = repo_with_perennial_itk().await;
+        let (repo, vid, lid, sid, _t_care, _t_prep) = repo_with_perennial_itk().await;
         let today = d(2026, 7, 21);
         let planting = create_perennial_planting(
             &repo,
@@ -1225,7 +1252,7 @@ mod tests {
         use crate::services::{create_perennial_planting, PerennialPlantingRequest};
         use pomone_db::{ItkRepo, TaskRepo, VarietyRepo};
 
-        let (repo, vid, lid, sid, _t_care) = repo_with_perennial_itk().await;
+        let (repo, vid, lid, sid, _t_care, _t_prep) = repo_with_perennial_itk().await;
         // Drop the ITK template so generation falls back to the variety profile.
         let crop_id = repo.variety_get(vid).await.unwrap().unwrap().crop_id;
         let tpl = repo
@@ -1257,7 +1284,7 @@ mod tests {
         use crate::services::{create_perennial_planting, PerennialPlantingRequest};
         use pomone_db::TaskRepo;
 
-        let (repo, vid, lid, sid, t_care) = repo_with_perennial_itk().await;
+        let (repo, vid, lid, sid, t_care, t_prep) = repo_with_perennial_itk().await;
         let today = d(2026, 7, 21);
         let planting = create_perennial_planting(
             &repo,
@@ -1268,9 +1295,44 @@ mod tests {
         .unwrap();
 
         let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
-        assert_eq!(tasks.len(), 1, "the J+30 activity is in the future — kept");
-        assert_eq!(tasks[0].task_type_id, t_care);
-        assert_eq!(tasks[0].planned_on, d(2026, 8, 20));
+        assert_eq!(
+            tasks.len(),
+            2,
+            "a planting established today is not a retro-entry — nothing is suppressed"
+        );
+        let care = tasks.iter().find(|t| t.task_type_id == t_care).unwrap();
+        assert_eq!(care.planned_on, d(2026, 8, 20), "J+30");
+        // The regression this pins: a J-negative preparation activity on a
+        // perennial planted TODAY lands before establishment and must survive.
+        // Keying suppression on `date < today` alone silently deleted it.
+        let prep = tasks
+            .iter()
+            .find(|t| t.task_type_id == t_prep)
+            .expect("the J-14 preparation task must survive on a forward-planted perennial");
+        assert_eq!(prep.planned_on, d(2026, 7, 7), "J-14, before establishment");
+        assert!(prep.planned_on < today);
+    }
+
+    /// The other half of the same rule: on a genuine retro-entry the J-negative
+    /// activity is 1996-dated and must be suppressed along with everything else.
+    #[tokio::test]
+    async fn retro_entry_suppresses_the_j_negative_activity_too() {
+        use crate::services::{create_perennial_planting, PerennialPlantingRequest};
+        use pomone_db::TaskRepo;
+
+        let (repo, vid, lid, sid, _t_care, _t_prep) = repo_with_perennial_itk().await;
+        let planting = create_perennial_planting(
+            &repo,
+            PerennialPlantingRequest::new(vid, lid, sid, d(1996, 4, 15), dec!(240), 12),
+            d(2026, 7, 21),
+        )
+        .await
+        .unwrap();
+        assert!(repo
+            .task_list_for_planting(planting.id)
+            .await
+            .unwrap()
+            .is_empty());
     }
 
     /// **Anti-regression for story 3.3.** A cycle is exempt from the cutoff: an

@@ -1,6 +1,6 @@
 # Story 3.4: Retro-entry and perennial lifecycle
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -89,6 +89,38 @@ Two independent halves of the same journey (PRD J3, FR14 + FR15), closing Epic 3
   - [x] (No deferral note to write — the `planting.terminated` fact-projection deferral to Epic 5 is already recorded in `deferred-work.md`, decision by Guy 2026-07-21. Do **not** re-open it in this story.)
   - [x] Smoke-run against an isolated DB: `XDG_DATA_HOME=/tmp/pom XDG_CONFIG_HOME=/tmp/pom cargo run -p pomone-ui` — create a 1996 perennial, read the notice, terminate it, watch the placement curve.
 
+### Review Findings
+
+_Focused 2-reviewer review (AI-E2-1), 2026-07-21: Edge Case Hunter + Acceptance Auditor._
+
+**Decisions taken (Guy, 2026-07-21)**
+
+- [x] [Review][Decision] Migration 0014 backfill — **not done, deliberately.** Pre-existing terminated plantings keep `terminated_on = NULL` and therefore still occupy to the horizon. Accepted because the only existing database is disposable test data the owner will recreate; Pomone is pre-release with a single user. **This is a property of the current situation, not of the code** — if a database is ever shipped or shared before Epic 5, a backfill or a read-path fallback (terminal status + NULL date) becomes necessary. Recorded in `deferred-work.md`.
+- [x] [Review][Decision] `bed_usage_view` honours `terminated_on` → **patch** (option a): one occupancy truth across screens beats the story's scope line.
+- [x] [Review][Decision] Retro-entry notice on the placement screen → **patch** (option a).
+- [x] [Review][Decision] MariaDB `record_fact` divergence → **GitHub issue to be filed** (option a), draft submitted to the owner before publication.
+
+**Patch**
+
+- [x] [Review][Patch] `bed_usage_view` must honour `terminated_on` so the home curve and the placement curve agree on whether a bed is free. [crates/pomone-app/src/bed_usage_view.rs:126-153]
+- [x] [Review][Patch] Surface the retro-entry notice on the placement path too, so a past-dated perennial placed from the placement screen explains its missing tasks. [crates/pomone-ui/src/wiring/placement.rs:266-272]
+
+- [x] [Review][Patch] The past-task cutoff fires on any perennial, not only on a retro-entry: `is_suppressed_past` tests `date < today` but never whether `established_on < today`. A perennial established **today** with a J-14 ITK preparation activity silently loses that task — the exact argument used to exempt cycles, not applied to perennials. Nothing regenerates it and the notice stays silent (it requires a past establishment). [crates/pomone-app/src/task_autogen.rs:87-93, applied :188 and :255] — also makes `seed-demo` produce a task-less orchard for ~10 months of the year [crates/pomone-app/src/demo.rs:496-508]
+- [x] [Review][Patch] Harness E3 never asserts "within capacity" (AC 7) **and the dataset cannot satisfy it**: six 15 m successions are placed on a single 30 m bed — `peak_open=90` vs `open_capacity=30`. `OccupancyCurve::over_capacity` exists and is untouched. [crates/pomone-app/tests/paper_loop.rs:2042-2050; seed_placement_geometry]
+- [x] [Review][Patch] A failure inside `retro_entry_notice` is propagated by `?`, so a read error after a **successfully committed** perennial reports the creation as failed and skips the refresh — the user re-enters and creates a duplicate. The notice is cosmetic; its failure must not fail the creation. [crates/pomone-ui/src/wiring/plantings.rs:195-198]
+- [x] [Review][Patch] The termination invariant guards `schedule.start_date()` (sowing) instead of the occupancy start (transplant), so a termination between sowing and transplanting is accepted and yields an inverted interval. AC 4 says occupancy start; Task 3 said schedule start — they conflict and the Task was followed. Degrades safely (inverted intervals are never active) but the guard is looser than specified. [crates/pomone-domain/src/planting.rs:246]
+- [x] [Review][Patch] The termination proptest omits AC 5's "no-op" clause and applies the private `earlier_end` helper directly to `Placement.end`, bypassing `occupancy_window` — the schedule→window plumbing `capacity_view` actually calls is not property-covered. [crates/pomone-domain/src/capacity.rs:2536-2566]
+- [x] [Review][Patch] The notice truncates the upcoming-task list at three with no ellipsis or count, reading as exhaustive while silently dropping the rest. [crates/pomone-app/src/plantings_view.rs:128-134]
+- [x] [Review][Patch] `DomainError::DateBefore` on a termination date collapses to the generic `error-date-range` string, naming neither the field nor the minimum — and the field is prefilled with today, making it easy to hit on a future-dated planting. `DomainError::NotATerminalStatus` has no Fluent key at all (currently unreachable from the UI). [crates/pomone-ui/src/forms.rs:154-172]
+
+**Deferred**
+
+- [x] [Review][Defer] AC 1's absolute clause "no `Local::now()` / `Utc::now()` appears in `pomone-app` or below" is literally false: `backup.rs:27` stamps backup filenames with `Local::now()`. Pre-existing, untouched, unrelated to the date-injection path — every clock read on the task-generation path is now at the UI edge. — deferred, pre-existing [crates/pomone-app/src/backup.rs:27]
+
+**Accepted deviation (no action)**
+
+- `today` ships as a third service parameter rather than a request-struct field, deviating from AC 1's letter. The Acceptance Auditor independently read story 0.5 and confirmed the justification is accurate — 0.5's AC 2 reserves exactly this slot, and `(repo, request, today)` is 3 parameters. AC 1's intent (no clock below the UI) is met. Disclosed in the Completion Notes.
+
 ## Dev Notes
 
 ### Read these three files fully before editing
@@ -169,6 +201,18 @@ A missed backend row mapper is a **silent divergence**, not a compile error — 
 - [Source: _bmad-output/implementation-artifacts/3-3-tasks-generate-at-placement.md] — ITK path, establishment anchor, skip-aware guard this story must not disturb.
 - [Source: _bmad-output/implementation-artifacts/epic-2-retro-2026-07-15.md] — AI-E2-1 review mode, AI-E2-3 read-path posture, AI-E2-4 `.ftl` trap.
 - [Source: _bmad-output/project-context.md] — layering, 8-touchpoint checklist, migration rules, MSRV, lints.
+
+### Review Resolution
+
+All 9 patch findings applied and verified; the 4 decisions were taken by Guy. Notable corrections:
+
+- **The cutoff predicate was wrong, not just narrow.** `is_suppressed_past` keyed on `date < today` alone, so *any* perennial — including one planted today — lost its J-negative ITK preparation task. Replaced by `is_retro_entry(planting, today)` = perennial **and** `established_on < today`. Two tests now pin both halves: a J-14 activity survives on a forward-planted perennial, and vanishes on a 1996 retro-entry.
+- **The harness dataset could not satisfy its own AC.** Six 15 m successions were stacked on one 30 m bed (`peak_open=90` vs `capacity=30`), and the "within capacity" assertion AC 7 requires was simply absent. The fixture now provides four beds, the successions are spread across them, and `assert!(!curve.over_capacity)` is in place — it fails on the old geometry.
+- **The reassurance notice could report a successful creation as a failure.** Its `AppResult` was propagated by `?` after the planting had already committed, so a read error showed an error banner *and* skipped the refresh — inviting a duplicate entry. The notice is now logged-and-ignored on failure, on both the create and placement paths.
+- The termination invariant now guards the **occupancy** start via `occupancy_window` (transplant) instead of `schedule.start_date()` (sowing), closing the window where a termination produced an inverted interval.
+- Two proptests added that drive `occupancy_window` itself — AC 5's no-op clause, and the open-ended-perennial shortening that `Option::min` would get wrong.
+- `bed_usage_view` honours `terminated_on`, so the home curve and the placement curve no longer disagree about whether a bed is free.
+- Truncated notice lists now say how many tasks are hidden; termination-date errors get their own fr/en messages naming the field and the bound.
 
 ## Dev Agent Record
 

@@ -194,8 +194,24 @@ fn try_create_planting(
             }
             let planting =
                 services::create_perennial_planting(state.app.repo(), request, today).await?;
-            plantings_view::retro_entry_notice(state.app.repo(), state.app.i18n(), &planting, today)
-                .await
+            // The notice is reassurance, not part of the write. The planting is
+            // already committed at this point, so a read failure here must NOT
+            // be reported as a failed creation: the user would re-enter the
+            // form and end up with a duplicate perennial. Log it and fall back
+            // to the ordinary confirmation.
+            let notice = plantings_view::retro_entry_notice(
+                state.app.repo(),
+                state.app.i18n(),
+                &planting,
+                today,
+            )
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(error = %e, planting_id = %planting.id,
+                    "could not build the retro-entry notice; the planting was created");
+                None
+            });
+            Ok::<_, AppError>(notice)
         })?
     };
     Ok(notice)

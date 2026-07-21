@@ -199,12 +199,17 @@ async fn step_e2_plan_lines(app: &App) {
 ///   from its termination date, while its past occupancy stays visible.
 async fn step_e3_placement(app: &App) {
     let (bed_id, strata_id) = seed_placement_geometry(app).await;
-    place_the_planned_successions(app, bed_id, strata_id).await;
+    place_the_planned_successions(app, strata_id).await;
     retro_enter_and_terminate_the_orchard(app, bed_id, strata_id).await;
 }
 
-/// One open-field parcel with a single 30 m bed beneath it, plus a stratum —
-/// the minimum geometry the capacity engine needs to have something to load.
+/// One open-field parcel with **four** 30 m beds beneath it, plus a stratum.
+///
+/// The bed count is not arbitrary: E2 plans six successions of 15 bed-metres
+/// (90 m in total) and the orchard row adds more, so a single bed would leave
+/// the harness permanently over capacity and make the `!over_capacity`
+/// assertion in `place_the_planned_successions` unsatisfiable. A farm that
+/// cannot hold its own plan is not a meaningful fixture for a capacity engine.
 async fn seed_placement_geometry(
     app: &App,
 ) -> (pomone_domain::LocationId, pomone_domain::StrataId) {
@@ -215,38 +220,51 @@ async fn seed_placement_geometry(
     app.repo().location_kind_create(&kind).await.unwrap();
     let parcel = Location::new(kind.id, "Parcelle Est", dec!(100), dec!(30), None, None).unwrap();
     app.repo().location_create(&parcel).await.unwrap();
-    let bed = Location::new(
-        kind.id,
-        "Planche E1",
-        dec!(30),
-        dec!(1.2),
-        Some(parcel.id),
-        None,
-    )
-    .unwrap();
-    app.repo().location_create(&bed).await.unwrap();
+    let mut first_bed = None;
+    for i in 1..=4 {
+        let bed = Location::new(
+            kind.id,
+            format!("Planche E{i}"),
+            dec!(30),
+            dec!(1.2),
+            Some(parcel.id),
+            None,
+        )
+        .unwrap();
+        app.repo().location_create(&bed).await.unwrap();
+        first_bed.get_or_insert(bed.id);
+    }
     let strata = Strata::new("Herbacée (paper-loop)", None, None, None, 40).unwrap();
     app.repo().strata_create(&strata).await.unwrap();
-    (bed.id, strata.id)
+    (first_bed.expect("four beds were created"), strata.id)
 }
 
 /// Place the six successions E2 generated — placement turns each planned row
 /// into a real `Planting` and generates its tasks — then check the curve reacts.
-async fn place_the_planned_successions(
-    app: &App,
-    bed_id: pomone_domain::LocationId,
-    strata_id: pomone_domain::StrataId,
-) {
+async fn place_the_planned_successions(app: &App, strata_id: pomone_domain::StrataId) {
     use pomone_app::capacity_view::occupancy_curve;
     use pomone_app::services::{place_planned_planting, PlacementRequest};
 
     let today = fixed_today();
+    // Spread the successions across the parcel's beds rather than stacking all
+    // six on one — what a grower actually does, and it keeps the farm inside
+    // its own capacity so the overflow assertion below can mean something.
+    let beds: Vec<_> = app
+        .repo()
+        .location_list()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|l| l.parent_id.is_some())
+        .map(|l| l.id)
+        .collect();
+    assert_eq!(beds.len(), 4, "the fixture provides four beds");
     let planned = app.repo().planned_planting_list_all().await.unwrap();
     assert_eq!(planned.len(), 6, "E2 left six successions to place");
-    for pp in &planned {
+    for (i, pp) in planned.iter().enumerate() {
         place_planned_planting(
             app.repo(),
-            PlacementRequest::new(pp.id, bed_id, strata_id, 60),
+            PlacementRequest::new(pp.id, beds[i % beds.len()], strata_id, 60),
             today,
         )
         .await
@@ -271,6 +289,14 @@ async fn place_the_planned_successions(
     assert!(
         curve.peak_covered.abs() < f32::EPSILON,
         "nothing was placed under cover"
+    );
+    // AC 7: the plan must fit the farm. Without this assertion the harness
+    // would green-light a 90 m plan on 30 m of bed — the engine "working"
+    // while reporting a farm three times overbooked.
+    assert!(
+        !curve.over_capacity,
+        "the harness plan must fit the farm: peak_open={} open_capacity={}",
+        curve.peak_open, curve.open_capacity
     );
 }
 
