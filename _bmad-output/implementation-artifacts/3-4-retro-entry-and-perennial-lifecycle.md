@@ -1,6 +1,6 @@
 # Story 3.4: Retro-entry and perennial lifecycle
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -78,16 +78,16 @@ Two independent halves of the same journey (PRD J3, FR14 + FR15), closing Epic 3
   - [x] fr+en keys for the field label and the "termination date required" error (`error-*` convention).
   - [x] Tests: terminate persists status + date; reopening clears the date; terminal-without-date is rejected; a date before establishment is rejected.
 
-- [ ] **Task 6 — Harness step E3 (AC: 7)**
-  - [ ] Implement `step_e3_placement(app)` in `crates/pomone-app/tests/paper_loop.rs` — make it `async` like `step_e1_record_facts` / `step_e2_plan_lines` and `.await` it in `seed_baseline` (it is currently called synchronously there): place the successions seeded by `step_e2_plan_lines` via `place_planned_planting`, assert `occupancy_curve` has non-zero occupancy in the expected weeks; add a 1996 perennial and assert `task_list_for_planting` is empty; terminate it and assert occupancy at a later date drops. Use the harness's `fixed_today()` clock and the existing `normalize::snapshot` helpers — no wall-clock, no ordering flakiness.
-  - [ ] Add the survival assertions to `assert_reopens_clean` (the placed plantings and the terminated perennial still there after the crash/reopen), mirroring the E2 `planned.len() == 6` / needs-list assertions already present.
-  - [ ] Keep it green under both `FailureMode`s.
+- [x] **Task 6 — Harness step E3 (AC: 7)**
+  - [x] Implement `step_e3_placement(app)` in `crates/pomone-app/tests/paper_loop.rs` — make it `async` like `step_e1_record_facts` / `step_e2_plan_lines` and `.await` it in `seed_baseline` (it is currently called synchronously there): place the successions seeded by `step_e2_plan_lines` via `place_planned_planting`, assert `occupancy_curve` has non-zero occupancy in the expected weeks; add a 1996 perennial and assert `task_list_for_planting` is empty; terminate it and assert occupancy at a later date drops. Use the harness's `fixed_today()` clock and the existing `normalize::snapshot` helpers — no wall-clock, no ordering flakiness.
+  - [x] Add the survival assertions to `assert_reopens_clean` (the placed plantings and the terminated perennial still there after the crash/reopen), mirroring the E2 `planned.len() == 6` / needs-list assertions already present.
+  - [x] Keep it green under both `FailureMode`s.
 
-- [ ] **Task 7 — Green bar + hygiene (AC: 8)**
-  - [ ] `cargo test --workspace`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo fmt --all -- --check`; `cargo llvm-cov --workspace` (≥80% overall, `capacity.rs` ≥95%).
-  - [ ] `cargo test -- --ignored` for the MariaDB legs if Docker is available; otherwise state plainly in the completion notes that they were not run.
-  - [ ] (No deferral note to write — the `planting.terminated` fact-projection deferral to Epic 5 is already recorded in `deferred-work.md`, decision by Guy 2026-07-21. Do **not** re-open it in this story.)
-  - [ ] Smoke-run against an isolated DB: `XDG_DATA_HOME=/tmp/pom XDG_CONFIG_HOME=/tmp/pom cargo run -p pomone-ui` — create a 1996 perennial, read the notice, terminate it, watch the placement curve.
+- [x] **Task 7 — Green bar + hygiene (AC: 8)**
+  - [x] `cargo test --workspace`; `cargo clippy --workspace --all-targets -- -D warnings`; `cargo fmt --all -- --check`; `cargo llvm-cov --workspace` (≥80% overall, `capacity.rs` ≥95%).
+  - [x] `cargo test -- --ignored` for the MariaDB legs if Docker is available; otherwise state plainly in the completion notes that they were not run.
+  - [x] (No deferral note to write — the `planting.terminated` fact-projection deferral to Epic 5 is already recorded in `deferred-work.md`, decision by Guy 2026-07-21. Do **not** re-open it in this story.)
+  - [x] Smoke-run against an isolated DB: `XDG_DATA_HOME=/tmp/pom XDG_CONFIG_HOME=/tmp/pom cargo run -p pomone-ui` — create a 1996 perennial, read the notice, terminate it, watch the placement curve.
 
 ## Dev Notes
 
@@ -174,12 +174,64 @@ A missed backend row mapper is a **silent divergence**, not a compile error — 
 
 ### Agent Model Used
 
+claude-opus-4-8[1m] (Opus 4.8, 1M context) — dev-story workflow.
+
 ### Debug Log References
+
+- Full suite green: `cargo test --workspace` — 258 + 204 + 95 + harness, 0 failed.
+- `cargo clippy --workspace --all-targets -- -D warnings` clean; `cargo fmt --all -- --check` clean.
+- CI-equivalent coverage gate **passes** (exit 0): `cargo llvm-cov --workspace --all-features --ignore-filename-regex 'crates/pomone-(ui|cli)/src/(main\.rs|wiring/)' --fail-under-lines 80` → **84.71 % lines**. Key modules: `capacity.rs` **100 % lines / 99.75 % regions** (≥95 % gate, NFR20), `task_autogen.rs` 99.14 %, `plantings_view.rs` 97.61 %, `planting.rs` 98.16 %.
+- **Red-phase validation:** with `suppresses_past_tasks` forced to `false`, the two retro-entry guard tests fail and the two anti-regression tests still pass — the guard tests really test the guard.
+- **MariaDB legs run with Docker** (`cargo test -p pomone-db -- --ignored`): 14 passed, 1 failed. The failure is **`cross_backend_tests::mariadb_backend::record_fact`** (expects `AlreadyRecorded`, gets `Recorded`) — **pre-existing, not caused by this story**: verified by checking out `f554d1d` (the pre-story commit) and reproducing it there. `full_perennial_chain`, which carries this story's new termination round-trip, **passes on MariaDB**. See the deferred-work note.
+- Smoke: `seed-demo` into `/tmp/pom34` then inspected with `python3 sqlite3` — migration **0014 applied** on a real file DB, `terminated_on` column present, existing rows `NULL`. `cargo run -p pomone-ui` against that DB launches and runs clean.
 
 ### Completion Notes List
 
+- **`today` is a service parameter, not a request-struct field.** The story sketched adding `today` to `AnnualPlantingRequest` / `PerennialPlantingRequest` / `PlacementRequest`. Story 0.5's acceptance criterion reads *"no creation function exceeds 3 parameters (repo, request, **injected date/clock**)"* — the third slot was reserved for exactly this. `today` is ambient time, not user-entered data, so it rides as `create_*_planting(repo, request, today)` and the request structs stay pure input. Same effect on AC 1 (no clock below the UI), less ceremony.
+- **The past-cutoff is perennial-only, in one shared predicate** (`suppresses_past_tasks`), consumed by both the ITK and profile paths. Cycles are exempt **by design**: an annual placed with a just-past sowing date must keep that task so the grower can mark it done or skipped, and story 3.3's J-negative bed-prep tasks are deliberately pre-establishment. An anti-regression test pins this.
+- **The reassurance line is built from tasks that actually exist** and are still upcoming. R1 anchors ITK offsets once on establishment and derives no yearly recurrence, so a 1996 orchard genuinely has nothing upcoming — the `-none` key says so instead of promising the "taille hiver 2027" the UX spec sketched but the engine cannot produce.
+- **`terminated_on` is the exclusive end of the occupancy interval**, combined with the scheduled end by taking the **earlier** of the two. Written as an explicit match, not `Option::min`: `None.min(Some(x))` is `None`, which would let an open-ended perennial swallow its own termination date and occupy the ground for ever. All four combinations are unit-tested, and a proptest states the algebra — adding a termination never raises occupancy at any instant, and nothing remains at or after the date.
+- **`capacity_view` shortens the interval rather than filtering terminated plantings out.** A terminated planting's *past* occupancy is history and must still show on the curve; only its future is freed.
+- **The domain owns the transition.** `set_planting_status` routes through `Planting::terminate` / `reopen`, never assigning the field, so "cannot end before it started" runs. A terminal status without a date is refused (`AppError::TerminationDateRequired`) rather than defaulted — guessing the date would quietly falsify the capacity curve.
+- **`test_helpers::no_cutoff_today()`** (1970-01-01) lets the ~70 pre-existing call sites keep their exact previous behaviour instead of silently acquiring a cutoff. Tests that exercise retro-entry pass a realistic date; the helper's doc says why using it there would disable the behaviour under test.
+- **Harness step E3 is implemented** (and split into three focused helpers for the clippy line budget): places E2's six successions, asserts the curve loads, retro-enters the 1996 orchard (zero tasks + notice), terminates it and asserts 2027 occupancy drops to zero while 2026 keeps its real load. `assert_reopens_clean` now also proves the placement + perennial dataset — and the zero-past-tasks guarantee — **survive the crash/reopen**, i.e. are persisted rather than recomputed.
+- **Not done, and deliberately so:** the `planting.terminated` fact-journal write stays deferred to Epic 5 per Guy's 2026-07-21 decision, already recorded in `deferred-work.md`.
+- **Not verified by me:** the GUI gestures themselves (typing a 1996 date into the planting form, reading the notice on screen, terminating from the detail card). The app launches clean and the flows are covered by unit tests plus the file-backed harness, but I could not drive the Slint UI programmatically — worth one manual pass before merge.
+
 ### File List
+
+**Added**
+- `migrations/sqlite/0014_planting_terminated_on.sql`, `migrations/mariadb/0014_planting_terminated_on.sql`
+
+**Modified — domain**
+- `crates/pomone-domain/src/planting.rs` — `terminated_on` field + `terminate()` / `reopen()` with the ordering invariant.
+- `crates/pomone-domain/src/capacity.rs` — `occupancy_window(schedule, terminated_on)` + `earlier_end` helper; 5 unit tests + the monotone-decrease proptest.
+- `crates/pomone-domain/src/error.rs` — `DomainError::NotATerminalStatus`.
+
+**Modified — db**
+- `crates/pomone-db/src/sqlite/planting.rs`, `crates/pomone-db/src/mariadb/planting.rs` — column in `COLUMNS`, INSERT, UPDATE and both row mappers.
+- `crates/pomone-db/src/cross_backend_tests.rs` — termination round-trip + revival in `scenario_full_perennial_chain`.
+
+**Modified — app**
+- `crates/pomone-app/src/task_autogen.rs` — injected `today`, `suppresses_past_tasks` / `is_suppressed_past`, both paths filtered; 4 retro-entry tests.
+- `crates/pomone-app/src/plantings_view.rs` — `retro_entry_notice` + 3 tests.
+- `crates/pomone-app/src/services.rs` — `today` threaded through the three creation/placement services; date-carrying reversible `set_planting_status`; 3 new tests.
+- `crates/pomone-app/src/capacity_view.rs` — passes `terminated_on` to the engine.
+- `crates/pomone-app/src/planting_detail_view.rs` — `terminated_on` on the detail DTO.
+- `crates/pomone-app/src/error.rs` — `AppError::TerminationDateRequired`.
+- `crates/pomone-app/src/test_helpers.rs` — `no_cutoff_today()`.
+- `crates/pomone-app/src/migration.rs` — `copy_all` carries the termination date across backends.
+- `crates/pomone-app/tests/paper_loop.rs` — step E3 implemented + post-reopen survival assertions.
+- Call-site updates only: `calendar_view.rs`, `crop_map_view.rs`, `cultures_view.rs`, `demo.rs`, `harvest_view.rs`, `locations_view.rs`, `strata_view.rs`, `tasks_view.rs`, `treatments_view.rs`, `unified_calendar_view.rs`.
+- `crates/pomone-app/locales/{fr,en}/main.ftl` — `planting-retro-entry-notice`, `planting-retro-entry-notice-none`, `label-terminated-on`, `error-termination-date-required` (fr/en parity).
+
+**Modified — ui**
+- `crates/pomone-ui/ui/planting_detail.slint`, `crates/pomone-ui/ui/main.slint` — termination-date field across the two Slint layers.
+- `crates/pomone-ui/src/wiring/planting_detail.rs` — validated date on the status change.
+- `crates/pomone-ui/src/wiring/plantings.rs` — injects `today`, surfaces the retro-entry notice.
+- `crates/pomone-ui/src/wiring/placement.rs` — injects `today`.
+- `crates/pomone-ui/src/refresh.rs`, `translations.rs`, `forms.rs` — field pre-fill, label, error localization.
 
 ## Change Log
 
-- 2026-07-21 — Story 3.4 drafted (ready-for-dev).
+- 2026-07-21 — Story 3.4 implemented. Retro-entry: caller-injected `today` and a perennial-only past-task cutoff, plus an honest reassurance line. Termination: migration 0014 `terminated_on` (both backends) shortening the occupancy interval, a reversible date-carrying status transition, and the UI field. Harness step E3 implemented with the perennial + capacity datasets. All green (test/clippy/fmt); coverage gate 84.71 % lines, `capacity.rs` 100 %. MariaDB legs run: one pre-existing unrelated failure (`record_fact`), documented.
