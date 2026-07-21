@@ -81,8 +81,8 @@ development_status:
   # Epic 3: Placer — géométrie et capacité
   epic-3: in-progress
   3-1-the-pure-capacity-engine-with-migration-0009: done
-  3-2-the-placement-screen-with-the-live-curve: review
-  3-3-tasks-generate-at-placement: backlog
+  3-2-the-placement-screen-with-the-live-curve: done
+  3-3-tasks-generate-at-placement: review
   3-4-retro-entry-and-perennial-lifecycle: backlog
   epic-3-retrospective: optional
 

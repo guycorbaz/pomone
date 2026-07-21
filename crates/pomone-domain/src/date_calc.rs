@@ -32,6 +32,16 @@ pub fn add_days(date: NaiveDate, days: u16) -> DomainResult<NaiveDate> {
         .ok_or(DomainError::DateOverflow)
 }
 
+/// Shift `date` by a **signed** number of days — negative moves earlier
+/// (`J-10`), positive later (`J+20`), zero is the day itself. Returns
+/// `DateOverflow` if the result falls outside chrono's representable range
+/// (an ITK's `offset_days` is a persisted `i32`, so an absurd value must be a
+/// clean error, never a panic).
+pub fn offset_days(date: NaiveDate, offset: i32) -> DomainResult<NaiveDate> {
+    date.checked_add_signed(chrono::Duration::days(i64::from(offset)))
+        .ok_or(DomainError::DateOverflow)
+}
+
 /// Build a date from `(year, day-of-year)`. Returns `InvalidDayOfYear` if
 /// `doy` is out of range for that year (e.g. 366 in a non-leap year).
 pub fn date_from_doy(year: i32, doy: u16) -> DomainResult<NaiveDate> {
@@ -171,6 +181,33 @@ mod tests {
     }
 
     #[test]
+    fn offset_days_positive_negative_and_zero() {
+        let base = d(2026, 4, 1);
+        assert_eq!(offset_days(base, 20).unwrap(), d(2026, 4, 21));
+        assert_eq!(offset_days(base, -14).unwrap(), d(2026, 3, 18));
+        assert_eq!(offset_days(base, 0).unwrap(), base);
+    }
+
+    #[test]
+    fn offset_days_crosses_leap_boundary() {
+        // 2028 is a leap year: Feb has 29 days.
+        assert_eq!(offset_days(d(2028, 2, 28), 1).unwrap(), d(2028, 2, 29));
+        assert_eq!(offset_days(d(2028, 3, 1), -1).unwrap(), d(2028, 2, 29));
+    }
+
+    #[test]
+    fn offset_days_extreme_offsets_error_not_panic() {
+        assert_eq!(
+            offset_days(NaiveDate::MAX, i32::MAX),
+            Err(DomainError::DateOverflow)
+        );
+        assert_eq!(
+            offset_days(NaiveDate::MIN, i32::MIN),
+            Err(DomainError::DateOverflow)
+        );
+    }
+
+    #[test]
     fn date_from_doy_basic() {
         assert_eq!(date_from_doy(2026, 1).unwrap(), d(2026, 1, 1));
         // 2027 not leap → DOY 365 = Dec 31
@@ -288,6 +325,25 @@ mod tests {
     // === Property-based tests ===
 
     proptest! {
+        // A signed offset never panics, and is exactly invertible by its
+        // negation when it stays in range.
+        #[test]
+        fn offset_days_never_panics_and_inverts(
+            year in 1900i32..2200,
+            month in 1u32..=12,
+            day in 1u32..=28,
+            offset in -400_000i32..400_000,
+        ) {
+            let date = NaiveDate::from_ymd_opt(year, month, day).unwrap();
+            if let Ok(shifted) = offset_days(date, offset) {
+                // Shifting back by the negation returns the original.
+                prop_assert_eq!(offset_days(shifted, -offset).unwrap(), date);
+            }
+            // Extreme offsets simply error — no panic reached here.
+            let _ = offset_days(date, i32::MAX);
+            let _ = offset_days(date, i32::MIN);
+        }
+
         #[test]
         fn add_days_is_monotonic(
             year in 1900i32..2200,
