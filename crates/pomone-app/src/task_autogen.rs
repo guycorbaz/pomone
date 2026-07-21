@@ -128,6 +128,11 @@ async fn generate_from_itk(
         .filter(|t| t.is_settled())
         .map(|t| t.task_type_id)
         .collect();
+    // The guard grows as we go: two activities may legitimately share an
+    // `offset_days` (`ItkActivity::position` documents it), so a same-type
+    // pair landing on the same date must not emit two identical tasks within
+    // a single run — the pre-loaded `existing` set alone wouldn't catch it.
+    let mut existing = existing.clone();
 
     let mut created = Vec::with_capacity(activities.len());
     for activity in activities {
@@ -165,6 +170,7 @@ async fn generate_from_itk(
             itk_notes(activity),
         );
         repo.task_create(&task).await?;
+        existing.insert((activity.task_type_id, date));
         created.push(task);
     }
     Ok(created)
@@ -897,6 +903,126 @@ mod tests {
             after.iter().filter(|t| t.task_type_id == t_care).count(),
             1,
             "a settled (skipped) ITK type must not be resurrected on re-generation"
+        );
+    }
+
+    #[tokio::test]
+    async fn itk_generation_is_idempotent_on_an_unchanged_planting() {
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
+        use pomone_db::{PlantingRepo, TaskRepo};
+
+        let (repo, vid, lid, sid, _t_prep, _t_care) = repo_with_itk().await;
+        let planting = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(15), 50),
+        )
+        .await
+        .unwrap();
+        let planting = repo.planting_get(planting.id).await.unwrap().unwrap();
+
+        // Re-run generation with the schedule untouched: the (type, date) guard
+        // must recognize every activity as already materialized.
+        let created = generate_tasks_for_planting(&repo, &planting).await.unwrap();
+        assert!(created.is_empty(), "a second run creates nothing new");
+        assert_eq!(
+            repo.task_list_for_planting(planting.id)
+                .await
+                .unwrap()
+                .len(),
+            2,
+            "still exactly the two ITK tasks"
+        );
+    }
+
+    #[tokio::test]
+    async fn done_itk_task_not_resurrected_after_regeneration() {
+        use crate::facts::{record_fact, Fact};
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
+        use pomone_db::{PlantingRepo, TaskRepo};
+        use pomone_domain::{Planting, PlantingSchedule};
+
+        let (repo, vid, lid, sid, t_prep, _t_care) = repo_with_itk().await;
+        let planting = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(15), 50),
+        )
+        .await
+        .unwrap();
+        let planting = repo.planting_get(planting.id).await.unwrap().unwrap();
+
+        // Do the J-14 prep task — a done deed, not a pending one.
+        let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
+        let prep = tasks
+            .iter()
+            .find(|t| t.task_type_id == t_prep)
+            .unwrap()
+            .clone();
+        record_fact(
+            &repo,
+            Fact::Done {
+                task_id: prep.id,
+                on: prep.planned_on,
+            },
+            prep.planned_on.and_hms_opt(9, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
+
+        // Replan two weeks later and regenerate on the same planting.
+        let replanned = Planting {
+            schedule: PlantingSchedule::cycle(
+                Some(d(2026, 3, 15)),
+                Some(d(2026, 4, 14)),
+                d(2026, 6, 1),
+                d(2026, 8, 1),
+            )
+            .unwrap(),
+            ..planting
+        };
+        generate_tasks_for_planting(&repo, &replanned)
+            .await
+            .unwrap();
+
+        let after = repo.task_list_for_planting(replanned.id).await.unwrap();
+        assert_eq!(
+            after.iter().filter(|t| t.task_type_id == t_prep).count(),
+            1,
+            "a settled (done) ITK type must not be resurrected on re-generation"
+        );
+    }
+
+    #[tokio::test]
+    async fn two_activities_sharing_type_and_offset_emit_a_single_task() {
+        use crate::services::{create_annual_planting, AnnualPlantingRequest};
+        use pomone_db::{ItkRepo, TaskRepo, VarietyRepo};
+        use pomone_domain::ItkActivity;
+
+        let (repo, vid, lid, sid, _t_prep, t_care) = repo_with_itk().await;
+        // A degenerate ITK: a second activity with the same type *and* the same
+        // offset as `t_care` — it would land on the very same date.
+        let tpl = repo
+            .itk_template_get_for_crop(repo.variety_get(vid).await.unwrap().unwrap().crop_id)
+            .await
+            .unwrap()
+            .unwrap();
+        repo.itk_activity_create(&ItkActivity::new(
+            tpl.id, t_care, 20, None, None, None, 2, None,
+        ))
+        .await
+        .unwrap();
+
+        let planting = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(15), 50),
+        )
+        .await
+        .unwrap();
+
+        let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
+        assert_eq!(
+            tasks.iter().filter(|t| t.task_type_id == t_care).count(),
+            1,
+            "the same (type, date) is not materialized twice within one run"
         );
     }
 
