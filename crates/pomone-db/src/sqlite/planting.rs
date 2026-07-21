@@ -14,7 +14,8 @@ use uuid::Uuid;
 
 const COLUMNS: &str = "id, variety_id, location_id, area_m2, plants_count, name, notes, \
                        schedule_kind, sown_on, transplanted_on, first_harvest_on, \
-                       last_harvest_on, established_on, expected_removal_on, status, strata_id";
+                       last_harvest_on, established_on, expected_removal_on, status, strata_id, \
+                       terminated_on";
 
 #[async_trait]
 impl PlantingRepo for SqliteRepository {
@@ -49,8 +50,8 @@ impl PlantingRepo for SqliteRepository {
         sqlx::query(
             "INSERT INTO planting (id, variety_id, location_id, area_m2, plants_count, name, \
              notes, schedule_kind, sown_on, transplanted_on, first_harvest_on, last_harvest_on, \
-             established_on, expected_removal_on, status, strata_id) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+             established_on, expected_removal_on, status, strata_id, terminated_on) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
         )
         .bind(p.id.as_uuid())
         .bind(p.variety_id.as_uuid())
@@ -68,6 +69,7 @@ impl PlantingRepo for SqliteRepository {
         .bind(s.expected_removal_on)
         .bind(encode_planting_status(p.status))
         .bind(p.strata_id.as_uuid())
+        .bind(p.terminated_on)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -80,7 +82,7 @@ impl PlantingRepo for SqliteRepository {
              plants_count = ?5, name = ?6, notes = ?7, schedule_kind = ?8, sown_on = ?9, \
              transplanted_on = ?10, first_harvest_on = ?11, last_harvest_on = ?12, \
              established_on = ?13, expected_removal_on = ?14, status = ?15, \
-             strata_id = ?16 WHERE id = ?1",
+             strata_id = ?16, terminated_on = ?17 WHERE id = ?1",
         )
         .bind(p.id.as_uuid())
         .bind(p.variety_id.as_uuid())
@@ -98,6 +100,7 @@ impl PlantingRepo for SqliteRepository {
         .bind(s.expected_removal_on)
         .bind(encode_planting_status(p.status))
         .bind(p.strata_id.as_uuid())
+        .bind(p.terminated_on)
         .execute(&self.pool)
         .await?;
         if result.rows_affected() == 0 {
@@ -153,6 +156,7 @@ fn row_to_planting(row: sqlx::sqlite::SqliteRow) -> DbResult<Planting> {
         plants_count,
         schedule,
         status: decode_planting_status(&status)?,
+        terminated_on: row.try_get("terminated_on")?,
         name: row.try_get("name")?,
         notes: row.try_get("notes")?,
     })

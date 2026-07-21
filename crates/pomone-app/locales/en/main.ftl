@@ -359,6 +359,7 @@ confirm-delete-planting = Delete this planting? This cannot be undone, and is on
 ## Planting life cycle (issue #63)
 section-planting-lifecycle = Life cycle
 label-status = Status
+label-terminated-on = End date
 button-change-status = Change status
 button-delete-planting = Delete planting
 status-planting-status-updated = Status updated
@@ -576,6 +577,7 @@ crop-map-split-cancel = Cancel
 error-no-planting-selected = No planting selected.
 error-location-required = Destination location is required.
 error-planting-has-activity = This planting has recorded activity (completed tasks or logged hours) and cannot be deleted. Mark it completed, failed, or abandoned instead.
+error-termination-date-required = Enter the end date: it is what frees the ground on the capacity curve.
 
 ## Bed-usage curve (home)
 bed-usage-legend-open = Open field

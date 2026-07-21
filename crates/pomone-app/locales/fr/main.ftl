@@ -361,6 +361,7 @@ confirm-delete-planting = Supprimer cette plantation ? Cette action est irréver
 ## Planting life cycle (issue #63)
 section-planting-lifecycle = Cycle de vie
 label-status = Statut
+label-terminated-on = Date de fin
 button-change-status = Changer le statut
 button-delete-planting = Supprimer la plantation
 status-planting-status-updated = Statut mis à jour
@@ -578,6 +579,7 @@ crop-map-split-cancel = Annuler
 error-no-planting-selected = Aucune plantation sélectionnée.
 error-location-required = Le lieu de destination est requis.
 error-planting-has-activity = Cette plantation a une activité enregistrée (tâches faites ou heures saisies) ; elle ne peut pas être supprimée. Marquez-la plutôt comme terminée, échouée ou abandonnée.
+error-termination-date-required = Indiquez la date de fin : c'est elle qui libère la place sur la courbe de charge.
 
 ## Bed-usage curve (home)
 bed-usage-legend-open = Plein champ

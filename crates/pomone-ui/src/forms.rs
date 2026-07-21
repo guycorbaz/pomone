@@ -131,6 +131,7 @@ pub(crate) fn localize_app_error(i18n: &pomone_app::I18n, err: &AppError) -> Str
         }
         AppError::MigrationTargetNotEmpty => i18n.t("settings-migrate-target-not-empty"),
         AppError::PlantingHasActivity => i18n.t("error-planting-has-activity"),
+        AppError::TerminationDateRequired => i18n.t("error-termination-date-required"),
         AppError::Inconsistent(_)
         | AppError::Io(_)
         | AppError::TomlSerialize(_)

@@ -257,7 +257,11 @@ async fn build_placed(repo: &dyn Repository) -> AppResult<Vec<PlacedInfo>> {
                 .and_then(|l| covered_kind.get(&l.kind_id).copied())
                 .unwrap_or(false)
         }));
-        let (start, end) = capacity::occupancy_window(&p.schedule)?;
+        // A terminated planting stops occupying its ground on its termination
+        // date (story 3.4, FR15) — the interval shortens, the row stays. Its
+        // *past* occupancy is history and must still show on the curve, so this
+        // is deliberately not a "filter out terminated plantings".
+        let (start, end) = capacity::occupancy_window(&p.schedule, p.terminated_on)?;
         out.push(PlacedInfo {
             placement: Placement {
                 path,

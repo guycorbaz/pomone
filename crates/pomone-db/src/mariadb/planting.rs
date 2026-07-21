@@ -15,7 +15,8 @@ use uuid::Uuid;
 
 const COLUMNS: &str = "id, variety_id, location_id, area_m2, plants_count, name, notes, \
                        schedule_kind, sown_on, transplanted_on, first_harvest_on, \
-                       last_harvest_on, established_on, expected_removal_on, status, strata_id";
+                       last_harvest_on, established_on, expected_removal_on, status, strata_id, \
+                       terminated_on";
 
 #[async_trait]
 impl PlantingRepo for MariaDbRepository {
@@ -48,8 +49,8 @@ impl PlantingRepo for MariaDbRepository {
         sqlx::query(
             "INSERT INTO planting (id, variety_id, location_id, area_m2, plants_count, name, \
              notes, schedule_kind, sown_on, transplanted_on, first_harvest_on, last_harvest_on, \
-             established_on, expected_removal_on, status, strata_id) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             established_on, expected_removal_on, status, strata_id, terminated_on) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(p.id.as_uuid())
         .bind(p.variety_id.as_uuid())
@@ -67,6 +68,7 @@ impl PlantingRepo for MariaDbRepository {
         .bind(s.expected_removal_on)
         .bind(encode_planting_status(p.status))
         .bind(p.strata_id.as_uuid())
+        .bind(p.terminated_on)
         .execute(&self.pool)
         .await?;
         Ok(())
@@ -79,7 +81,7 @@ impl PlantingRepo for MariaDbRepository {
              plants_count = ?, name = ?, notes = ?, schedule_kind = ?, sown_on = ?, \
              transplanted_on = ?, first_harvest_on = ?, last_harvest_on = ?, \
              established_on = ?, expected_removal_on = ?, status = ?, \
-             strata_id = ? WHERE id = ?",
+             strata_id = ?, terminated_on = ? WHERE id = ?",
         )
         .bind(p.variety_id.as_uuid())
         .bind(p.location_id.as_uuid())
@@ -96,6 +98,7 @@ impl PlantingRepo for MariaDbRepository {
         .bind(s.expected_removal_on)
         .bind(encode_planting_status(p.status))
         .bind(p.strata_id.as_uuid())
+        .bind(p.terminated_on)
         .bind(p.id.as_uuid())
         .execute(&self.pool)
         .await?;
@@ -151,6 +154,7 @@ fn row_to_planting(row: sqlx::mysql::MySqlRow) -> DbResult<Planting> {
         plants_count,
         schedule,
         status: decode_planting_status(&status)?,
+        terminated_on: row.try_get("terminated_on")?,
         name: row.try_get("name")?,
         notes: row.try_get("notes")?,
     })

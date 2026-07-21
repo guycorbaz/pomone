@@ -628,6 +628,7 @@ pub(crate) fn apply_translations(window: &MainWindow, app: &App) {
     window.set_detail_status_section_text(SharedString::from(i18n.t("section-planting-lifecycle")));
     window.set_detail_status_field_label(SharedString::from(i18n.t("label-status")));
     window.set_detail_change_status_text(SharedString::from(i18n.t("button-change-status")));
+    window.set_detail_terminated_on_label(SharedString::from(i18n.t("label-terminated-on")));
     window.set_detail_delete_button_text(SharedString::from(i18n.t("button-delete-planting")));
     let status_options: Vec<SharedString> = [
         PlantingStatus::Active,

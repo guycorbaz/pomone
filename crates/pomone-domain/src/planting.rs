@@ -176,6 +176,14 @@ pub struct Planting {
     pub plants_count: u32,
     pub schedule: PlantingSchedule,
     pub status: PlantingStatus,
+    /// When this planting actually stopped occupying the ground (story 3.4,
+    /// FR15/FR26). `None` while `status` is `Active`.
+    ///
+    /// This is the **exclusive** end of the occupancy interval — the ground is
+    /// free again *on* that day, the same convention `expected_removal_on`
+    /// already follows. Set it through [`Planting::terminate`], never by hand,
+    /// so the ordering invariant runs.
+    pub terminated_on: Option<NaiveDate>,
     pub name: Option<String>,
     pub notes: Option<String>,
 }
@@ -213,9 +221,46 @@ impl Planting {
             plants_count: require_positive_count(plants_count)?,
             schedule,
             status: PlantingStatus::default(),
+            terminated_on: None,
             name,
             notes: normalize_optional(notes),
         })
+    }
+
+    /// End this planting on `on`, with the terminal `status` saying why
+    /// (`Completed` / `Failed` / `Abandoned`). The date frees the ground from
+    /// that day on (story 3.4, FR15).
+    ///
+    /// Rejects [`DomainError::DateBefore`] if `on` precedes the planting's own
+    /// start — a bush cannot die before it was planted.
+    ///
+    /// Rejects [`DomainError::NotATerminalStatus`] if handed `Active`: ending a
+    /// planting and reviving one are different gestures, so the revival has its
+    /// own method ([`Planting::reopen`]) rather than a status argument that
+    /// silently means "actually, don't".
+    pub fn terminate(&mut self, status: PlantingStatus, on: NaiveDate) -> DomainResult<()> {
+        if status == PlantingStatus::Active {
+            return Err(DomainError::NotATerminalStatus);
+        }
+        let start = self.schedule.start_date();
+        if on < start {
+            return Err(DomainError::DateBefore {
+                field: "terminated_on",
+                date: on,
+                min: start,
+            });
+        }
+        self.status = status;
+        self.terminated_on = Some(on);
+        Ok(())
+    }
+
+    /// Revive a terminated planting: back to `Active`, termination date cleared
+    /// so it occupies its ground again (FR24 — nothing is ever un-done
+    /// silently, but everything is correctable).
+    pub fn reopen(&mut self) {
+        self.status = PlantingStatus::Active;
+        self.terminated_on = None;
     }
 }
 

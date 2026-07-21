@@ -380,10 +380,21 @@ pub async fn delete_planting(repo: &dyn Repository, planting_id: PlantingId) -> 
 /// Set a planting's life-cycle status (Active / Completed / Failed /
 /// Abandoned). This is the non-destructive alternative to deletion for a
 /// planting that has already happened (issue #63).
+///
+/// **A terminal status carries its date** (story 3.4, FR26): `terminated_on`
+/// must be `Some` for Completed / Failed / Abandoned, because that date is what
+/// frees the ground on the capacity curve (FR15) — a terminal status without one
+/// would leave a dead planting occupying its bed to the horizon. Going back to
+/// `Active` clears the date and is the reversal path (FR24).
+///
+/// The transition goes through the domain (`Planting::terminate` / `reopen`) so
+/// the "cannot end before it started" invariant runs; the field is never
+/// assigned here.
 pub async fn set_planting_status(
     repo: &dyn Repository,
     planting_id: PlantingId,
     status: PlantingStatus,
+    terminated_on: Option<NaiveDate>,
 ) -> AppResult<()> {
     let mut planting = repo
         .planting_get(planting_id)
@@ -392,7 +403,12 @@ pub async fn set_planting_status(
             kind: "planting",
             id: planting_id.to_string(),
         })?;
-    planting.status = status;
+    if status == PlantingStatus::Active {
+        planting.reopen();
+    } else {
+        let on = terminated_on.ok_or(AppError::TerminationDateRequired)?;
+        planting.terminate(status, on)?;
+    }
     repo.planting_update(&planting).await?;
     Ok(())
 }
@@ -1334,12 +1350,83 @@ mod tests {
         )
         .await
         .unwrap();
-        // Fresh plantings start Active.
+        // Fresh plantings start Active, with no termination date.
         assert_eq!(p.status, PlantingStatus::Active);
-        set_planting_status(&repo, p.id, PlantingStatus::Failed)
+        assert_eq!(p.terminated_on, None);
+        set_planting_status(&repo, p.id, PlantingStatus::Failed, Some(d(2026, 6, 10)))
             .await
             .unwrap();
         let got = repo.planting_get(p.id).await.unwrap().unwrap();
         assert_eq!(got.status, PlantingStatus::Failed);
+        assert_eq!(got.terminated_on, Some(d(2026, 6, 10)));
+    }
+
+    /// FR24: terminating is reversible, and reviving clears the date so the
+    /// planting occupies its ground again.
+    #[tokio::test]
+    async fn reopening_a_terminated_planting_clears_its_termination_date() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
+        set_planting_status(&repo, p.id, PlantingStatus::Abandoned, Some(d(2026, 6, 10)))
+            .await
+            .unwrap();
+
+        set_planting_status(&repo, p.id, PlantingStatus::Active, None)
+            .await
+            .unwrap();
+        let got = repo.planting_get(p.id).await.unwrap().unwrap();
+        assert_eq!(got.status, PlantingStatus::Active);
+        assert_eq!(got.terminated_on, None, "revival frees the date too");
+    }
+
+    /// A terminal status without a date is refused — defaulting it would
+    /// quietly falsify the capacity curve (FR15).
+    #[tokio::test]
+    async fn terminal_status_without_a_date_is_refused() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
+        let err = set_planting_status(&repo, p.id, PlantingStatus::Completed, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::TerminationDateRequired));
+        // …and nothing was written.
+        let got = repo.planting_get(p.id).await.unwrap().unwrap();
+        assert_eq!(got.status, PlantingStatus::Active);
+    }
+
+    /// A planting cannot end before it started — the domain invariant runs
+    /// because the service goes through `Planting::terminate`.
+    #[tokio::test]
+    async fn termination_before_the_start_is_refused() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
+        let err = set_planting_status(&repo, p.id, PlantingStatus::Failed, Some(d(2020, 1, 1)))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, AppError::Domain(_)),
+            "expected a domain invariant error, got {err:?}"
+        );
     }
 }

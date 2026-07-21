@@ -10,8 +10,9 @@ use crate::seed::seed_defaults;
 use chrono::{NaiveDate, NaiveDateTime};
 use pomone_domain::{
     skip_payload, AnnualProfile, Crop, FactKind, Family, FieldEvent, FieldEventId, Lifespan,
-    Location, LocationKind, Planting, PlantingSchedule, PluriannualProfile, PruningSeason,
-    SkipReason, Strata, Task, TaskId, Treatment, Variety, VarietyProfile, YearlyHarvest,
+    Location, LocationKind, Planting, PlantingSchedule, PlantingStatus, PluriannualProfile,
+    PruningSeason, SkipReason, Strata, Task, TaskId, Treatment, Variety, VarietyProfile,
+    YearlyHarvest,
 };
 use rust_decimal_macros::dec;
 use uuid::Uuid;
@@ -132,6 +133,32 @@ async fn scenario_full_perennial_chain(repo: &dyn Repository) {
     // Roundtrip: refetch the planting and verify the perennial schedule survived
     let got = repo.planting_get(planting.id).await.unwrap().unwrap();
     assert_eq!(got, planting);
+    assert_eq!(
+        got.terminated_on, None,
+        "a planting that was never terminated carries no termination date \
+         (migration 0014 is nullable — pre-existing rows read back as NULL)"
+    );
+
+    // Termination (migration 0014, story 3.4) round-trips identically on every
+    // backend: the date is what lets the capacity engine free the ground, so a
+    // silent divergence here would show up as a wrong curve, not as an error.
+    let mut terminated = got;
+    terminated
+        .terminate(PlantingStatus::Failed, d(2031, 8, 20))
+        .unwrap();
+    repo.planting_update(&terminated).await.unwrap();
+    let got = repo.planting_get(planting.id).await.unwrap().unwrap();
+    assert_eq!(got, terminated);
+    assert_eq!(got.terminated_on, Some(d(2031, 8, 20)));
+    assert_eq!(got.status, PlantingStatus::Failed);
+
+    // …and reviving it clears the date again (FR24, reversible).
+    let mut revived = got;
+    revived.reopen();
+    repo.planting_update(&revived).await.unwrap();
+    let got = repo.planting_get(planting.id).await.unwrap().unwrap();
+    assert_eq!(got.terminated_on, None);
+    assert_eq!(got.status, PlantingStatus::Active);
 }
 
 async fn scenario_annual_cycle_with_full_dates(repo: &dyn Repository) {
