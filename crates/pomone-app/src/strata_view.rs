@@ -190,6 +190,7 @@ mod tests {
                 dec!(10),
                 10,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();

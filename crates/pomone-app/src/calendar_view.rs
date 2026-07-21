@@ -301,6 +301,7 @@ mod tests {
                 100,
             )
             .with_name("démo"),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -335,6 +336,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -367,6 +369,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -380,6 +383,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();

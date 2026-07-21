@@ -352,6 +352,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             24,
         )
         .with_name("démo: Marmande sous serre"),
+        today,
     )
     .await?;
     create_annual_planting(
@@ -365,6 +366,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             60,
         )
         .with_name("démo: Roma plein champ"),
+        today,
     )
     .await?;
     create_annual_planting(
@@ -378,6 +380,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             400,
         )
         .with_name("démo: carotte semis direct"),
+        today,
     )
     .await?;
     create_annual_planting(
@@ -391,6 +394,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             80,
         )
         .with_name("démo: laitue 1re succession"),
+        today,
     )
     .await?;
     create_annual_planting(
@@ -404,6 +408,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             80,
         )
         .with_name("démo: laitue 2e succession"),
+        today,
     )
     .await?;
     create_annual_planting(
@@ -417,6 +422,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             12,
         )
         .with_name("démo: courgette"),
+        today,
     )
     .await?;
     s.plantings_created += 6;
@@ -439,6 +445,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             28_000_000,            // ~3.5 M plants/ha
         )
         .with_name("démo: blé d'hiver"),
+        today,
     )
     .await?;
     create_annual_planting(
@@ -452,6 +459,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             450_000,               // ~90 000 plants/ha
         )
         .with_name("démo: maïs grain"),
+        today,
     )
     .await?;
     create_annual_planting(
@@ -465,6 +473,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             120_000,               // ~40 000 plants/ha
         )
         .with_name("démo: pomme de terre Charlotte"),
+        today,
     )
     .await?;
     create_annual_planting(
@@ -478,6 +487,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             300_000,               // ~100 000 plants/ha
         )
         .with_name("démo: betterave sucrière"),
+        today,
     )
     .await?;
     s.plantings_created += 4;
@@ -494,6 +504,7 @@ pub async fn seed_demo_data(repo: &dyn Repository, today: NaiveDate) -> AppResul
             1,
         )
         .with_name("démo: pommier Reine des Reinettes"),
+        today,
     )
     .await?;
     s.plantings_created += 1;
@@ -647,6 +658,7 @@ mod tests {
                 Decimal::from(800_000), // 80 ha
                 280_000_000,            // ~3.5 M plants/ha over 80 ha
             ),
+            today,
         )
         .await
         .unwrap();

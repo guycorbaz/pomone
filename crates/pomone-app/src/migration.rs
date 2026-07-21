@@ -306,6 +306,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -379,6 +380,7 @@ mod tests {
                 dec!(100),
                 10,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -391,10 +393,30 @@ mod tests {
         .await
         .unwrap();
 
+        // Terminate it: `terminated_on` (migration 0014) must survive a backend
+        // swap, or the migrated database would silently resurrect a dead
+        // planting's occupancy on the capacity curve.
+        let mut terminated = source.planting_get(planting.id).await.unwrap().unwrap();
+        terminated
+            .terminate(
+                pomone_domain::PlantingStatus::Failed,
+                NaiveDate::from_ymd_opt(2029, 6, 1).unwrap(),
+            )
+            .unwrap();
+        source.planting_update(&terminated).await.unwrap();
+
         let target = SqliteRepository::in_memory().await.unwrap();
         let report = copy_all(&source, &target).await.unwrap();
         assert!(report.plantings >= 1);
         assert_eq!(report.yearly_harvests, 1);
+
+        let copied = target.planting_get(planting.id).await.unwrap().unwrap();
+        assert_eq!(
+            copied.terminated_on,
+            Some(NaiveDate::from_ymd_opt(2029, 6, 1).unwrap()),
+            "copy_all must carry the termination date across backends"
+        );
+        assert_eq!(copied.status, pomone_domain::PlantingStatus::Failed);
     }
 
     #[tokio::test]
@@ -422,6 +444,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -562,6 +585,7 @@ mod tests {
                 dec!(12),
                 80,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();

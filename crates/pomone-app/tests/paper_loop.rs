@@ -188,8 +188,215 @@ async fn step_e2_plan_lines(app: &App) {
     assert!(needs[0].variety_label.ends_with("Batavia"));
 }
 
-fn step_e3_placement(_app: &App) {
-    // TODO(E3): place plantings against the capacity engine.
+/// E3 placement + capacity dataset (story 3.4). Places the successions E2
+/// planned onto a real bed and checks the capacity curve reacts; then carries
+/// the two perennial guarantees the epic closes on:
+///
+/// * **retro-entry** — a 1996 orchard row enters `active` with zero past tasks
+///   (FR14), so the kill/replay cycle also proves the guarantee is *persisted*,
+///   not just computed;
+/// * **termination frees occupancy** (FR15) — the row stops loading the curve
+///   from its termination date, while its past occupancy stays visible.
+async fn step_e3_placement(app: &App) {
+    let (bed_id, strata_id) = seed_placement_geometry(app).await;
+    place_the_planned_successions(app, strata_id).await;
+    retro_enter_and_terminate_the_orchard(app, bed_id, strata_id).await;
+}
+
+/// One open-field parcel with **four** 30 m beds beneath it, plus a stratum.
+///
+/// The bed count is not arbitrary: E2 plans six successions of 15 bed-metres
+/// (90 m in total) and the orchard row adds more, so a single bed would leave
+/// the harness permanently over capacity and make the `!over_capacity`
+/// assertion in `place_the_planned_successions` unsatisfiable. A farm that
+/// cannot hold its own plan is not a meaningful fixture for a capacity engine.
+async fn seed_placement_geometry(
+    app: &App,
+) -> (pomone_domain::LocationId, pomone_domain::StrataId) {
+    use pomone_domain::{Location, LocationKind, Strata};
+    use rust_decimal_macros::dec;
+
+    let kind = LocationKind::new("Planche (paper-loop)", None).unwrap();
+    app.repo().location_kind_create(&kind).await.unwrap();
+    let parcel = Location::new(kind.id, "Parcelle Est", dec!(100), dec!(30), None, None).unwrap();
+    app.repo().location_create(&parcel).await.unwrap();
+    let mut first_bed = None;
+    for i in 1..=4 {
+        let bed = Location::new(
+            kind.id,
+            format!("Planche E{i}"),
+            dec!(30),
+            dec!(1.2),
+            Some(parcel.id),
+            None,
+        )
+        .unwrap();
+        app.repo().location_create(&bed).await.unwrap();
+        first_bed.get_or_insert(bed.id);
+    }
+    let strata = Strata::new("Herbacée (paper-loop)", None, None, None, 40).unwrap();
+    app.repo().strata_create(&strata).await.unwrap();
+    (first_bed.expect("four beds were created"), strata.id)
+}
+
+/// Place the six successions E2 generated — placement turns each planned row
+/// into a real `Planting` and generates its tasks — then check the curve reacts.
+async fn place_the_planned_successions(app: &App, strata_id: pomone_domain::StrataId) {
+    use pomone_app::capacity_view::occupancy_curve;
+    use pomone_app::services::{place_planned_planting, PlacementRequest};
+
+    let today = fixed_today();
+    // Spread the successions across the parcel's beds rather than stacking all
+    // six on one — what a grower actually does, and it keeps the farm inside
+    // its own capacity so the overflow assertion below can mean something.
+    let beds: Vec<_> = app
+        .repo()
+        .location_list()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|l| l.parent_id.is_some())
+        .map(|l| l.id)
+        .collect();
+    assert_eq!(beds.len(), 4, "the fixture provides four beds");
+    let planned = app.repo().planned_planting_list_all().await.unwrap();
+    assert_eq!(planned.len(), 6, "E2 left six successions to place");
+    for (i, pp) in planned.iter().enumerate() {
+        place_planned_planting(
+            app.repo(),
+            PlacementRequest::new(pp.id, beds[i % beds.len()], strata_id, 60),
+            today,
+        )
+        .await
+        .expect("place a planned succession");
+    }
+    let still_unplaced = app
+        .repo()
+        .planned_planting_list_all()
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|pp| pp.placed_planting_id.is_none())
+        .count();
+    assert_eq!(still_unplaced, 0, "every succession is placed");
+
+    // The curve reacts: the season carries occupancy, all of it open-field.
+    let curve = occupancy_curve(app.repo(), 2026).await.expect("curve");
+    assert!(
+        curve.peak_open > 0.0,
+        "placing six successions must load the open-field curve"
+    );
+    assert!(
+        curve.peak_covered.abs() < f32::EPSILON,
+        "nothing was placed under cover"
+    );
+    // AC 7: the plan must fit the farm. Without this assertion the harness
+    // would green-light a 90 m plan on 30 m of bed — the engine "working"
+    // while reporting a farm three times overbooked.
+    assert!(
+        !curve.over_capacity,
+        "the harness plan must fit the farm: peak_open={} open_capacity={}",
+        curve.peak_open, curve.open_capacity
+    );
+}
+
+/// The two perennial guarantees Epic 3 closes on: retro-entry generates zero
+/// past tasks (FR14), and terminating frees the ground from its date (FR15)
+/// without erasing the occupancy the planting really had.
+async fn retro_enter_and_terminate_the_orchard(
+    app: &App,
+    bed_id: pomone_domain::LocationId,
+    strata_id: pomone_domain::StrataId,
+) {
+    use pomone_app::capacity_view::occupancy_curve;
+    use pomone_app::plantings_view::retro_entry_notice;
+    use pomone_app::services::{
+        create_perennial_planting, set_planting_status, PerennialPlantingRequest,
+    };
+    use pomone_domain::{
+        Crop, Family, Lifespan, PluriannualProfile, PruningSeason, Variety, VarietyProfile,
+    };
+    use rust_decimal_macros::dec;
+
+    let today = fixed_today();
+    let family = Family::new("Rosaceae (paper-loop)", None, None).unwrap();
+    app.repo().family_create(&family).await.unwrap();
+    let lifespan = Lifespan::perennial(30, 4).unwrap();
+    let crop = Crop::new(family.id, "Pommier", None, lifespan, PruningSeason::Winter).unwrap();
+    app.repo().crop_create(&crop).await.unwrap();
+    let variety = Variety::new(
+        crop.id,
+        lifespan,
+        "Reinette",
+        None,
+        VarietyProfile::Pluriannual(
+            PluriannualProfile::new(Some(100), Some(120), 250, 280, None).unwrap(),
+        ),
+    )
+    .unwrap();
+    app.repo().variety_create(&variety).await.unwrap();
+
+    let orchard = create_perennial_planting(
+        app.repo(),
+        PerennialPlantingRequest::new(
+            variety.id,
+            bed_id,
+            strata_id,
+            NaiveDate::from_ymd_opt(1996, 4, 15).unwrap(),
+            dec!(36),
+            12,
+        ),
+        today,
+    )
+    .await
+    .expect("retro-enter the 1996 orchard row");
+
+    let tasks = app.repo().task_list_for_planting(orchard.id).await.unwrap();
+    assert!(
+        tasks.is_empty(),
+        "a 1996 establishment must generate zero past tasks, got {:?}",
+        tasks.iter().map(|t| t.planned_on).collect::<Vec<_>>()
+    );
+    let notice = retro_entry_notice(app.repo(), app.i18n(), &orchard, today)
+        .await
+        .expect("notice")
+        .expect("a past-established perennial gets the reassurance line");
+    assert!(
+        notice.contains("1996"),
+        "the notice names the year: {notice}"
+    );
+
+    // --- Termination frees occupancy (FR15) ---------------------------------
+    // Open-ended perennial: before termination it loads the curve to the
+    // horizon; after, only up to its termination date.
+    let before = occupancy_curve(app.repo(), 2027).await.expect("curve 2027");
+    assert!(
+        before.peak_open > 0.0,
+        "the orchard row occupies its bed in 2027 while it lives"
+    );
+
+    set_planting_status(
+        app.repo(),
+        orchard.id,
+        pomone_domain::PlantingStatus::Failed,
+        Some(NaiveDate::from_ymd_opt(2026, 6, 1).unwrap()),
+    )
+    .await
+    .expect("terminate the orchard row");
+
+    let after = occupancy_curve(app.repo(), 2027).await.expect("curve 2027");
+    assert!(
+        after.peak_open.abs() < f32::EPSILON,
+        "a terminated perennial must stop occupying its ground (FR15): \
+         2027 still shows {} bed-metres",
+        after.peak_open
+    );
+    // …but its past is not erased: 2026 still carries the load it really had.
+    let past = occupancy_curve(app.repo(), 2026).await.expect("curve 2026");
+    assert!(
+        past.peak_open > 0.0,
+        "terminating must shorten the interval, not erase the planting's history"
+    );
 }
 
 fn step_e4_documents(_app: &App) {
@@ -237,7 +444,7 @@ async fn open_app(config: &AppConfig) -> App {
 async fn seed_baseline(app: &App) -> String {
     step_e1_record_facts(app).await;
     step_e2_plan_lines(app).await;
-    step_e3_placement(app);
+    step_e3_placement(app).await;
     step_e4_documents(app);
     step_e5_reconcile(app);
 
@@ -303,6 +510,40 @@ async fn assert_reopens_clean(app: &App, created_id: &str, mode: FailureMode) {
         "{mode:?}: needs list did not survive the crash/reopen"
     );
     assert_eq!(needs[0].quantity_bed_meters, "90");
+
+    // The E3 placement + perennial dataset (story 3.4) survives the crash too.
+    let plantings = app.repo().planting_list().await.expect("list plantings");
+    let placed = plantings
+        .iter()
+        .filter(|p| matches!(p.schedule, pomone_domain::PlantingSchedule::Cycle { .. }))
+        .count();
+    assert_eq!(
+        placed, 6,
+        "{mode:?}: the six placed successions did not survive the crash/reopen"
+    );
+
+    let orchard = plantings
+        .iter()
+        .find(|p| {
+            matches!(
+                p.schedule,
+                pomone_domain::PlantingSchedule::Perennial { .. }
+            )
+        })
+        .expect("the retro-entered orchard row survived");
+    assert_eq!(
+        orchard.terminated_on,
+        Some(NaiveDate::from_ymd_opt(2026, 6, 1).unwrap()),
+        "{mode:?}: the termination date must be durable — it is what frees the curve"
+    );
+    assert!(
+        app.repo()
+            .task_list_for_planting(orchard.id)
+            .await
+            .unwrap()
+            .is_empty(),
+        "{mode:?}: the retro-entry guarantee (zero past tasks) must be persisted, not recomputed"
+    );
 }
 
 /// One full paper loop for a single failure mode.

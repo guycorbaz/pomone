@@ -41,6 +41,13 @@ pub enum AppError {
     /// caller should mark it terminal (Completed / Failed / Abandoned) instead.
     #[error("planting has recorded activity and cannot be deleted")]
     PlantingHasActivity,
+
+    /// A terminal life-cycle status (Completed / Failed / Abandoned) was set
+    /// without the date it ended on. That date is what frees the planting's
+    /// ground on the capacity curve (story 3.4, FR15/FR26), so it is required
+    /// rather than defaulted — guessing it would quietly falsify the curve.
+    #[error("a terminal planting status requires a termination date")]
+    TerminationDateRequired,
 }
 
 pub type AppResult<T> = Result<T, AppError>;

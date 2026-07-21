@@ -176,6 +176,14 @@ pub struct Planting {
     pub plants_count: u32,
     pub schedule: PlantingSchedule,
     pub status: PlantingStatus,
+    /// When this planting actually stopped occupying the ground (story 3.4,
+    /// FR15/FR26). `None` while `status` is `Active`.
+    ///
+    /// This is the **exclusive** end of the occupancy interval — the ground is
+    /// free again *on* that day, the same convention `expected_removal_on`
+    /// already follows. Set it through [`Planting::terminate`], never by hand,
+    /// so the ordering invariant runs.
+    pub terminated_on: Option<NaiveDate>,
     pub name: Option<String>,
     pub notes: Option<String>,
 }
@@ -213,9 +221,53 @@ impl Planting {
             plants_count: require_positive_count(plants_count)?,
             schedule,
             status: PlantingStatus::default(),
+            terminated_on: None,
             name,
             notes: normalize_optional(notes),
         })
+    }
+
+    /// End this planting on `on`, with the terminal `status` saying why
+    /// (`Completed` / `Failed` / `Abandoned`). The date frees the ground from
+    /// that day on (story 3.4, FR15).
+    ///
+    /// Rejects [`DomainError::DateBefore`] if `on` precedes the planting's own
+    /// start — a bush cannot die before it was planted.
+    ///
+    /// Rejects [`DomainError::NotATerminalStatus`] if handed `Active`: ending a
+    /// planting and reviving one are different gestures, so the revival has its
+    /// own method ([`Planting::reopen`]) rather than a status argument that
+    /// silently means "actually, don't".
+    pub fn terminate(&mut self, status: PlantingStatus, on: NaiveDate) -> DomainResult<()> {
+        if status == PlantingStatus::Active {
+            return Err(DomainError::NotATerminalStatus);
+        }
+        // Guard the **occupancy** start, not the schedule start. For a
+        // raised-transplant cycle `start_date()` is the sowing date while the
+        // bed is only occupied from transplanting, so guarding the former would
+        // accept a termination between sowing and transplanting and produce an
+        // inverted occupancy interval. The engine tolerates that (an inverted
+        // interval is never active), but the invariant should not manufacture
+        // one. `occupancy_window` is the single source of truth for the start.
+        let (start, _) = crate::capacity::occupancy_window(&self.schedule, None)?;
+        if on < start {
+            return Err(DomainError::DateBefore {
+                field: "terminated_on",
+                date: on,
+                min: start,
+            });
+        }
+        self.status = status;
+        self.terminated_on = Some(on);
+        Ok(())
+    }
+
+    /// Revive a terminated planting: back to `Active`, termination date cleared
+    /// so it occupies its ground again (FR24 — nothing is ever un-done
+    /// silently, but everything is correctable).
+    pub fn reopen(&mut self) {
+        self.status = PlantingStatus::Active;
+        self.terminated_on = None;
     }
 }
 
@@ -223,6 +275,41 @@ impl Planting {
 mod tests {
     use super::*;
     use rust_decimal_macros::dec;
+
+    /// The invariant guards the **occupancy** start (transplant), not the
+    /// schedule start (sowing): a termination between the two would otherwise
+    /// be accepted and yield an inverted occupancy interval.
+    #[test]
+    fn terminating_between_sowing_and_transplanting_is_refused() {
+        let mut p = Planting::new(
+            VarietyId::new(),
+            LocationId::new(),
+            StrataId::new(),
+            Lifespan::Annual,
+            dec!(10),
+            10,
+            PlantingSchedule::cycle(
+                Some(d(2026, 3, 1)),
+                Some(d(2026, 5, 1)),
+                d(2026, 7, 1),
+                d(2026, 8, 15),
+            )
+            .unwrap(),
+            None,
+            None,
+        )
+        .unwrap();
+        let err = p
+            .terminate(PlantingStatus::Failed, d(2026, 4, 1))
+            .unwrap_err();
+        assert!(
+            matches!(err, DomainError::DateBefore { min, .. } if min == d(2026, 5, 1)),
+            "the minimum must be the transplant date, got {err:?}"
+        );
+        // …and terminating on or after the transplant date is fine.
+        p.terminate(PlantingStatus::Failed, d(2026, 5, 1)).unwrap();
+        assert_eq!(p.terminated_on, Some(d(2026, 5, 1)));
+    }
 
     fn d(y: i32, m: u32, day: u32) -> NaiveDate {
         NaiveDate::from_ymd_opt(y, m, day).unwrap()

@@ -39,6 +39,9 @@ pub enum DomainError {
     #[error("date arithmetic overflow")]
     DateOverflow,
 
+    #[error("terminating a planting needs a terminal status, not 'active'")]
+    NotATerminalStatus,
+
     #[error("pluriannual lifespan must be at least 2 years (got {0})")]
     PluriannualLifespanTooShort(u8),
 

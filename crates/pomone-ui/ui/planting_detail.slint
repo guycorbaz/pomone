@@ -80,6 +80,8 @@ export component PlantingDetailPage inherits Rectangle {
     in property <[string]> status-options;        // 4 localized status labels
     in-out property <int> status-index;           // selected status in the combo
     in property <string> change-status-text;      // "Change status" button
+    in property <string> terminated-on-label;     // "End date"
+    in-out property <string> terminated-on-text;  // ISO end date, ignored while Active
     in property <string> delete-button-text;      // "Delete planting" button
     in property <string> lifecycle-status-text;   // action result message
     in property <bool> lifecycle-status-is-error: false;
@@ -385,6 +387,23 @@ export component PlantingDetailPage inherits Rectangle {
                             model: status-options;
                             current-index <=> status-index;
                             min-width: 200px;
+                        }
+                    }
+                    VerticalLayout {
+                        spacing: Theme.space-xs;
+                        Text {
+                            text: terminated-on-label;
+                            color: Palette.text-secondary;
+                            font-size: Theme.font-size-label;
+                        }
+                        // The date the planting stopped occupying its ground —
+                        // what frees the capacity curve (story 3.4). Disabled
+                        // while "Active" is selected, since reviving clears it.
+                        ThemedLineEdit {
+                            text <=> terminated-on-text;
+                            placeholder-text: "AAAA-MM-JJ";
+                            enabled: status-index != 0;
+                            min-width: 140px;
                         }
                     }
                     VerticalLayout {

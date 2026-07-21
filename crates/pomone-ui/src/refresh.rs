@@ -2,7 +2,7 @@
 //! Extracted from `main.rs` (story 0.4); re-exported from the crate root so
 //! `crate::…` paths keep working everywhere.
 
-use crate::{i32_to_usize, parse_hex_color, usize_to_i32, UiState};
+use crate::{i32_to_usize, parse_hex_color, today_iso, usize_to_i32, UiState};
 use anyhow::{Context, Result};
 use chrono::{Datelike, Days, Local, NaiveDate, Weekday};
 use pomone_app::{
@@ -623,6 +623,15 @@ pub(crate) fn refresh_planting_detail(
         i18n.t(planting_status_key(detail.status)),
     ));
     window.set_detail_status_index(status_to_index(detail.status));
+    // Pre-fill the termination date: the recorded one if the planting is
+    // already terminated, else today — the overwhelmingly common answer when
+    // the grower is recording a loss they just noticed (story 3.4).
+    let terminated_on = if detail.terminated_on.is_empty() {
+        today_iso()
+    } else {
+        detail.terminated_on.clone()
+    };
+    window.set_detail_terminated_on_text(SharedString::from(terminated_on));
     window.set_detail_lifecycle_status_text(SharedString::from(""));
     window.set_detail_lifecycle_status_is_error(false);
     let task_rows: Vec<SlintPlantingTaskRow> = tasks

@@ -1,0 +1,15 @@
+-- Pomone — record WHEN a planting was terminated (Epic 3, story 3.4).
+--
+-- `status` (migration 0003) says a planting is completed / failed / abandoned
+-- but not *when*, so the capacity engine had no way to stop counting it: a dead
+-- currant bush kept occupying its row to the end of the horizon (FR15). This
+-- column carries the explicitly entered termination date (FR26) and becomes the
+-- **exclusive** end of the occupancy interval — the ground is free again on that
+-- day, exactly like `expected_removal_on`.
+--
+-- Nullable and NULL for every existing row: a planting that was never terminated
+-- has no termination date, and `status = 'active'` keeps it that way. Additive,
+-- no CHECK (the additive-only rule: a SQLite CHECK cannot gain allowed values
+-- without a dangerous table rebuild), no trigger, no date maths in SQL — that
+-- lives in `pomone-domain` (`capacity::occupancy_window`).
+ALTER TABLE planting ADD COLUMN terminated_on TEXT;

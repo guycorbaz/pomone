@@ -143,10 +143,26 @@ pub async fn bed_usage_series(repo: &dyn Repository, season_year: i32) -> AppRes
                 .flatten()
                 .min()
                 .unwrap_or(first_harvest_on);
+            // A terminated planting frees its bed on the termination date
+            // (story 3.4, FR15). `terminated_on` is the **exclusive** end, so
+            // the last occupied day is the day before. Without this the home
+            // curve would keep showing the bed as busy through October while
+            // the placement curve frees it in June — two screens, two answers
+            // to "is this bed free?".
+            let scheduled_end = last_harvest_on;
+            let effective_end = match p.terminated_on {
+                Some(t) => scheduled_end.min(t.pred_opt().unwrap_or(t)),
+                None => scheduled_end,
+            };
             // Clamp the window to the season year (winter-sow before Jan, or a
             // harvest spilling past Dec) so weeks stay within 1..=52.
             let start = raw_start.max(season_start);
-            let end = last_harvest_on.min(season_end);
+            let end = effective_end.min(season_end);
+            // A planting terminated before it ever occupied this season leaves
+            // no weeks at all — an inverted range must not wrap the loop.
+            if end < start {
+                continue;
+            }
             for w in week_of_doy(start.ordinal())..=week_of_doy(end.ordinal()) {
                 bed.occupied_weeks.insert(w);
             }

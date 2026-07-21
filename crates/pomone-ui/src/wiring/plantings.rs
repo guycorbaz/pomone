@@ -5,9 +5,10 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use chrono::Local;
 use slint::{ComponentHandle, SharedString};
 
-use pomone_app::{parse_id, services, AppError};
+use pomone_app::{parse_id, plantings_view, services, AppError};
 use pomone_domain::{LocationId, StrataId, VarietyId};
 
 use crate::generated::MainWindow;
@@ -45,9 +46,13 @@ pub(crate) fn wire_plantings(window: &MainWindow, state: &Rc<RefCell<UiState>>) 
             };
             let mut s = state.borrow_mut();
             match try_create_planting(&window, &mut s) {
-                Ok(()) => {
+                Ok(notice) => {
                     let i18n = s.app.i18n();
-                    window.set_status_text(SharedString::from(i18n.t("status-planting-created")));
+                    // Retro-entering a pre-existing perennial replaces the bare
+                    // "created" confirmation with the reassurance line: the
+                    // avalanche fear is answered before it forms (story 3.4).
+                    let text = notice.unwrap_or_else(|| i18n.t("status-planting-created"));
+                    window.set_status_text(SharedString::from(text));
                     window.set_status_is_error(false);
                     if let Err(e) = refresh_plantings(&window, &mut s) {
                         tracing::error!(error = %e, "failed to refresh plantings after create");
@@ -101,8 +106,19 @@ pub(crate) fn wire_plantings(window: &MainWindow, state: &Rc<RefCell<UiState>>) 
 /// service depending on whether the picked variety is annual or perennial.
 /// Client-side validation surfaces localized messages; service-side errors
 /// pass through unchanged.
-fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), FormError> {
+///
+/// Returns the retro-entry reassurance line when one applies (a perennial
+/// established in the past, story 3.4) — `None` means the caller shows the
+/// ordinary "planting created" confirmation.
+fn try_create_planting(
+    window: &MainWindow,
+    state: &mut UiState,
+) -> Result<Option<String>, FormError> {
     let i18n = state.app.i18n();
+    // The clock is read here, at the UI edge, and injected downwards (AR12).
+    // It drives the retro-entry cutoff: a perennial established in the past
+    // generates no past-dated task (story 3.4).
+    let today = Local::now().date_naive();
     let variety_idx = i32_to_usize(window.get_variety_index());
     let location_idx = i32_to_usize(window.get_location_index());
     let strata_idx = i32_to_usize(window.get_strata_index());
@@ -134,7 +150,7 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
         .to_m2(validate_positive_decimal(&window.get_area_text(), i18n)?);
     let plants_count = validate_positive_count(&window.get_count_text(), i18n)?;
 
-    if is_annual {
+    let notice = if is_annual {
         // The sown-on field holds the sowing date (direct / raised) or the
         // planting date (bought plants), per the chosen establishment method.
         let date = validate_iso_date(&window.get_sown_on_text(), i18n)?;
@@ -151,10 +167,11 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
                     plants_count,
                 )
                 .with_method(method),
+                today,
             )
             .await
-            .map(|_| ())
-        })?;
+            .map(|_| None)
+        })?
     } else {
         let established_on = validate_iso_date(&window.get_established_on_text(), i18n)?;
         let removal_text = window.get_removal_on_text();
@@ -175,12 +192,29 @@ fn try_create_planting(window: &MainWindow, state: &mut UiState) -> Result<(), F
             if let Some(removal) = expected_removal_on {
                 request = request.with_expected_removal(removal);
             }
-            services::create_perennial_planting(state.app.repo(), request)
-                .await
-                .map(|_| ())
-        })?;
-    }
-    Ok(())
+            let planting =
+                services::create_perennial_planting(state.app.repo(), request, today).await?;
+            // The notice is reassurance, not part of the write. The planting is
+            // already committed at this point, so a read failure here must NOT
+            // be reported as a failed creation: the user would re-enter the
+            // form and end up with a duplicate perennial. Log it and fall back
+            // to the ordinary confirmation.
+            let notice = plantings_view::retro_entry_notice(
+                state.app.repo(),
+                state.app.i18n(),
+                &planting,
+                today,
+            )
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!(error = %e, planting_id = %planting.id,
+                    "could not build the retro-entry notice; the planting was created");
+                None
+            });
+            Ok::<_, AppError>(notice)
+        })?
+    };
+    Ok(notice)
 }
 
 /// Map the establishment-method dropdown index to the service enum. Order must

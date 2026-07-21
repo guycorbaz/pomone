@@ -340,6 +340,8 @@ export component MainWindow inherits Window {
     in property <[string]> detail-status-options;
     in-out property <int> detail-status-index;
     in property <string> detail-change-status-text;
+    in property <string> detail-terminated-on-label;
+    in-out property <string> detail-terminated-on-text;
     in property <string> detail-delete-button-text;
     in property <string> detail-lifecycle-status-text;
     in property <bool> detail-lifecycle-status-is-error: false;
@@ -1266,6 +1268,8 @@ export component MainWindow inherits Window {
                 status-options: detail-status-options;
                 status-index <=> detail-status-index;
                 change-status-text: detail-change-status-text;
+                terminated-on-label: detail-terminated-on-label;
+                terminated-on-text <=> detail-terminated-on-text;
                 delete-button-text: detail-delete-button-text;
                 lifecycle-status-text: detail-lifecycle-status-text;
                 lifecycle-status-is-error: detail-lifecycle-status-is-error;

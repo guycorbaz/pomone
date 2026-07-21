@@ -37,6 +37,9 @@ pub struct PlantingDetail {
     /// Life-cycle status (issue #63); localize with
     /// [`crate::plantings_view::planting_status_key`].
     pub status: PlantingStatus,
+    /// ISO date the planting stopped occupying its ground (story 3.4), empty
+    /// while it is still active. Pre-fills the life-cycle card's date field.
+    pub terminated_on: String,
     /// Schedule entries: sowing/transplant/harvest for `Cycle`, establishment
     /// + (optional) removal for `Perennial`. Always non-empty.
     pub schedule_lines: Vec<DetailLine>,
@@ -235,6 +238,10 @@ pub async fn get_planting_detail(
         name: planting.name.clone(),
         notes: planting.notes.clone(),
         status: planting.status,
+        terminated_on: planting
+            .terminated_on
+            .map(|d| d.format("%Y-%m-%d").to_string())
+            .unwrap_or_default(),
         schedule_lines: schedule_lines(&planting),
         is_perennial,
     })
@@ -279,6 +286,7 @@ mod tests {
             )
             .with_name("démo")
             .with_notes("notes"),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -321,6 +329,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -391,6 +400,7 @@ mod tests {
                 dec!(20),
                 100,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();

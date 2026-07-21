@@ -93,9 +93,16 @@ impl AnnualPlantingRequest {
 /// Create an annual `Cycle` planting with the chosen establishment method.
 /// Harvest dates are inferred from the variety's `AnnualProfile`.
 /// `Inconsistent` if the variety is pluriannual.
+///
+/// `today` is the caller-injected reference date handed to task generation (no
+/// clock below the UI/CLI layer, AR12 — story 0.5 reserved this third slot for
+/// exactly that). A cycle never suppresses past-dated tasks, so `today` does not
+/// change what a healthy annual generates; it is threaded so both creation paths
+/// share one generator contract.
 pub async fn create_annual_planting(
     repo: &dyn Repository,
     request: AnnualPlantingRequest,
+    today: NaiveDate,
 ) -> AppResult<Planting> {
     let AnnualPlantingRequest {
         variety_id,
@@ -166,7 +173,7 @@ pub async fn create_annual_planting(
     repo.planting_create(&planting).await?;
     // Best-effort auto-generation of the operational tasks. A failure here only
     // logs — the planting is already saved and the user can re-trigger later.
-    if let Err(e) = crate::task_autogen::generate_tasks_for_planting(repo, &planting).await {
+    if let Err(e) = crate::task_autogen::generate_tasks_for_planting(repo, &planting, today).await {
         tracing::warn!(error = %e, planting_id = %planting.id, "failed to auto-generate tasks");
     }
     Ok(planting)
@@ -233,9 +240,15 @@ impl PerennialPlantingRequest {
 /// Create a perennial planting (a long-lived productive plant tracked by
 /// yearly harvests). Rejects annual varieties — the caller must use
 /// [`create_annual_planting`] for those.
+///
+/// **Retro-entry (story 3.4, FR14):** `today` is the caller-injected reference
+/// date. A perennial established in the past generates **no task dated before
+/// `today`** — retro-entering a 1996 orchard yields zero past tasks instead of
+/// thirty years of phantom prunings.
 pub async fn create_perennial_planting(
     repo: &dyn Repository,
     request: PerennialPlantingRequest,
+    today: NaiveDate,
 ) -> AppResult<Planting> {
     let PerennialPlantingRequest {
         variety_id,
@@ -280,7 +293,7 @@ pub async fn create_perennial_planting(
         notes,
     )?;
     repo.planting_create(&planting).await?;
-    if let Err(e) = crate::task_autogen::generate_tasks_for_planting(repo, &planting).await {
+    if let Err(e) = crate::task_autogen::generate_tasks_for_planting(repo, &planting, today).await {
         tracing::warn!(error = %e, planting_id = %planting.id, "failed to auto-generate tasks");
     }
     Ok(planting)
@@ -367,10 +380,21 @@ pub async fn delete_planting(repo: &dyn Repository, planting_id: PlantingId) -> 
 /// Set a planting's life-cycle status (Active / Completed / Failed /
 /// Abandoned). This is the non-destructive alternative to deletion for a
 /// planting that has already happened (issue #63).
+///
+/// **A terminal status carries its date** (story 3.4, FR26): `terminated_on`
+/// must be `Some` for Completed / Failed / Abandoned, because that date is what
+/// frees the ground on the capacity curve (FR15) — a terminal status without one
+/// would leave a dead planting occupying its bed to the horizon. Going back to
+/// `Active` clears the date and is the reversal path (FR24).
+///
+/// The transition goes through the domain (`Planting::terminate` / `reopen`) so
+/// the "cannot end before it started" invariant runs; the field is never
+/// assigned here.
 pub async fn set_planting_status(
     repo: &dyn Repository,
     planting_id: PlantingId,
     status: PlantingStatus,
+    terminated_on: Option<NaiveDate>,
 ) -> AppResult<()> {
     let mut planting = repo
         .planting_get(planting_id)
@@ -379,7 +403,12 @@ pub async fn set_planting_status(
             kind: "planting",
             id: planting_id.to_string(),
         })?;
-    planting.status = status;
+    if status == PlantingStatus::Active {
+        planting.reopen();
+    } else {
+        let on = terminated_on.ok_or(AppError::TerminationDateRequired)?;
+        planting.terminate(status, on)?;
+    }
     repo.planting_update(&planting).await?;
     Ok(())
 }
@@ -447,6 +476,7 @@ async fn planned_planting_by_id(
 pub async fn place_planned_planting(
     repo: &dyn Repository,
     request: PlacementRequest,
+    today: NaiveDate,
 ) -> AppResult<Planting> {
     let mut pp = planned_planting_by_id(repo, request.planned_planting_id).await?;
     if pp.is_placed() {
@@ -485,6 +515,7 @@ pub async fn place_planned_planting(
                     area_m2,
                     request.plants_count,
                 ),
+                today,
             )
             .await?
         }
@@ -499,6 +530,7 @@ pub async fn place_planned_planting(
                     area_m2,
                     request.plants_count,
                 ),
+                today,
             )
             .await?
         }
@@ -773,9 +805,13 @@ mod tests {
         let (repo, vid, lid, sid) = setup_annual().await;
         let pp_id = make_planned(&repo, vid, dec!(15), d(2026, 4, 1)).await;
 
-        let planting = place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 80))
-            .await
-            .unwrap();
+        let planting = place_planned_planting(
+            &repo,
+            PlacementRequest::new(pp_id, lid, sid, 80),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
 
         // A real annual Cycle planting now exists on the bed.
         assert_eq!(planting.location_id, lid);
@@ -795,9 +831,13 @@ mod tests {
         let (repo, vid, lid, sid) = setup_perennial().await;
         let pp_id = make_planned(&repo, vid, dec!(10), d(2026, 3, 15)).await;
 
-        let planting = place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 5))
-            .await
-            .unwrap();
+        let planting = place_planned_planting(
+            &repo,
+            PlacementRequest::new(pp_id, lid, sid, 5),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
         assert!(matches!(
             planting.schedule,
             PlantingSchedule::Perennial { .. }
@@ -808,12 +848,20 @@ mod tests {
     async fn place_twice_is_refused() {
         let (repo, vid, lid, sid) = setup_annual().await;
         let pp_id = make_planned(&repo, vid, dec!(15), d(2026, 4, 1)).await;
-        place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 80))
-            .await
-            .unwrap();
-        let err = place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 80))
-            .await
-            .unwrap_err();
+        place_planned_planting(
+            &repo,
+            PlacementRequest::new(pp_id, lid, sid, 80),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
+        let err = place_planned_planting(
+            &repo,
+            PlacementRequest::new(pp_id, lid, sid, 80),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap_err();
         assert!(matches!(err, AppError::Inconsistent(_)));
     }
 
@@ -821,9 +869,13 @@ mod tests {
     async fn unplace_restores_the_unplaced_row() {
         let (repo, vid, lid, sid) = setup_annual().await;
         let pp_id = make_planned(&repo, vid, dec!(15), d(2026, 4, 1)).await;
-        let planting = place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 80))
-            .await
-            .unwrap();
+        let planting = place_planned_planting(
+            &repo,
+            PlacementRequest::new(pp_id, lid, sid, 80),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
 
         unplace_planned_planting(&repo, pp_id).await.unwrap();
 
@@ -847,9 +899,13 @@ mod tests {
         let (repo, vid, lid, sid) = setup_annual().await;
         seed_defaults(&repo).await.unwrap(); // task types for autogen
         let pp_id = make_planned(&repo, vid, dec!(15), d(2026, 4, 1)).await;
-        let planting = place_planned_planting(&repo, PlacementRequest::new(pp_id, lid, sid, 80))
-            .await
-            .unwrap();
+        let planting = place_planned_planting(
+            &repo,
+            PlacementRequest::new(pp_id, lid, sid, 80),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
 
         // Log labour on an auto-generated task → real activity.
         let tasks = repo.task_list_for_planting(planting.id).await.unwrap();
@@ -868,6 +924,7 @@ mod tests {
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100)
                 .with_name("Tomates Marmande"),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -898,6 +955,7 @@ mod tests {
         let err = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 10),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap_err();
@@ -922,6 +980,7 @@ mod tests {
                 dec!(10),
                 5,
             ),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap_err();
@@ -940,6 +999,7 @@ mod tests {
         let p = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -969,6 +1029,7 @@ mod tests {
             PerennialPlantingRequest::new(vid, lid, sid, d(2026, 3, 15), dec!(2000), 50)
                 .with_expected_removal(d(2056, 12, 31))
                 .with_name("Verger Sud"),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -991,6 +1052,7 @@ mod tests {
         let err = create_perennial_planting(
             &repo,
             PerennialPlantingRequest::new(vid, lid, sid, d(2026, 3, 15), dec!(10), 5),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap_err();
@@ -1035,6 +1097,7 @@ mod tests {
         let p = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1057,6 +1120,7 @@ mod tests {
         let p = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1087,6 +1151,7 @@ mod tests {
         let p = create_perennial_planting(
             &repo,
             PerennialPlantingRequest::new(vid, lid, sid, d(2026, 3, 15), dec!(2000), 50),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1109,6 +1174,7 @@ mod tests {
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 4, 1), dec!(20), 50)
                 .with_method(EstablishmentMethod::BoughtPlants),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1151,6 +1217,7 @@ mod tests {
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100)
                 .with_method(EstablishmentMethod::DirectSow),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1176,6 +1243,7 @@ mod tests {
         let p = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1194,6 +1262,7 @@ mod tests {
         let p = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1213,6 +1282,7 @@ mod tests {
         let p = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1242,6 +1312,7 @@ mod tests {
         let p = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -1275,15 +1346,87 @@ mod tests {
         let p = create_annual_planting(
             &repo,
             AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
-        // Fresh plantings start Active.
+        // Fresh plantings start Active, with no termination date.
         assert_eq!(p.status, PlantingStatus::Active);
-        set_planting_status(&repo, p.id, PlantingStatus::Failed)
+        assert_eq!(p.terminated_on, None);
+        set_planting_status(&repo, p.id, PlantingStatus::Failed, Some(d(2026, 6, 10)))
             .await
             .unwrap();
         let got = repo.planting_get(p.id).await.unwrap().unwrap();
         assert_eq!(got.status, PlantingStatus::Failed);
+        assert_eq!(got.terminated_on, Some(d(2026, 6, 10)));
+    }
+
+    /// FR24: terminating is reversible, and reviving clears the date so the
+    /// planting occupies its ground again.
+    #[tokio::test]
+    async fn reopening_a_terminated_planting_clears_its_termination_date() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
+        set_planting_status(&repo, p.id, PlantingStatus::Abandoned, Some(d(2026, 6, 10)))
+            .await
+            .unwrap();
+
+        set_planting_status(&repo, p.id, PlantingStatus::Active, None)
+            .await
+            .unwrap();
+        let got = repo.planting_get(p.id).await.unwrap().unwrap();
+        assert_eq!(got.status, PlantingStatus::Active);
+        assert_eq!(got.terminated_on, None, "revival frees the date too");
+    }
+
+    /// A terminal status without a date is refused — defaulting it would
+    /// quietly falsify the capacity curve (FR15).
+    #[tokio::test]
+    async fn terminal_status_without_a_date_is_refused() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
+        let err = set_planting_status(&repo, p.id, PlantingStatus::Completed, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, AppError::TerminationDateRequired));
+        // …and nothing was written.
+        let got = repo.planting_get(p.id).await.unwrap().unwrap();
+        assert_eq!(got.status, PlantingStatus::Active);
+    }
+
+    /// A planting cannot end before it started — the domain invariant runs
+    /// because the service goes through `Planting::terminate`.
+    #[tokio::test]
+    async fn termination_before_the_start_is_refused() {
+        let (repo, vid, lid, sid) = setup_annual().await;
+        seed_defaults(&repo).await.unwrap();
+        let p = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(vid, lid, sid, d(2026, 3, 1), dec!(20), 100),
+            crate::test_helpers::no_cutoff_today(),
+        )
+        .await
+        .unwrap();
+        let err = set_planting_status(&repo, p.id, PlantingStatus::Failed, Some(d(2020, 1, 1)))
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, AppError::Domain(_)),
+            "expected a domain invariant error, got {err:?}"
+        );
     }
 }

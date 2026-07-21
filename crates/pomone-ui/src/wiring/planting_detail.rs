@@ -148,9 +148,26 @@ pub(crate) fn wire_planting_detail(window: &MainWindow, state: &Rc<RefCell<UiSta
             let mut s = state.borrow_mut();
             let id = s.detail_planting_id.clone();
             let status = status_from_index(window.get_detail_status_index());
+            // A terminal status carries the date the planting stopped occupying
+            // its ground; going back to Active clears it (story 3.4, FR24/FR26).
+            // An unparseable date is refused here rather than silently dropped —
+            // a missing date would leave a dead planting on the capacity curve.
+            let terminated_on = if status == PlantingStatus::Active {
+                None
+            } else {
+                match validate_iso_date(&window.get_detail_terminated_on_text(), s.app.i18n()) {
+                    Ok(date) => Some(date),
+                    Err(e) => {
+                        let (text, is_err) = render_form_error(s.app.i18n(), e);
+                        window.set_detail_lifecycle_status_text(text);
+                        window.set_detail_lifecycle_status_is_error(is_err);
+                        return;
+                    }
+                }
+            };
             let result: Result<(), AppError> = s.runtime.block_on(async {
                 let pid: PlantingId = parse_id(&id)?;
-                services::set_planting_status(s.app.repo(), pid, status).await
+                services::set_planting_status(s.app.repo(), pid, status, terminated_on).await
             });
             match result {
                 Ok(()) => {

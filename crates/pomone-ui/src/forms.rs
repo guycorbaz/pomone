@@ -131,6 +131,7 @@ pub(crate) fn localize_app_error(i18n: &pomone_app::I18n, err: &AppError) -> Str
         }
         AppError::MigrationTargetNotEmpty => i18n.t("settings-migrate-target-not-empty"),
         AppError::PlantingHasActivity => i18n.t("error-planting-has-activity"),
+        AppError::TerminationDateRequired => i18n.t("error-termination-date-required"),
         AppError::Inconsistent(_)
         | AppError::Io(_)
         | AppError::TomlSerialize(_)
@@ -163,6 +164,20 @@ pub(crate) fn localize_domain_error(
         }
         D::InvertedRange { .. } => i18n.t("error-height-range"),
         D::EmptyHarvestWindow => i18n.t("error-harvest-window"),
+        // The termination date gets its own message: the field is prefilled with
+        // today, so a planting that starts in the future trips this on the very
+        // first click, and the generic "check your dates" text names neither the
+        // field nor the bound the user has to respect.
+        D::DateBefore {
+            field: "terminated_on",
+            min,
+            ..
+        } => {
+            let mut args = FluentArgs::new();
+            args.set("min", min.format("%Y-%m-%d").to_string());
+            i18n.t_args("error-terminated-before-start", &args)
+        }
+        D::NotATerminalStatus => i18n.t("error-not-a-terminal-status"),
         D::DateBefore { .. } | D::DateAfter { .. } | D::DateOverflow => i18n.t("error-date-range"),
         _ => {
             let mut args = FluentArgs::new();

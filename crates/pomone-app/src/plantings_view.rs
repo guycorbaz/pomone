@@ -7,11 +7,12 @@
 
 use crate::error::{AppError, AppResult};
 use crate::units::AreaUnit;
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 use pomone_db::Repository;
 use pomone_domain::{Location, LocationId, PlantingStatus};
 use rust_decimal::Decimal;
 use std::collections::HashMap;
+use std::fmt::Write as _;
 use std::str::FromStr;
 use uuid::Uuid;
 
@@ -74,6 +75,86 @@ pub fn planting_status_key(status: PlantingStatus) -> &'static str {
         PlantingStatus::Failed => "planting-status-failed",
         PlantingStatus::Abandoned => "planting-status-abandoned",
     }
+}
+
+/// How many upcoming tasks the retro-entry notice names before stopping.
+const RETRO_NOTICE_TASKS: usize = 3;
+
+/// The reassurance line shown after retro-entering a pre-existing perennial
+/// (story 3.4, FR14; UX flow 3b).
+///
+/// Returns `None` unless the planting is a **perennial established before
+/// `today`** — the only case where the grower needs to be told that thirty
+/// years of prunings will *not* appear. Otherwise it states the guarantee and
+/// names the planting's next tasks.
+///
+/// The list is built from the tasks that **actually exist** and are dated on or
+/// after `today`, never from what the agronomy "should" produce: R1 anchors ITK
+/// offsets once on establishment and derives no yearly recurrence, so a 1996
+/// apple row legitimately has nothing upcoming — and then the notice says so
+/// (the `-none` variant) instead of promising a task that will never appear.
+pub async fn retro_entry_notice(
+    repo: &dyn Repository,
+    i18n: &crate::I18n,
+    planting: &pomone_domain::Planting,
+    today: NaiveDate,
+) -> AppResult<Option<String>> {
+    use pomone_domain::PlantingSchedule;
+
+    let PlantingSchedule::Perennial { established_on, .. } = planting.schedule else {
+        return Ok(None);
+    };
+    if established_on >= today {
+        return Ok(None); // not a retro-entry — nothing to reassure about.
+    }
+
+    let type_names: HashMap<_, _> = repo
+        .task_type_list()
+        .await?
+        .into_iter()
+        .map(|t| (t.id, t.name))
+        .collect();
+    let mut upcoming: Vec<_> = repo
+        .task_list_for_planting(planting.id)
+        .await?
+        .into_iter()
+        .filter(|t| t.planned_on >= today)
+        .collect();
+    upcoming.sort_by_key(|t| t.planned_on);
+
+    let mut args = fluent::FluentArgs::new();
+    args.set("year", established_on.year());
+    if upcoming.is_empty() {
+        return Ok(Some(i18n.t_args("planting-retro-entry-notice-none", &args)));
+    }
+    let mut listed = upcoming
+        .iter()
+        .take(RETRO_NOTICE_TASKS)
+        .map(|t| {
+            let name = type_names
+                .get(&t.task_type_id)
+                .map_or("?", std::string::String::as_str);
+            format!("{name} ({})", t.planned_on.format("%Y-%m-%d"))
+        })
+        .collect::<Vec<_>>()
+        .join(", ");
+    // Say so when the list is cut. Without this the line reads as exhaustive
+    // while silently dropping tasks — and a grower comparing it against the
+    // agenda would find more than the notice promised. Honesty about what the
+    // notice does NOT show is the whole point of this message.
+    if let Some(hidden) = upcoming.len().checked_sub(RETRO_NOTICE_TASKS) {
+        if hidden > 0 {
+            let mut more = fluent::FluentArgs::new();
+            more.set("count", hidden);
+            let _ = write!(
+                listed,
+                " {}",
+                i18n.t_args("planting-retro-entry-notice-more", &more)
+            );
+        }
+    }
+    args.set("tasks", listed);
+    Ok(Some(i18n.t_args("planting-retro-entry-notice", &args)))
 }
 
 /// Raw dates from `PlantingSchedule::Cycle`, surfaced so the UI's Gantt
@@ -347,6 +428,7 @@ mod tests {
                 100,
             )
             .with_name("démo"),
+            crate::test_helpers::no_cutoff_today(),
         )
         .await
         .unwrap();
@@ -382,5 +464,212 @@ mod tests {
         let id = LocationId::new();
         let back: LocationId = parse_id(&id.to_string()).unwrap();
         assert_eq!(back, id);
+    }
+
+    // ---- Retro-entry notice (story 3.4) ------------------------------------
+
+    /// Build a perennial crop + variety + bed and return the ids a perennial
+    /// planting needs. No ITK: generation falls back to the variety profile.
+    async fn perennial_fixture(
+        repo: &SqliteRepository,
+    ) -> (VarietyId, LocationId, pomone_domain::StrataId) {
+        use pomone_db::{CropRepo, FamilyRepo, LocationKindRepo};
+        use pomone_domain::{
+            Crop, Family, Lifespan, Location, LocationKind, PluriannualProfile, PruningSeason,
+            Strata, Variety, VarietyProfile,
+        };
+
+        let fam = Family::new("Rosaceae", None, None).unwrap();
+        repo.family_create(&fam).await.unwrap();
+        let strata = Strata::new("Arboré", None, None, None, 400).unwrap();
+        repo.strata_create(&strata).await.unwrap();
+        let kind = LocationKind::new("Rang", None).unwrap();
+        repo.location_kind_create(&kind).await.unwrap();
+        let bed = Location::new(kind.id, "Rang Est", dec!(60), dec!(4), None, None).unwrap();
+        repo.location_create(&bed).await.unwrap();
+        let lifespan = Lifespan::perennial(30, 4).unwrap();
+        let crop = Crop::new(fam.id, "Pommier", None, lifespan, PruningSeason::Winter).unwrap();
+        repo.crop_create(&crop).await.unwrap();
+        let variety = Variety::new(
+            crop.id,
+            lifespan,
+            "Reinette",
+            None,
+            VarietyProfile::Pluriannual(
+                PluriannualProfile::new(Some(100), Some(120), 250, 280, None).unwrap(),
+            ),
+        )
+        .unwrap();
+        repo.variety_create(&variety).await.unwrap();
+        (variety.id, bed.id, strata.id)
+    }
+
+    /// A 1996 orchard with nothing upcoming gets the honest `-none` variant —
+    /// R1 derives no yearly recurrence, so the notice must not promise one.
+    #[tokio::test]
+    async fn retro_notice_states_the_guarantee_when_nothing_is_upcoming() {
+        use crate::services::{create_perennial_planting, PerennialPlantingRequest};
+
+        let repo = fresh_repo().await;
+        let (vid, lid, sid) = perennial_fixture(&repo).await;
+        let i18n = crate::I18n::new(crate::i18n::Lang::Fr).unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 7, 21).unwrap();
+
+        let planting = create_perennial_planting(
+            &repo,
+            PerennialPlantingRequest::new(
+                vid,
+                lid,
+                sid,
+                NaiveDate::from_ymd_opt(1996, 4, 15).unwrap(),
+                dec!(240),
+                12,
+            ),
+            today,
+        )
+        .await
+        .unwrap();
+
+        let notice = retro_entry_notice(&repo, &i18n, &planting, today)
+            .await
+            .unwrap()
+            .expect("a past-established perennial gets a notice");
+        assert!(
+            notice.contains("1996"),
+            "the notice names the year: {notice}"
+        );
+        assert!(
+            !notice.contains("prochaines tâches :"),
+            "with nothing upcoming the notice must not open a task list: {notice}"
+        );
+    }
+
+    /// When upcoming tasks exist they are named, oldest first.
+    #[tokio::test]
+    async fn retro_notice_lists_the_upcoming_tasks() {
+        use crate::services::{create_perennial_planting, PerennialPlantingRequest};
+        use pomone_db::{TaskRepo, TaskTypeRepo};
+        use pomone_domain::Task;
+
+        let repo = fresh_repo().await;
+        let (vid, lid, sid) = perennial_fixture(&repo).await;
+        let i18n = crate::I18n::new(crate::i18n::Lang::Fr).unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 7, 21).unwrap();
+
+        let planting = create_perennial_planting(
+            &repo,
+            PerennialPlantingRequest::new(
+                vid,
+                lid,
+                sid,
+                NaiveDate::from_ymd_opt(1996, 4, 15).unwrap(),
+                dec!(240),
+                12,
+            ),
+            today,
+        )
+        .await
+        .unwrap();
+
+        // A future pruning the grower added by hand.
+        let tt = repo.task_type_list().await.unwrap()[0].clone();
+        let future = NaiveDate::from_ymd_opt(2027, 2, 10).unwrap();
+        repo.task_create(&Task::new(
+            Some(planting.id),
+            Some(lid),
+            tt.id,
+            None,
+            None,
+            future,
+            None,
+            None,
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
+        // A past one must NOT be listed.
+        repo.task_create(&Task::new(
+            Some(planting.id),
+            Some(lid),
+            tt.id,
+            None,
+            None,
+            NaiveDate::from_ymd_opt(2020, 2, 10).unwrap(),
+            None,
+            None,
+            None,
+            None,
+        ))
+        .await
+        .unwrap();
+
+        let notice = retro_entry_notice(&repo, &i18n, &planting, today)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            notice.contains("2027-02-10"),
+            "lists the upcoming task: {notice}"
+        );
+        assert!(notice.contains(&tt.name), "names the task type: {notice}");
+        assert!(
+            !notice.contains("2020-02-10"),
+            "a past task is never listed: {notice}"
+        );
+    }
+
+    /// The notice is scoped: annuals and freshly-planted perennials get none.
+    #[tokio::test]
+    async fn no_retro_notice_for_annuals_or_perennials_established_today() {
+        use crate::services::{create_perennial_planting, PerennialPlantingRequest};
+
+        let repo = fresh_repo().await;
+        seed_test_data(&repo).await.unwrap();
+        let i18n = crate::I18n::new(crate::i18n::Lang::Fr).unwrap();
+        let today = NaiveDate::from_ymd_opt(2026, 7, 21).unwrap();
+
+        // An annual, established long ago — still no notice (cycles are exempt).
+        let variety = repo.variety_list().await.unwrap()[0].clone();
+        let bed = repo
+            .location_list()
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|l| l.parent_id.is_some())
+            .unwrap();
+        let strata = repo.strata_list().await.unwrap()[0].id;
+        let annual = create_annual_planting(
+            &repo,
+            AnnualPlantingRequest::from_sowing(
+                variety.id,
+                bed.id,
+                strata,
+                NaiveDate::from_ymd_opt(2020, 3, 1).unwrap(),
+                dec!(20),
+                100,
+            ),
+            today,
+        )
+        .await
+        .unwrap();
+        assert!(retro_entry_notice(&repo, &i18n, &annual, today)
+            .await
+            .unwrap()
+            .is_none());
+
+        // A perennial established today is not a retro-entry.
+        let (vid, lid, sid) = perennial_fixture(&repo).await;
+        let fresh = create_perennial_planting(
+            &repo,
+            PerennialPlantingRequest::new(vid, lid, sid, today, dec!(240), 12),
+            today,
+        )
+        .await
+        .unwrap();
+        assert!(retro_entry_notice(&repo, &i18n, &fresh, today)
+            .await
+            .unwrap()
+            .is_none());
     }
 }
